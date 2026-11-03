@@ -309,3 +309,13 @@ export const OPEN_APIS: OpenApiEntry[] = [
     docsUrl: "https://offeneregister.de/",
   },
 ];
+
+export const OPEN_APIS_INVENTORY = OPEN_APIS;
+
+export function getApiCategories(): string[] {
+  return Array.from(new Set(OPEN_APIS.map((a) => a.category)));
+}
+
+export function getApisByCategory(category: string): OpenApiEntry[] {
+  return OPEN_APIS.filter((a) => a.category === category);
+}

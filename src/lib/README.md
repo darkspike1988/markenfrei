@@ -150,7 +150,14 @@ Brücke zu Mobile App Stores und Shipped Binary Identifiers (§ 5 Abs. 3 MarkenG
 
 ---
 
-### G. `domain-pricing.ts` · Registrar-Preisvergleich & Hosting
+### G. `clearance.ts` · Zentrale Clearance-Engine
+Zentrales Ausführungsmodul für simultane Multi-Vektor-Recherchen.
+- **`performClearanceCheck(options)`**: Führt parallele Abfragen gegen autoritative RDAP-Server, DoH, Apple App Store, Google Play, Enzyklopädien (Wikipedia REST, DuckDuckGo), Wikidata und Entwickler-Namensräume (GitHub, npm, PyPI, Crates, Brew, Go) aus.
+- Wird sowohl von der REST-API (`/api/clearance`) als auch vom **MCP-Server** (`src/mcp/`) und HTTP-MCP-Endpoint (`/api/mcp`) gemeinsam genutzt.
+
+---
+
+### H. `domain-pricing.ts` · Registrar-Preisvergleich & Hosting
 Transparenter Preisvergleich führender Registrare ohne Lockvogel-Fallen.
 - **`compareDomainPrices(domain: string): TldPriceComparison | null`**
   - Ermittelt für `.de`, `.com`, `.app`, `.ai`, `.io`, `.dev` die Preise bei Netcup, Hetzner, Cloudflare, Porkbun, INWX, IONOS und Namecheap.

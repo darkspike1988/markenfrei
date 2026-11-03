@@ -441,11 +441,10 @@ export default function Home() {
             type="button"
             onClick={() => setInfoOpen(true)}
             className="inline-flex cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-muted transition-colors hover:bg-wash hover:text-ink"
-            title="Verwendete Open APIs & Quellen anzeigen"
+            title="Infos, 25+ Open APIs & MCP-Server für KI-Agenten"
           >
             <Database size={14} weight="bold" aria-hidden />
-            <span className="hidden sm:inline">Open APIs & Infos</span>
-            <span className="sm:hidden">Infos</span>
+            <span>Infos & MCP</span>
           </button>
           <button
             type="button"
@@ -469,13 +468,6 @@ export default function Home() {
       {/* Main Omnibar Interface */}
       <main className="mx-auto w-full max-w-3xl flex-1 px-5 pb-24">
         <section className="pt-10 sm:pt-16">
-          <div className="flex flex-wrap items-center gap-2 mb-3">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-ok-bg/50 px-2.5 py-0.5 text-xs text-ok font-medium border border-ok/20">
-              <Check size={12} weight="bold" />
-              100% Kostenlos · Ohne LLM & ohne Key nutzbar (Open-Data)
-            </span>
-          </div>
-
           <h1 className="max-w-xl text-3xl font-medium leading-[1.15] tracking-tight sm:text-5xl">
             Ein Name, der dir niemand streitig macht.
           </h1>
@@ -821,7 +813,7 @@ export default function Home() {
             onClick={() => setInfoOpen(true)}
             className="underline underline-offset-2 hover:text-ink cursor-pointer"
           >
-            Alle 18+ Open APIs
+            Infos, 25+ Open APIs & MCP-Server
           </button>
         </div>
         <span className="hidden sm:inline">DENIC, Verisign, Wikipedia, App Store, DuckDuckGo</span>

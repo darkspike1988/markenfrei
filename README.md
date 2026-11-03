@@ -99,10 +99,48 @@ Inspiriert von wegweisenden GitHub-Projekten wie `facundoolano/app-store-scraper
 ---
 
 ### 7. Verwendete Open APIs & Quellen-Transparenz
-Über den Button **„Open APIs & Infos“** im Header zeigt MarkenFrei alle **25 verwendeten Schnittstellen** übersichtlich an:
+Über den Button **„Infos & MCP“** im Header zeigt MarkenFrei alle **25 verwendeten Schnittstellen** übersichtlich an:
 * Endpoint-URL, Protokoll (RDAP, DoH, REST)
 * Authentifizierung (100% Kostenlos / Zero-Key)
 * Prüfzweck und Direktlink zur offiziellen Entwickler-Dokumentation.
+
+---
+
+### 8. 🤖 Model Context Protocol (MCP) Server für KI-Agenten
+MarkenFrei liefert einen voll ausgestatteten **MCP-Server**, mit dem autonome KI-Agenten (Claude Desktop, Claude Code, Cursor, Codex, Gemini CLI / Antigravity, Windsurf) direkt Markennamen prüfen, Domains vergleichen und Namensideen generieren können:
+
+#### Integration in Claude Desktop (`claude_desktop_config.json`) oder Cursor (`.cursor/mcp.json`):
+```json
+{
+  "mcpServers": {
+    "markenfrei": {
+      "command": "npx",
+      "args": ["-y", "markenfrei-mcp"]
+    }
+  }
+}
+```
+
+Oder lokal aus dem Repository:
+```json
+{
+  "mcpServers": {
+    "markenfrei": {
+      "command": "node",
+      "args": ["./bin/markenfrei-mcp.mjs"]
+    }
+  }
+}
+```
+
+#### Bereitgestellte MCP-Tools:
+1. `markenfrei_clearance_check`: Vollständige Prüfung auf Markenrecht (§ 8, § 9), Phonetik, App Stores (§ 5 Abs. 3 MarkenG), Domains (.de, .com, .app) und GitHub/npm.
+2. `markenfrei_domain_pricing`: Vergleicht Netcup, Hetzner, Cloudflare Wholesale & warnt vor 1-€-Lockvogelangeboten.
+3. `markenfrei_generate_ideas`: Generiert Kunstwörter & Portmanteaus aus Open-Data Wortfeldern (OpenThesaurus & Datamuse).
+4. `markenfrei_inspect_bundle`: Prüft Reverse-DNS App-Bundle-IDs (`de.app.name`) auf iOS App Store & Android Play Store.
+5. `markenfrei_list_open_apis`: Liefert das komplette Inventar aller 25+ Open APIs.
+
+Zusätzlich steht ein nativer HTTP JSON-RPC Endpunkt unter `POST /api/mcp` zur Verfügung.
 
 ---
 

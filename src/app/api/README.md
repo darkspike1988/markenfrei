@@ -148,3 +148,10 @@ Leichtgewichtiger Endpoint für das interaktive Open-Data Wortlabor in der Benut
 ### D. `GET /api/ollama-models` (`ollama-models/route.ts`)
 Prüft die Verfügbarkeit eines lokalen Ollama-Servers auf dem Rechner des Nutzers (`http://localhost:11434/api/tags`, 1500ms Timeout).
 - Rückgabe: `{ running: boolean, models: string[] }`.
+
+---
+
+### E. `POST /api/mcp` (`mcp/route.ts`)
+Nativer Model Context Protocol (MCP) JSON-RPC 2.0 Endpunkt über HTTP für Remote-KI-Agenten.
+- Unterstützt Methoden: `initialize`, `tools/list`, `tools/call`.
+- Exponiert alle MarkenFrei Tools (`markenfrei_clearance_check`, `markenfrei_domain_pricing`, `markenfrei_generate_ideas`, `markenfrei_inspect_bundle`, `markenfrei_list_open_apis`).
