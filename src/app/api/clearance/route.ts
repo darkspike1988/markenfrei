@@ -16,6 +16,10 @@ import {
   auditCandidateBundleIds,
   type AppBundleCheckResult,
 } from "@/lib/rea";
+import {
+  compareDomainPrices,
+  type TldPriceComparison,
+} from "@/lib/domain-pricing";
 
 const UA =
   "MarkenFrei/1.0 (+https://github.com/darkspike1988/markenfrei; Namens-Vorpruefung)";
@@ -45,6 +49,19 @@ export type WikidataHit = {
   isBrandOrSoftware: boolean;
 };
 
+export type WikipediaHit = {
+  title: string;
+  description: string;
+  extract: string;
+  url: string;
+};
+
+export type DuckDuckGoHit = {
+  heading: string;
+  abstract: string;
+  entity: string;
+};
+
 export type GitHubRepoHit = {
   fullName: string;
   stars: number;
@@ -60,6 +77,9 @@ export type ClearanceReport = {
   domains: TldCheckResult[];
   trademark: TrademarkAnalysis;
   wikidataHits: WikidataHit[];
+  wikipediaHit?: WikipediaHit | null;
+  duckDuckGoHit?: DuckDuckGoHit | null;
+  domainPrices: Record<string, TldPriceComparison | null>;
   /** Quellen, die nicht antworteten. Ein Ergebnis ohne Treffer bedeutet dort NICHT "frei". */
   incomplete: string[];
   appStore: {
@@ -73,6 +93,7 @@ export type ClearanceReport = {
     pypiPackage: "available" | "taken" | "unknown";
     cratesIo: "available" | "taken" | "unknown";
     homebrew: "available" | "taken" | "unknown";
+    golangModule: "available" | "taken" | "unknown";
     topRepos: GitHubRepoHit[];
   };
   aiGroundedTm?: {
@@ -203,6 +224,60 @@ async function checkWikidata(
 }
 
 /**
+ * Queries Wikipedia REST API (de.wikipedia.org) for existing notable entities/brands
+ */
+async function checkWikipedia(name: string): Promise<WikipediaHit | null> {
+  try {
+    const url = `https://de.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(
+      name,
+    )}`;
+    const res = await fetch(url, {
+      headers: { "User-Agent": UA },
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data?.title || data?.type === "disambiguation") return null;
+    return {
+      title: String(data.title || ""),
+      description: String(data.description || ""),
+      extract: String(data.extract || "").slice(0, 180),
+      url: String(
+        data?.content_urls?.desktop?.page ||
+          `https://de.wikipedia.org/wiki/${encodeURIComponent(name)}`,
+      ),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Queries DuckDuckGo Instant Answer Open API for zero-click brand abstracts
+ */
+async function checkDuckDuckGo(name: string): Promise<DuckDuckGoHit | null> {
+  try {
+    const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(
+      name,
+    )}&format=json&no_html=1&skip_disambig=1`;
+    const res = await fetch(url, {
+      headers: { "User-Agent": UA },
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data?.Heading && !data?.Abstract) return null;
+    return {
+      heading: String(data.Heading || ""),
+      abstract: String(data.Abstract || "").slice(0, 180),
+      entity: String(data.Entity || ""),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Queries Apple iTunes Search API (DE App Store) for Werktitelschutz (§ 5 Abs. 3 MarkenG)
  */
 async function checkAppleAppStore(name: string): Promise<{
@@ -275,7 +350,7 @@ async function checkDevAndSocial(name: string): Promise<ClearanceReport["devAndS
     ghHeaders.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
   }
 
-  const [ghUserRes, npmRes, pypiRes, cratesRes, brewRes, ghRepoRes] = await Promise.allSettled([
+  const [ghUserRes, npmRes, pypiRes, cratesRes, brewRes, goRes, ghRepoRes] = await Promise.allSettled([
     fetch(`https://api.github.com/users/${encodeURIComponent(name)}`, {
       headers: ghHeaders,
       signal: AbortSignal.timeout(3000),
@@ -293,6 +368,10 @@ async function checkDevAndSocial(name: string): Promise<ClearanceReport["devAndS
       signal: AbortSignal.timeout(3000),
     }),
     fetch(`https://formulae.brew.sh/api/formula/${encodeURIComponent(name)}.json`, {
+      headers: { "User-Agent": UA },
+      signal: AbortSignal.timeout(3000),
+    }),
+    fetch(`https://proxy.golang.org/${encodeURIComponent(name)}/@v/list`, {
       headers: { "User-Agent": UA },
       signal: AbortSignal.timeout(3000),
     }),
@@ -339,6 +418,7 @@ async function checkDevAndSocial(name: string): Promise<ClearanceReport["devAndS
     pypiPackage: mapStatus(pypiRes),
     cratesIo: mapStatus(cratesRes),
     homebrew: mapStatus(brewRes),
+    golangModule: mapStatus(goRes),
     topRepos,
   };
 }
@@ -420,15 +500,25 @@ export async function POST(req: Request) {
         : process.env.GEMINI_API_KEY || "";
 
     // Run all live checks in parallel!
-    const [domains, wikidata, appStoreRaw, candidateBundleIds, devAndSocial, aiGroundedTm] =
-      await Promise.all([
-        Promise.all(tlds.map((tld) => checkSingleDomain(clean, tld))),
-        checkWikidata(clean),
-        checkAppleAppStore(clean),
-        auditCandidateBundleIds(clean),
-        checkDevAndSocial(clean),
-        geminiApiKey ? checkGeminiGroundedTrademark(clean, geminiApiKey) : Promise.resolve(null),
-      ]);
+    const [
+      domains,
+      wikidata,
+      wikipediaHit,
+      duckDuckGoHit,
+      appStoreRaw,
+      candidateBundleIds,
+      devAndSocial,
+      aiGroundedTm,
+    ] = await Promise.all([
+      Promise.all(tlds.map((tld) => checkSingleDomain(clean, tld))),
+      checkWikidata(clean),
+      checkWikipedia(clean),
+      checkDuckDuckGo(clean),
+      checkAppleAppStore(clean),
+      auditCandidateBundleIds(clean),
+      checkDevAndSocial(clean),
+      geminiApiKey ? checkGeminiGroundedTrademark(clean, geminiApiKey) : Promise.resolve(null),
+    ]);
 
     const wikidataHits = wikidata.hits;
     const { ok: appStoreOk, ...appStoreBase } = appStoreRaw;
@@ -440,6 +530,12 @@ export async function POST(req: Request) {
       ...appStoreBase,
       bundleIds: candidateBundleIds,
     };
+
+    // Calculate domain price comparisons for all requested TLDs
+    const domainPrices: Record<string, TldPriceComparison | null> = {};
+    for (const tld of tlds) {
+      domainPrices[tld] = compareDomainPrices(`${clean}.${tld}`);
+    }
 
     const incomplete: string[] = [];
     if (domains.every((d) => d.status === "unknown")) incomplete.push("Domains");
@@ -473,6 +569,10 @@ export async function POST(req: Request) {
       const brandWikidataHits = wikidataHits.filter((w) => w.isBrandOrSoftware);
       if (brandWikidataHits.length >= 2) tmRiskScore -= 3;
       else if (brandWikidataHits.length === 1) tmRiskScore -= 2;
+
+      // Zusätzliche Abzüge durch Wikipedia oder DuckDuckGo Marken-Treffer
+      if (wikipediaHit) tmRiskScore = Math.max(1, tmRiskScore - 2);
+      if (duckDuckGoHit) tmRiskScore = Math.max(1, tmRiskScore - 1);
     }
 
     if (aiGroundedTm && typeof aiGroundedTm.riskScore === "number") {
@@ -544,6 +644,9 @@ export async function POST(req: Request) {
       domains,
       trademark,
       wikidataHits,
+      wikipediaHit,
+      duckDuckGoHit,
+      domainPrices,
       incomplete,
       appStore,
       devAndSocial,

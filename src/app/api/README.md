@@ -70,16 +70,18 @@ Führt eine vollständige Multi-Vektor-Prüfung für einen konkreten Namen durch
      - Extrahiert den App-Haupttitel vor Doppelpunkt oder Bindestrich.
      - Vergleicht exakt und über Kölner Phonetik.
      - Status: `"clear"` | `"similar"` | `"collision"` (§ 5 Abs. 3 MarkenG).
-  3. **Wikidata Entitäten (`checkWikidata`):**
-     - Fragt `https://www.wikidata.org/w/api.php?action=wbsearchentities` ab.
-     - Filtert nach bestehenden Unternehmen, Marken, Webseiten, Apps oder Software-Projekten.
-     - Automatischer Retry bei HTTP 429.
+  3. **Wissensdatenbanken & Enzyklopädie:**
+     - **Wikidata API:** Fragt `https://www.wikidata.org/w/api.php` nach bekannten Marken und Unternehmen ab.
+     - **Wikipedia REST API:** Fragt `https://de.wikipedia.org/api/rest_v1/page/summary/{name}` nach bestehenden Artikeln ab.
+     - **DuckDuckGo Instant Answer:** Prüft `https://api.duckduckgo.com/?q={name}&format=json` auf Zero-Click-Entitäten.
   4. **Entwickler- & Paket-Namensräume (`checkDevAndSocial`):**
      - Prüft `api.github.com/users/{name}` und sucht Repositories mit hoher Star-Anzahl.
-     - Prüft `registry.npmjs.org/{name}`, `pypi.org/pypi/{name}/json`, `crates.io/api/v1/crates/{name}` und `formulae.brew.sh/api/formula/{name}.json`.
+     - Prüft `registry.npmjs.org/{name}`, `pypi.org/pypi/{name}/json`, `crates.io/api/v1/crates/{name}`, `formulae.brew.sh/api/formula/{name}.json` und `proxy.golang.org/{name}/@v/list`.
   5. **Mobile App Bundle-IDs & Werktitelschutz (`auditCandidateBundleIds`):**
      - Prüft kanonische Identifiers (`de.{name}.app`, `com.{name}.app`, `io.{name}.app`) live gegen Apple App Store und Google Play Store.
-  6. **KI-Marken-Grounding (`checkGeminiGroundedTrademark`):**
+  6. **Domain-Preisvergleich (`compareDomainPrices`):**
+     - Liefert für jede TLD den günstigsten Dauerpreis (Netcup, Hetzner, Cloudflare, Porkbun) und warnt vor Lockangeboten.
+  7. **KI-Marken-Grounding (`checkGeminiGroundedTrademark`):**
      - Optional bei Google Gemini: Nutzt `google_search` Tool-Grounding zur Erkennung real existierender, noch nicht im DPMA eingetragener Brands.
 
 - **Response:** `ClearanceReport`

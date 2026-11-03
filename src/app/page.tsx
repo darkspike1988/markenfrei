@@ -5,6 +5,7 @@ import {
   ArrowRight,
   CaretDown,
   Check,
+  Database,
   Download,
   GearSix,
   Lightning,
@@ -24,6 +25,7 @@ import {
 import { ResultRow, ResultSkeleton } from "@/components/result-row";
 import { DetailPanel } from "@/components/detail-panel";
 import { SettingsDialog } from "@/components/settings-dialog";
+import { InfoModal } from "@/components/info-modal";
 
 const TLDS = ["de", "com", "app", "ai", "io", "dev"];
 
@@ -48,6 +50,7 @@ type Phase = "idle" | "generating" | "checking" | "done";
 export default function Home() {
   const [config, setConfig] = useState<LlmConfig>(getDefaultConfig());
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
   const [ollama, setOllama] = useState<{ running: boolean; models: string[] }>({
     running: false,
     models: [],
@@ -399,18 +402,30 @@ export default function Home() {
           <ShieldCheck size={20} weight="bold" aria-hidden />
           <span className="text-[15px] font-medium tracking-tight">MarkenFrei</span>
         </div>
-        <button
-          type="button"
-          onClick={() => setSettingsOpen(true)}
-          className="inline-flex cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-muted transition-colors hover:bg-wash hover:text-ink"
-          title="Modell konfigurieren (⌘K)"
-        >
-          <GearSix size={14} weight="bold" aria-hidden />
-          <span>{providerLabel}</span>
-          <kbd className="hidden sm:inline rounded bg-wash px-1 py-0.5 font-mono text-[10px] text-muted border border-line">
-            ⌘K
-          </kbd>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setInfoOpen(true)}
+            className="inline-flex cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-muted transition-colors hover:bg-wash hover:text-ink"
+            title="Verwendete Open APIs & Quellen anzeigen"
+          >
+            <Database size={14} weight="bold" aria-hidden />
+            <span className="hidden sm:inline">Open APIs & Infos</span>
+            <span className="sm:hidden">Infos</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+            className="inline-flex cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-muted transition-colors hover:bg-wash hover:text-ink"
+            title="Modell konfigurieren (⌘K)"
+          >
+            <GearSix size={14} weight="bold" aria-hidden />
+            <span>{providerLabel}</span>
+            <kbd className="hidden sm:inline rounded bg-wash px-1 py-0.5 font-mono text-[10px] text-muted border border-line">
+              ⌘K
+            </kbd>
+          </button>
+        </div>
       </header>
 
       {/* Main Omnibar Interface */}
@@ -716,8 +731,17 @@ export default function Home() {
       </main>
 
       <footer className="mx-auto w-full max-w-3xl px-5 py-6 text-xs text-muted flex items-center justify-between">
-        <span>MarkenFrei · Open Source (MIT)</span>
-        <span>DENIC, Verisign, OpenThesaurus, Apple App Store</span>
+        <div className="flex items-center gap-3">
+          <span>MarkenFrei · Open Source (MIT)</span>
+          <button
+            type="button"
+            onClick={() => setInfoOpen(true)}
+            className="underline underline-offset-2 hover:text-ink cursor-pointer"
+          >
+            Alle 18+ Open APIs
+          </button>
+        </div>
+        <span className="hidden sm:inline">DENIC, Verisign, Wikipedia, App Store, DuckDuckGo</span>
       </footer>
 
       {selected && (
@@ -731,6 +755,7 @@ export default function Home() {
           ollama={ollama}
         />
       )}
+      {infoOpen && <InfoModal onClose={() => setInfoOpen(false)} />}
     </div>
   );
 }

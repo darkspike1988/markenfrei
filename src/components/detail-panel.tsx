@@ -165,6 +165,87 @@ export function DetailPanel({
                 </li>
               ))}
             </ul>
+
+            {/* Domain-Preisvergleich & Hosting */}
+            {report.domainPrices && Object.keys(report.domainPrices).length > 0 && (
+              <div className="mt-4 pt-4 border-t border-line">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-xs font-medium text-ink">
+                    Günstigste Registrare & Preisvergleich
+                  </span>
+                  <span className="text-[11px] text-muted">
+                    Dauerpreis ohne Lockvogel-Fallen
+                  </span>
+                </div>
+
+                <div className="space-y-2.5">
+                  {Object.entries(report.domainPrices).map(([tld, comp]) => {
+                    if (!comp) return null;
+                    const domainObj = report.domains.find((d) => d.tld === tld);
+                    const isAvailable = domainObj?.status === "available";
+
+                    return (
+                      <div
+                        key={tld}
+                        className={`rounded-lg border p-2.5 text-xs ${
+                          isAvailable
+                            ? "border-ok/30 bg-ok-bg/15"
+                            : "border-line bg-surface"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between font-mono mb-1.5">
+                          <span className="font-semibold text-ink">.{tld}</span>
+                          <span className="text-[11px] text-muted">
+                            Günstigster Dauerpreis:{" "}
+                            <strong className="text-ok">
+                              {comp.cheapestRenewal.currencyLabel}
+                            </strong>{" "}
+                            ({comp.cheapestRenewal.name})
+                          </span>
+                        </div>
+
+                        <div className="divide-y divide-line/60">
+                          {comp.registrars.slice(0, 3).map((r) => (
+                            <div
+                              key={r.id}
+                              className="py-1 flex items-center justify-between text-[11px]"
+                            >
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-medium text-soft">{r.name}</span>
+                                {r.isAtCost && (
+                                  <span className="rounded bg-ok/10 text-ok px-1 text-[10px]">
+                                    At-Cost
+                                  </span>
+                                )}
+                                {r.isTeaserTrap && (
+                                  <span
+                                    title={r.trapWarning}
+                                    className="rounded bg-warn/15 text-warn px-1 text-[10px] cursor-help"
+                                  >
+                                    Lockangebot
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-muted">{r.currencyLabel}</span>
+                                <a
+                                  href={r.registerUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-ink underline hover:text-ok"
+                                >
+                                  Öffnen
+                                </a>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </Section>
 
           <Section title="Markenrecherche">
@@ -318,30 +399,88 @@ export function DetailPanel({
             )}
           </Section>
 
-          <Section title={`Wikidata (${report.wikidataHits.length})`}>
-            {report.wikidataHits.length === 0 ? (
-              <p className="text-muted">Keine gleichnamigen Einträge.</p>
-            ) : (
-              <ul className="divide-y divide-line">
-                {report.wikidataHits.slice(0, 4).map((w) => (
-                  <li key={w.id} className="py-2">
+          <Section title="Wissensdatenbanken & Enzyklopädie">
+            <div className="space-y-3">
+              {report.wikipediaHit && (
+                <div className="rounded-lg border border-line bg-wash/30 p-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-xs text-ink flex items-center gap-1.5">
+                      Wikipedia (DE)
+                    </span>
                     <a
-                      href={w.url}
+                      href={report.wikipediaHit.url}
                       target="_blank"
                       rel="noreferrer"
-                      className="font-medium underline-offset-2 hover:underline"
+                      className="text-xs text-soft underline flex items-center gap-0.5 hover:text-ink"
                     >
-                      {w.label}
+                      Artikel lesen
+                      <ArrowSquareOut size={11} weight="bold" />
                     </a>
-                    <p className="text-xs text-muted">{w.description}</p>
-                  </li>
-                ))}
-              </ul>
-            )}
+                  </div>
+                  <p className="mt-1 font-medium text-xs text-ink">
+                    {report.wikipediaHit.title}
+                  </p>
+                  <p className="text-xs text-muted">
+                    {report.wikipediaHit.description}
+                  </p>
+                  {report.wikipediaHit.extract && (
+                    <p className="mt-1 text-[11px] text-muted/90 italic">
+                      „{report.wikipediaHit.extract}“
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {report.duckDuckGoHit && (
+                <div className="rounded-lg border border-line bg-wash/30 p-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-xs text-ink">
+                      DuckDuckGo Instant Answer
+                    </span>
+                    {report.duckDuckGoHit.entity && (
+                      <span className="rounded bg-wash px-1.5 py-0.5 text-[10px] font-mono text-muted border border-line">
+                        {report.duckDuckGoHit.entity}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1 font-medium text-xs text-ink">
+                    {report.duckDuckGoHit.heading}
+                  </p>
+                  <p className="text-xs text-muted">
+                    {report.duckDuckGoHit.abstract}
+                  </p>
+                </div>
+              )}
+
+              <div>
+                <span className="mb-1 block text-xs font-medium text-soft">
+                  Wikidata Entitäten ({report.wikidataHits.length})
+                </span>
+                {report.wikidataHits.length === 0 ? (
+                  <p className="text-muted text-xs">Keine gleichnamigen Einträge auf Wikidata.</p>
+                ) : (
+                  <ul className="divide-y divide-line">
+                    {report.wikidataHits.slice(0, 4).map((w) => (
+                      <li key={w.id} className="py-2">
+                        <a
+                          href={w.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="font-medium underline-offset-2 hover:underline text-xs"
+                        >
+                          {w.label}
+                        </a>
+                        <p className="text-xs text-muted">{w.description}</p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
           </Section>
 
           <Section title="Entwickler-Namensräume">
-            <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1.5">
+            <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1.5 text-xs">
               <dt className="text-muted">GitHub-Handle</dt>
               <dd>
                 <Status value={report.devAndSocial.githubHandle} />
@@ -361,6 +500,10 @@ export function DetailPanel({
               <dt className="text-muted">Homebrew Formula</dt>
               <dd>
                 <Status value={report.devAndSocial.homebrew} />
+              </dd>
+              <dt className="text-muted">Go Module (proxy.golang.org)</dt>
+              <dd>
+                <Status value={report.devAndSocial.golangModule} />
               </dd>
             </dl>
             {report.devAndSocial.topRepos.length > 0 && (

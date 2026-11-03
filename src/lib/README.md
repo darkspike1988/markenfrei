@@ -150,7 +150,22 @@ Brücke zu Mobile App Stores und Shipped Binary Identifiers (§ 5 Abs. 3 MarkenG
 
 ---
 
-### G. `providers.ts` · Multi-Provider Registry
+### G. `domain-pricing.ts` · Registrar-Preisvergleich & Hosting
+Transparenter Preisvergleich führender Registrare ohne Lockvogel-Fallen.
+- **`compareDomainPrices(domain: string): TldPriceComparison | null`**
+  - Ermittelt für `.de`, `.com`, `.app`, `.ai`, `.io`, `.dev` die Preise bei Netcup, Hetzner, Cloudflare, Porkbun, INWX, IONOS und Namecheap.
+  - Sortiert nach tatsächlichem **Verlängerungspreis (Renewal)**, damit Gründer nicht in 1-Euro-Lockangebote tappen.
+  - Hebt **At-Cost Großhandelspreise** (z. B. Cloudflare Registrar mit 0 $ Markup) und **Lockvogel-Fallen** (Warnbadge) hervor.
+  - Generiert vorbereitete Direktlinks mit vorausgefülltem Domainnamen.
+
+---
+
+### H. `open-apis.ts` · Zentrales Schnittstellen-Inventar
+Erfasst alle 25 öffentlich genutzten Open APIs mit Provider, Endpoint, Protokoll (RDAP, DoH, REST) und Dokumentationslink.
+
+---
+
+### I. `providers.ts` · Multi-Provider Registry
 Definiert 11 unterstützte Provider-Profile:
 1. `opendata`: Zero-Key, 100% lokal & kostenlos.
 2. `google`: Gemini 2.5 Flash / Flash Lite / Pro mit Web-Search Grounding.

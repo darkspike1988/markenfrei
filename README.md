@@ -2,7 +2,7 @@
 
 **MarkenFrei** ist ein minimalistisches, hochperformantes Open-Source Clearinghouse zur Vorab-Prüfung und Generierung unbedenklicher Namen für **Apps, Websites, SaaS-Tools und Bibliotheken**.
 
-Das Tool prüft Namen und App-Identitäten in Echtzeit gegen **Marken-Kollisionen, phonetische Zwillinge (§ 9 MarkenG), deutsches Freihaltebedürfnis (§ 8 MarkenG), Apple & Google Play Werktitelschutz (§ 5 Abs. 3 MarkenG), autoritative Registries (DENIC, Verisign, Google, Identity Digital), DoH sowie Entwickler-Namensräume (GitHub, npm, PyPI, Crates.io, Homebrew)**.
+Das Tool prüft Namen und App-Identitäten in Echtzeit gegen **Marken-Kollisionen, phonetische Zwillinge (§ 9 MarkenG), deutsches Freihaltebedürfnis (§ 8 MarkenG), Apple & Google Play Werktitelschutz (§ 5 Abs. 3 MarkenG), autoritative Registries (DENIC, Verisign, Google, Identity Digital), DoH, Enzyklopädien (Wikipedia & DuckDuckGo), Entwickler-Namensräume (GitHub, npm, PyPI, Crates.io, Homebrew, Go Proxy) und liefert einen transparenten Domain-Preisvergleich ohne Lockvogel-Fallen**.
 
 Inspiriert von wegweisenden GitHub-Projekten wie `facundoolano/app-store-scraper`, `DunlapCoddingPC/pyUSPTO`, `r13i/dodomains`, `faizul666/domain-search-agent` und REA (Reverse Engineering Anything).
 
@@ -45,7 +45,33 @@ Inspiriert von wegweisenden GitHub-Projekten wie `facundoolano/app-store-scraper
 
 ---
 
-### 3. Autoritative Domains & Fail-Safe Invariant
+### 3. Domain-Preisvergleich & Hosting (Günstigste Registrare)
+* **Transparenter Dauerpreis-Vergleich:**
+  * Vergleicht für jede geprüfte TLD (`.de`, `.com`, `.app`, `.ai`, `.io`, `.dev`) die tatsächlichen Kosten der führenden Anbieter (Netcup, Hetzner, Cloudflare, Porkbun, INWX, IONOS, Namecheap).
+* **Entlarvt Lockvogel-Fallen:**
+  * Warnt transparent vor 1-Euro-Angeboten, die sich ab dem zweiten Jahr verfünfzehnfachen (z. B. IONOS 1 € -> 15 € oder 22 €).
+* **At-Cost Großhandels-Empfehlung:**
+  * Hebt Großhandelspreise ohne Aufschlag hervor (z. B. Cloudflare Registrar mit 0 $ Markup für `.com` und `.app`).
+* **Beste Konditionen nach TLD:**
+  * `.de`: **Netcup** (0,42 €/Monat = 5,04 €/Jahr) & **Hetzner** (5,95 €/Jahr)
+  * `.com`: **Porkbun** (9,55 €/Jahr) & **Cloudflare** (9,60 €/Jahr At-Cost)
+  * `.app`: **Porkbun** (12,80 €/Jahr) & **Cloudflare** (12,90 €/Jahr At-Cost)
+  * `.io` / `.ai`: **Porkbun** (32,10 € für .io, 63,50 € für .ai)
+* **Direktlinks:** 1-Klick-Links direkt zum jeweiligen Registrar mit vorausgefülltem Domainnamen.
+
+---
+
+### 4. Wissensdatenbanken & Enzyklopädie-Prüfung
+* **Wikipedia Page Summary REST API:**
+  * Prüft live über `de.wikipedia.org/api/rest_v1/page/summary/`, ob ein gleichnamiger enzyklopädischer Artikel existiert, und zeigt Kurzbeschreibung und Direktlink.
+* **DuckDuckGo Instant Answer API:**
+  * Prüft die freie Zero-Click-Schnittstelle von DuckDuckGo auf bekannte Entitäten, Infoboxen und Markenbeschreibungen.
+* **Wikidata Entity Search API:**
+  * Durchsucht strukturierte Wikidata-Objekte nach Firmen, Software, Brands und Services.
+
+---
+
+### 5. Autoritative Registries & Fail-Safe Invariant
 * **Autoritative RDAP-Endpunkte (kein rdap.org-Proxy):**
   * `.de`: Direkt über `https://rdap.denic.de/domain/`
   * `.com` / `.net`: Direkt über Verisign `https://rdap.verisign.com/`
@@ -58,22 +84,21 @@ Inspiriert von wegweisenden GitHub-Projekten wie `facundoolano/app-store-scraper
 
 ---
 
-### 4. Entwickler-Ökosystem & Social Namespaces
+### 6. Entwickler-Ökosysteme & Paketmanager
 * **GitHub:** Nutzer-/Org-Handle Verfügbarkeit + Suche nach bekannten Repositories mit Stars.
-* **npm:** Node.js Paket-Namensraum (`registry.npmjs.org`).
+* **npm:** JavaScript/TypeScript Paket-Namensraum (`registry.npmjs.org`).
 * **PyPI:** Python Package Index (`pypi.org`).
 * **Crates.io:** Rust Cargo Paket-Namensraum (`crates.io/api/v1/crates/`).
 * **Homebrew:** macOS/Linux Formula Namensraum (`formulae.brew.sh`).
+* **Go Proxy:** Globaler Go Modul-Namensraum (`proxy.golang.org`).
 
 ---
 
-### 5. Multi-Provider LLM & Open-Data Engine
-* **Open-Data (100% lokal, kostenlos & keyless):**
-  * OpenThesaurus.de API + Datamuse API + Morphem-Synthesizer.
-* **Bring Your Own Key (BYOK) - 100% Client-Side:**
-  * Google Gemini (mit optionalem Web Search Grounding)
-  * Ollama (lokal auf `localhost:11434`, automatische Modellerkennung)
-  * DeepSeek, Groq, Mistral, OpenRouter, OpenAI, Claude, xAI.
+### 7. Verwendete Open APIs & Quellen-Transparenz
+Über den Button **„Open APIs & Infos“** im Header zeigt MarkenFrei alle **25 verwendeten Schnittstellen** übersichtlich an:
+* Endpoint-URL, Protokoll (RDAP, DoH, REST)
+* Authentifizierung (100% Kostenlos / Zero-Key)
+* Prüfzweck und Direktlink zur offiziellen Entwickler-Dokumentation.
 
 ---
 
@@ -103,7 +128,7 @@ Im Browser öffnen: **`http://localhost:3000`**
 * **Sprache:** TypeScript
 * **Styling:** Tailwind CSS (Warm Monochrome, `#fbfbfa` Canvas, `#111111` Ink, 0 Drop Shadows)
 * **Icons:** Phosphor Icons (`@phosphor-icons/react`)
-* **Protokolle & APIs:** IETF RDAP (RFC 7484), DNS-over-HTTPS (RFC 8484), Apple iTunes Search API, Google Play, Wikidata API, GitHub REST API, npm, PyPI, Crates.io, Homebrew API.
+* **Protokolle & APIs:** IETF RDAP (RFC 7484), DNS-over-HTTPS (RFC 8484), Apple iTunes Search & Lookup API, Google Play, Wikipedia REST API, DuckDuckGo Instant Answer API, Wikidata API, GitHub REST API, npm, PyPI, Crates.io, Homebrew API, Go Module Proxy.
 
 ---
 
@@ -111,7 +136,7 @@ Im Browser öffnen: **`http://localhost:3000`**
 
 Die Architektur und Schnittstellen sind modular dokumentiert:
 * [`src/README.md`](src/README.md) – Gesamtarchitektur & Datenfluss
-* [`src/lib/README.md`](src/lib/README.md) – Scoring, Phonetik, DoH & REA-Bridge
+* [`src/lib/README.md`](src/lib/README.md) – Scoring, Phonetik, DoH, Domain-Pricing & Open APIs
 * [`src/app/api/README.md`](src/app/api/README.md) – API-Routen, Invarianten & Endpunkte
 
 ---
