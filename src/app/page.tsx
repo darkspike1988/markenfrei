@@ -4,10 +4,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   CaretDown,
+  Check,
   Download,
   GearSix,
+  Lightning,
+  Link,
   Plus,
   ShieldCheck,
+  Sparkle,
 } from "@phosphor-icons/react";
 import type { ClearanceReport } from "@/app/api/clearance/route";
 import type { OpenDataWordField } from "@/lib/opendata";
@@ -31,19 +35,15 @@ const STYLES = [
 ];
 
 const EXAMPLES = [
-  "Digitales Wachbuch und Schichtplaner für Rettungswachen",
-  "Terminplanung und Patientenportal für Arztpraxen",
-  "Belegerfassung und Umsatzsteuer für Freelancer",
+  { label: "WachWerk", q: "WachWerk" },
+  { label: "Rettungswache App", q: "Wachbuch und Schichtplaner für Rettungsdienst" },
+  { label: "Praxis-Portal", q: "Patientenportal und Terminkoordination für Arztpraxen" },
+  { label: "Fiskalo", q: "Fiskalo" },
 ];
 
-const field =
-  "w-full rounded-md border border-line bg-surface px-3 py-2 text-sm placeholder:text-muted/70 focus:border-ink focus:outline-none";
+const clean = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 
 type Phase = "idle" | "generating" | "checking" | "done";
-
-type Candidate = { name: string; tagline?: string };
-
-const clean = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 
 export default function Home() {
   const [config, setConfig] = useState<LlmConfig>(getDefaultConfig());
@@ -53,12 +53,11 @@ export default function Home() {
     models: [],
   });
 
-  const [description, setDescription] = useState("");
-  const [keywords, setKeywords] = useState("");
+  // Omnibar-Eingabe (kann ein einzelner Name oder eine Projektbeschreibung sein)
+  const [query, setQuery] = useState("");
   const [style, setStyle] = useState("brandable");
   const [tlds, setTlds] = useState<string[]>(["de", "com", "app"]);
   const [maxLen, setMaxLen] = useState(10);
-  const [custom, setCustom] = useState("");
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [words, setWords] = useState<OpenDataWordField | null>(null);
 
@@ -69,11 +68,18 @@ export default function Home() {
   const [notice, setNotice] = useState<string | null>(null);
   const [onlyFree, setOnlyFree] = useState(false);
   const [selected, setSelected] = useState<ClearanceReport | null>(null);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   const runId = useRef(0);
+  const inputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLElement>(null);
 
-  // Gespeicherte Konfiguration erst nach dem Mount lesen, damit Server- und Client-Markup übereinstimmen.
+  // Intent-Erkennung: 1 Wort = Sofort-Einzelprüfung, Mehrere Wörter = Namensgenerierung
+  const trimmed = query.trim();
+  const isSingleWord =
+    trimmed.length >= 2 && !trimmed.includes(" ") && !trimmed.includes("\n");
+
+  // Gespeicherte Konfiguration aus localStorage lesen
   useEffect(() => {
     queueMicrotask(() => {
       try {
@@ -85,7 +91,7 @@ export default function Home() {
           }
         }
       } catch {
-        /* ignore corrupt storage */
+        /* ignore */
       }
     });
   }, []);
@@ -99,6 +105,19 @@ export default function Home() {
     }
   };
 
+  // Keyboard Shortcuts: ⌘K für Settings, Esc zum Schließen
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setSettingsOpen((o) => !o);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // Ollama Status prüfen
   useEffect(() => {
     if (!settingsOpen || config.provider !== "ollama") return;
     fetch("/api/ollama-models")
@@ -107,30 +126,21 @@ export default function Home() {
       .catch(() => setOllama({ running: false, models: [] }));
   }, [settingsOpen, config.provider]);
 
-  // Wortideen (OpenThesaurus / Datamuse) nur laden, solange die Optionen offen sind.
+  // Open-Data Wortideen laden, wenn Optionen geöffnet sind
   useEffect(() => {
-    if (!optionsOpen || (!description.trim() && !keywords.trim())) return;
+    if (!optionsOpen || !trimmed || isSingleWord) return;
     const t = setTimeout(() => {
       fetch("/api/opendata-words", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ keywords, description, maxLen }),
+        body: JSON.stringify({ keywords: trimmed, description: trimmed, maxLen }),
       })
         .then((r) => (r.ok ? r.json() : null))
         .then((d) => d && setWords(d))
         .catch(() => undefined);
-    }, 700);
+    }, 600);
     return () => clearTimeout(t);
-  }, [optionsOpen, description, keywords, maxLen]);
-
-  const addKeyword = (word: string) => {
-    const list = keywords
-      .split(",")
-      .map((k) => k.trim())
-      .filter(Boolean);
-    const w = word.toLowerCase();
-    if (!list.includes(w)) setKeywords([...list, w].join(", "));
-  };
+  }, [optionsOpen, trimmed, isSingleWord, maxLen]);
 
   const toggleTld = (tld: string) =>
     setTlds((cur) =>
@@ -141,8 +151,33 @@ export default function Home() {
         : [...cur, tld],
     );
 
-  const generate = useCallback(
-    async (customNames: string[]): Promise<Candidate[]> => {
+  // Clearance Check für einen einzelnen Namen
+  const checkOne = useCallback(
+    async (name: string): Promise<ClearanceReport | null> => {
+      try {
+        const res = await fetch("/api/clearance", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: clean(name),
+            description: isSingleWord ? "" : trimmed,
+            keywords: isSingleWord ? [] : trimmed.split(/[\s,]+/).slice(0, 5),
+            tlds,
+            provider: config.provider,
+            apiKey: config.apiKey,
+          }),
+        });
+        return res.ok ? await res.json() : null;
+      } catch {
+        return null;
+      }
+    },
+    [isSingleWord, trimmed, tlds, config],
+  );
+
+  // Namensideen per LLM oder Open-Data generieren
+  const generateIdeas = useCallback(
+    async (desc: string): Promise<string[]> => {
       const call = (provider: string) =>
         fetch("/api/generate", {
           method: "POST",
@@ -152,106 +187,124 @@ export default function Home() {
             model: config.model,
             apiKey: config.apiKey,
             baseUrl: config.baseUrl,
-            description,
-            keywords,
+            description: desc,
+            keywords: desc.split(/[\s,]+/).slice(0, 5),
             styles: [style],
             maxLen,
             count: 10,
-            exclude: customNames,
           }),
         }).then(async (r) => ({ ok: r.ok, data: await r.json() }));
 
       let res = await call(config.provider);
       if ((!res.ok || res.data.error) && config.provider !== "opendata") {
         setNotice(
-          `${getProvider(config.provider)?.label ?? "Das Modell"} war nicht erreichbar. Die Vorschläge stammen aus der Open-Data-Engine.`,
+          `${getProvider(config.provider)?.label ?? "Das gewählte Modell"} war nicht erreichbar. Die Vorschläge stammen aus der Open-Data-Engine.`,
         );
         res = await call("opendata");
-      } else if (res.data.notice) {
-        setNotice(res.data.notice);
       }
       if (!res.ok || res.data.error) {
         throw new Error(res.data.error ?? "Generierung fehlgeschlagen");
       }
-      return res.data.candidates as Candidate[];
+      return (res.data.candidates || []).map((c: { name: string }) => clean(c.name));
     },
-    [config, description, keywords, style, maxLen],
+    [config, style, maxLen],
   );
 
-  const check = async (name: string): Promise<ClearanceReport | null> => {
-    try {
-      const res = await fetch("/api/clearance", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name,
-          description,
-          keywords: keywords.split(",").map((k) => k.trim()),
-          tlds,
-          provider: config.provider,
-          apiKey: config.apiKey,
-        }),
-      });
-      return res.ok ? await res.json() : null;
-    } catch {
-      return null;
-    }
-  };
+  // Hauptausführung (Single-Name ODER Batch-Generierung)
+  const runWithQuery = useCallback(
+    async (rawInput: string) => {
+      const input = rawInput.trim();
+      if (!input) return;
 
-  const run = async () => {
-    const customNames = custom
-      .split("\n")
-      .map(clean)
-      .filter((n) => n.length >= 3);
+      const id = ++runId.current;
+      setError(null);
+      setNotice(null);
+      setReports([]);
+      setSelected(null);
 
-    if (!description.trim() && customNames.length === 0) {
-      setError("Beschreibe kurz, was du baust, oder trage eigene Namen ein.");
-      return;
-    }
-
-    const id = ++runId.current;
-    setError(null);
-    setNotice(null);
-    setReports([]);
-    setSelected(null);
-    setPhase("generating");
-    setTotal(0);
-    requestAnimationFrame(() =>
-      resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
-    );
-
-    try {
-      let names = customNames;
-      if (description.trim()) {
-        const generated = await generate(customNames);
-        names = [...customNames, ...generated.map((c) => clean(c.name))];
+      // URL-Parameter aktualisieren (Shareable State)
+      if (typeof window !== "undefined") {
+        const url = new URL(window.location.href);
+        url.searchParams.set("q", input);
+        window.history.replaceState(null, "", url.toString());
       }
-      names = Array.from(new Set(names)).slice(0, 12);
-      if (id !== runId.current) return;
 
-      setTotal(names.length);
-      setPhase("checking");
+      requestAnimationFrame(() =>
+        resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      );
 
-      const queue = [...names];
-      const worker = async () => {
-        while (queue.length > 0) {
-          const next = queue.shift();
-          if (!next) break;
-          const report = await check(next);
+      try {
+        const isSingle = !input.includes(" ") && !input.includes("\n");
+
+        if (isSingle) {
+          // --- 1. SOFORT-EINZELPRÜFUNG ---
+          setPhase("checking");
+          setTotal(1);
+          const singleName = clean(input);
+          const report = await checkOne(singleName);
           if (id !== runId.current) return;
-          if (report) setReports((cur) => [...cur, report]);
-          else setTotal((t) => t - 1);
+          if (report) {
+            setReports([report]);
+          } else {
+            setError(`Prüfung für „${singleName}“ fehlgeschlagen.`);
+          }
+          setPhase("done");
+        } else {
+          // --- 2. GENERIERUNG + BATCH-PRÜFUNG ---
+          setPhase("generating");
+          setTotal(0);
+          const candidates = await generateIdeas(input);
+          if (id !== runId.current) return;
+
+          const unique = Array.from(new Set(candidates)).filter((n) => n.length >= 3);
+          setTotal(unique.length);
+          setPhase("checking");
+
+          const queue = [...unique];
+          const worker = async () => {
+            while (queue.length > 0) {
+              const next = queue.shift();
+              if (!next) break;
+              const rep = await checkOne(next);
+              if (id !== runId.current) return;
+              if (rep) setReports((cur) => [...cur, rep]);
+              else setTotal((t) => t - 1);
+            }
+          };
+          await Promise.all([worker(), worker(), worker()]);
+          if (id === runId.current) setPhase("done");
         }
-      };
-      await Promise.all([worker(), worker(), worker()]);
-      if (id === runId.current) setPhase("done");
-    } catch (e) {
-      if (id !== runId.current) return;
-      setError(e instanceof Error ? e.message : "Unbekannter Fehler");
-      setPhase("idle");
+      } catch (err) {
+        if (id !== runId.current) return;
+        setError(err instanceof Error ? err.message : "Fehler bei der Abfrage");
+        setPhase("idle");
+      }
+    },
+    [checkOne, generateIdeas],
+  );
+
+  // Initialer Start via URL-Parameter ?q=... (Shareable Link)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const initialQ = params.get("q");
+    if (initialQ && !query) {
+      queueMicrotask(() => {
+        setQuery(initialQ);
+        runWithQuery(initialQ);
+      });
     }
+  }, [runWithQuery, query]);
+
+  // Share-Link kopieren
+  const copyShareLink = async () => {
+    if (typeof window === "undefined") return;
+    await navigator.clipboard.writeText(window.location.href);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
   };
 
+  // Gefilterte Ergebnisse
   const visible = useMemo(() => {
     const list = onlyFree
       ? reports.filter((r) =>
@@ -266,15 +319,18 @@ export default function Home() {
   const exportMarkdown = () => {
     const rows = visible.map((r) => {
       const doms = r.domains
-        .map((d) => `.${d.tld} ${d.status === "available" ? "frei" : d.status === "taken" ? "vergeben" : "?"}`)
+        .map(
+          (d) =>
+            `.${d.tld} ${d.status === "available" ? "frei" : d.status === "taken" ? "vergeben" : "?"}`,
+        )
         .join(", ");
       return `| ${r.name} | ${r.matrixScore.verdict} | ${r.matrixScore.totalScore} | ${doms} | ${r.appStore.status} |`;
     });
-    const md = `# MarkenFrei\n\nProjekt: ${description || "-"}\nStand: ${new Date().toLocaleString("de-DE")}\n\n| Name | Ampel | Score | Domains | App Store |\n|---|---|---|---|---|\n${rows.join("\n")}\n\nVorprüfung, keine Rechtsberatung.\n`;
+    const md = `# MarkenFrei Clearance-Bericht\n\nAbfrage: ${query || "-"}\nStand: ${new Date().toLocaleString("de-DE")}\n\n| Name | Ampel | Score | Domains | App Store |\n|---|---|---|---|---|\n${rows.join("\n")}\n\nVorprüfung, keine Rechtsberatung.\n`;
     const url = URL.createObjectURL(new Blob([md], { type: "text/markdown" }));
     const a = document.createElement("a");
     a.href = url;
-    a.download = "markenfrei.md";
+    a.download = `markenfrei-${clean(query || "export")}.md`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -288,74 +344,211 @@ export default function Home() {
 
   return (
     <div className="flex min-h-[100dvh] flex-col">
+      {/* Header */}
       <header className="mx-auto flex w-full max-w-3xl items-center justify-between px-5 py-5">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
           <ShieldCheck size={20} weight="bold" aria-hidden />
-          <span className="text-[15px] font-medium tracking-tight">
-            MarkenFrei
-          </span>
+          <span className="text-[15px] font-medium tracking-tight">MarkenFrei</span>
         </div>
         <button
           type="button"
           onClick={() => setSettingsOpen(true)}
-          className="inline-flex cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm text-muted transition-colors hover:bg-wash hover:text-ink"
+          className="inline-flex cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-muted transition-colors hover:bg-wash hover:text-ink"
+          title="Modell konfigurieren (⌘K)"
         >
-          <GearSix size={16} weight="bold" aria-hidden />
-          {providerLabel}
+          <GearSix size={14} weight="bold" aria-hidden />
+          <span>{providerLabel}</span>
+          <kbd className="hidden sm:inline rounded bg-wash px-1 py-0.5 font-mono text-[10px] text-muted border border-line">
+            ⌘K
+          </kbd>
         </button>
       </header>
 
+      {/* Main Omnibar Interface */}
       <main className="mx-auto w-full max-w-3xl flex-1 px-5 pb-24">
         <section className="pt-10 sm:pt-16">
-          <h1 className="max-w-xl text-4xl font-medium leading-[1.1] tracking-tight sm:text-5xl">
+          <h1 className="max-w-xl text-3xl font-medium leading-[1.15] tracking-tight sm:text-5xl">
             Ein Name, der dir niemand streitig macht.
           </h1>
-          <p className="mt-4 max-w-lg text-base text-muted">
-            Beschreibe dein Projekt. Du bekommst Namensvorschläge, die direkt
-            auf Marken, Domains, App Store und Pakete geprüft sind.
+          <p className="mt-3.5 max-w-lg text-sm text-muted">
+            Tippe einen Wunschnamen oder eine Projektidee ein. Direkte Vorprüfung auf
+            Marken, Domains, App Store und Paket-Namensräume.
           </p>
 
-          <div className="mt-8">
-            <label htmlFor="description" className="sr-only">
-              Was baust du?
-            </label>
-            <textarea
-              id="description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !busy) run();
-              }}
-              rows={3}
-              placeholder="Was baust du? Zum Beispiel: Eine App, mit der Rettungswachen ihre Schichten planen."
-              className="w-full resize-none rounded-lg border border-line bg-surface px-4 py-3.5 text-base placeholder:text-muted/70 focus:border-ink focus:outline-none"
-            />
+          {/* OMNIBAR FORM */}
+          <div className="mt-7">
+            <div className="relative flex items-center rounded-xl border border-line bg-surface shadow-sm focus-within:border-ink focus-within:ring-1 focus-within:ring-ink transition-all">
+              <input
+                ref={inputRef}
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !busy) runWithQuery(query);
+                }}
+                placeholder="Name oder Idee eintippen (z. B. „WachWerk“ oder „Wachbuch für Hilfsorganisationen“)…"
+                className="w-full bg-transparent px-4 py-3.5 pr-28 text-base text-ink placeholder:text-muted/60 focus:outline-none"
+              />
 
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-x-1 gap-y-1 text-sm">
-                <span className="text-muted">Beispiele:</span>
-                {EXAMPLES.map((ex, i) => (
-                  <button
-                    key={ex}
-                    type="button"
-                    onClick={() => setDescription(ex)}
-                    className="cursor-pointer rounded px-1.5 py-0.5 text-soft underline-offset-2 hover:bg-wash hover:underline"
-                  >
-                    {["Wachbuch", "Praxis", "Buchhaltung"][i]}
-                  </button>
-                ))}
+              <div className="absolute right-2 flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => runWithQuery(query)}
+                  disabled={busy || !trimmed}
+                  className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-ink px-3.5 py-2 text-xs font-medium text-white transition-all hover:bg-soft active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <span>{busy ? "Prüfe…" : "Prüfen"}</span>
+                  {!busy && <ArrowRight size={12} weight="bold" aria-hidden />}
+                </button>
+              </div>
+            </div>
+
+            {/* Smart Detection & Examples */}
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2.5 text-xs">
+              <div className="flex flex-wrap items-center gap-1.5 text-muted">
+                {trimmed ? (
+                  <span className="inline-flex items-center gap-1 rounded bg-wash px-2 py-0.5 text-soft font-mono">
+                    {isSingleWord ? (
+                      <>
+                        <Lightning size={12} weight="bold" className="text-warn" />
+                        Sofort-Einzelprüfung für „{clean(trimmed)}“
+                      </>
+                    ) : (
+                      <>
+                        <Sparkle size={12} weight="bold" className="text-ok" />
+                        Namensgenerierung + Batch-Prüfung
+                      </>
+                    )}
+                  </span>
+                ) : (
+                  <>
+                    <span>Beispiele:</span>
+                    {EXAMPLES.map((ex) => (
+                      <button
+                        key={ex.label}
+                        type="button"
+                        onClick={() => {
+                          setQuery(ex.q);
+                          runWithQuery(ex.q);
+                        }}
+                        className="cursor-pointer rounded px-1.5 py-0.5 text-soft underline-offset-2 hover:bg-wash hover:underline"
+                      >
+                        {ex.label}
+                      </button>
+                    ))}
+                  </>
+                )}
               </div>
 
+              {/* Options Toggle */}
               <button
                 type="button"
-                onClick={run}
-                disabled={busy}
-                className="inline-flex cursor-pointer items-center gap-2 rounded-md bg-ink px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-soft active:scale-[0.98] disabled:cursor-wait disabled:opacity-60"
+                onClick={() => setOptionsOpen((o) => !o)}
+                aria-expanded={optionsOpen}
+                className="inline-flex cursor-pointer items-center gap-1 text-muted transition-colors hover:text-ink"
               >
-                {busy ? "Prüfe…" : "Namen finden"}
-                {!busy && <ArrowRight size={14} weight="bold" aria-hidden />}
+                <CaretDown
+                  size={12}
+                  weight="bold"
+                  className={`transition-transform ${optionsOpen ? "rotate-180" : ""}`}
+                  aria-hidden
+                />
+                Kriterien
               </button>
             </div>
+
+            {/* Collapsible Fine-Tuning */}
+            {optionsOpen && (
+              <div className="fade-up mt-4 rounded-xl border border-line bg-surface/50 p-4 grid gap-4 sm:grid-cols-2 text-xs">
+                <div>
+                  <span className="mb-1.5 block font-medium text-soft">
+                    Domain-Endungen
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {TLDS.map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        aria-pressed={tlds.includes(t)}
+                        onClick={() => toggleTld(t)}
+                        className={`cursor-pointer rounded px-2 py-1 font-mono transition-colors ${
+                          tlds.includes(t)
+                            ? "bg-ink text-white"
+                            : "bg-wash text-soft hover:bg-line"
+                        }`}
+                      >
+                        .{t}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <span className="mb-1.5 block font-medium text-soft">
+                    Namensstil (für Ideen)
+                  </span>
+                  <div className="flex flex-wrap gap-1.5" role="radiogroup">
+                    {STYLES.map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        role="radio"
+                        aria-checked={style === s.id}
+                        onClick={() => setStyle(s.id)}
+                        className={`cursor-pointer rounded px-2 py-1 transition-colors ${
+                          style === s.id
+                            ? "bg-ink text-white"
+                            : "bg-wash text-soft hover:bg-line"
+                        }`}
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="sm:col-span-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-medium text-soft">
+                      Maximale Zeichenlänge
+                    </span>
+                    <span className="font-mono text-muted">{maxLen} Zeichen</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={4}
+                    max={16}
+                    value={maxLen}
+                    onChange={(e) => setMaxLen(Number(e.target.value))}
+                    className="w-full accent-ink h-1 bg-line rounded cursor-pointer"
+                  />
+                </div>
+
+                {words && words.germanSynonyms.length > 0 && (
+                  <div className="sm:col-span-2 border-t border-line pt-2">
+                    <span className="block text-muted mb-1">
+                      Verwandte Wortideen aus OpenThesaurus:
+                    </span>
+                    <div className="flex flex-wrap gap-1">
+                      {words.germanSynonyms.slice(0, 10).map((w) => (
+                        <button
+                          key={w}
+                          type="button"
+                          onClick={() => {
+                            setQuery(w);
+                            runWithQuery(w);
+                          }}
+                          className="inline-flex cursor-pointer items-center gap-0.5 rounded bg-wash px-1.5 py-0.5 text-soft hover:bg-line"
+                        >
+                          <Plus size={10} weight="bold" />
+                          {w}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {error && (
               <p
@@ -366,194 +559,73 @@ export default function Home() {
               </p>
             )}
           </div>
-
-          <div className="mt-6 border-t border-line pt-4">
-            <button
-              type="button"
-              onClick={() => setOptionsOpen((o) => !o)}
-              aria-expanded={optionsOpen}
-              className="inline-flex cursor-pointer items-center gap-1.5 text-sm text-muted transition-colors hover:text-ink"
-            >
-              <CaretDown
-                size={12}
-                weight="bold"
-                className={`transition-transform ${optionsOpen ? "rotate-180" : ""}`}
-                aria-hidden
-              />
-              Optionen
-            </button>
-
-            {optionsOpen && (
-              <div className="fade-up mt-5 grid gap-6 sm:grid-cols-2">
-                <div>
-                  <label
-                    htmlFor="keywords"
-                    className="mb-1.5 block text-sm font-medium"
-                  >
-                    Stichwörter
-                  </label>
-                  <input
-                    id="keywords"
-                    type="text"
-                    value={keywords}
-                    onChange={(e) => setKeywords(e.target.value)}
-                    placeholder="rettung, wache, schicht"
-                    className={field}
-                  />
-                  {words && words.germanSynonyms.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {words.germanSynonyms.slice(0, 8).map((w) => (
-                        <button
-                          key={w}
-                          type="button"
-                          onClick={() => addKeyword(w)}
-                          className="inline-flex cursor-pointer items-center gap-0.5 rounded bg-wash px-1.5 py-0.5 text-xs text-soft hover:bg-line"
-                        >
-                          <Plus size={10} weight="bold" aria-hidden />
-                          {w}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <span className="mb-1.5 block text-sm font-medium">
-                    Namensstil
-                  </span>
-                  <div
-                    className="flex flex-wrap gap-1.5"
-                    role="radiogroup"
-                    aria-label="Namensstil"
-                  >
-                    {STYLES.map((s) => (
-                      <button
-                        key={s.id}
-                        type="button"
-                        role="radio"
-                        aria-checked={style === s.id}
-                        onClick={() => setStyle(s.id)}
-                        className={`cursor-pointer rounded-md border px-2.5 py-1.5 text-sm transition-colors ${
-                          style === s.id
-                            ? "border-ink bg-ink text-white"
-                            : "border-line bg-surface text-soft hover:bg-wash"
-                        }`}
-                      >
-                        {s.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <span className="mb-1.5 block text-sm font-medium">
-                    Domain-Endungen
-                  </span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {TLDS.map((t) => (
-                      <button
-                        key={t}
-                        type="button"
-                        aria-pressed={tlds.includes(t)}
-                        onClick={() => toggleTld(t)}
-                        className={`cursor-pointer rounded-md border px-2.5 py-1.5 font-mono text-sm transition-colors ${
-                          tlds.includes(t)
-                            ? "border-ink bg-ink text-white"
-                            : "border-line bg-surface text-soft hover:bg-wash"
-                        }`}
-                      >
-                        .{t}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="maxlen"
-                    className="mb-1.5 flex items-center justify-between text-sm font-medium"
-                  >
-                    Maximale Länge
-                    <span className="font-mono text-xs text-muted">
-                      {maxLen} Zeichen
-                    </span>
-                  </label>
-                  <input
-                    id="maxlen"
-                    type="range"
-                    min={4}
-                    max={16}
-                    value={maxLen}
-                    onChange={(e) => setMaxLen(Number(e.target.value))}
-                    className="w-full accent-ink"
-                  />
-                </div>
-
-                <div className="sm:col-span-2">
-                  <label
-                    htmlFor="custom"
-                    className="mb-1.5 block text-sm font-medium"
-                  >
-                    Eigene Namen prüfen
-                  </label>
-                  <textarea
-                    id="custom"
-                    value={custom}
-                    onChange={(e) => setCustom(e.target.value)}
-                    rows={2}
-                    placeholder="Ein Name pro Zeile"
-                    className={`${field} resize-none font-mono`}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
         </section>
 
-        <section
-          ref={resultsRef}
-          aria-live="polite"
-          className="scroll-mt-6 pt-14"
-        >
+        {/* RESULTS SECTION */}
+        <section ref={resultsRef} aria-live="polite" className="scroll-mt-6 pt-12">
           {phase !== "idle" && (
             <>
-              <div className="mb-2 flex flex-wrap items-end justify-between gap-3">
+              <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
                 <div>
-                  <h2 className="text-lg font-medium tracking-tight">
+                  <h2 className="text-base font-medium tracking-tight">
                     {phase === "generating"
-                      ? "Namen werden erzeugt…"
+                      ? "Namensideen werden generiert…"
                       : phase === "checking"
                         ? `Prüfe ${reports.length} von ${total}…`
-                        : `${visible.length} ${visible.length === 1 ? "Vorschlag" : "Vorschläge"}`}
+                        : visible.length === 1
+                          ? `Clearance-Ergebnis für „${visible[0].name}“`
+                          : `${visible.length} geprüfte Vorschläge`}
                   </h2>
-                  {notice && (
-                    <p className="mt-1 max-w-lg text-sm text-warn">{notice}</p>
-                  )}
+                  {notice && <p className="mt-1 text-xs text-warn">{notice}</p>}
                 </div>
 
                 {reports.length > 0 && (
-                  <div className="flex items-center gap-4 text-sm">
-                    <label className="inline-flex cursor-pointer items-center gap-2 text-soft">
-                      <input
-                        type="checkbox"
-                        checked={onlyFree}
-                        onChange={(e) => setOnlyFree(e.target.checked)}
-                        className="size-4 accent-ink"
-                      />
-                      Nur mit freier .de
-                    </label>
+                  <div className="flex items-center gap-3 text-xs">
+                    {reports.length > 1 && (
+                      <label className="inline-flex cursor-pointer items-center gap-1.5 text-soft">
+                        <input
+                          type="checkbox"
+                          checked={onlyFree}
+                          onChange={(e) => setOnlyFree(e.target.checked)}
+                          className="size-3.5 accent-ink"
+                        />
+                        Nur freie .de
+                      </label>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={copyShareLink}
+                      className="inline-flex cursor-pointer items-center gap-1 text-muted hover:text-ink"
+                      title="Link mit diesem Suchergebnis teilen"
+                    >
+                      {copiedLink ? (
+                        <>
+                          <Check size={13} weight="bold" className="text-ok" />
+                          <span className="text-ok">Kopiert!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Link size={13} weight="bold" />
+                          <span>Link teilen</span>
+                        </>
+                      )}
+                    </button>
+
                     <button
                       type="button"
                       onClick={exportMarkdown}
-                      className="inline-flex cursor-pointer items-center gap-1.5 text-muted transition-colors hover:text-ink"
+                      className="inline-flex cursor-pointer items-center gap-1 text-muted hover:text-ink"
+                      title="Als Markdown-Bericht exportieren"
                     >
-                      <Download size={14} weight="bold" aria-hidden />
-                      Export
+                      <Download size={13} weight="bold" />
+                      <span>Export</span>
                     </button>
                   </div>
                 )}
               </div>
 
+              {/* Ergebnisliste */}
               <ul className="divide-y divide-line border-y border-line">
                 {visible.map((r, i) => (
                   <ResultRow
@@ -565,7 +637,7 @@ export default function Home() {
                 ))}
                 {(phase === "generating" || pending > 0) && (
                   <ResultSkeleton
-                    count={phase === "generating" ? 4 : Math.min(pending, 3)}
+                    count={phase === "generating" ? 3 : Math.min(pending, 2)}
                   />
                 )}
               </ul>
@@ -573,15 +645,15 @@ export default function Home() {
               {phase === "done" && visible.length === 0 && (
                 <p className="py-10 text-center text-sm text-muted">
                   {onlyFree
-                    ? "Keiner der Namen hat eine freie .de-Domain. Filter ausschalten oder neu generieren."
-                    : "Keine Ergebnisse. Versuche es mit einer anderen Beschreibung."}
+                    ? "Keiner der Namen hat eine freie .de-Domain."
+                    : "Keine Treffer. Versuche eine andere Eingabe."}
                 </p>
               )}
 
               {phase === "done" && (
-                <p className="mt-6 text-xs text-muted">
-                  Automatische Vorprüfung. Das ersetzt keine Markenrecherche in
-                  DPMAregister oder TMview und keine Rechtsberatung.
+                <p className="mt-5 text-xs text-muted">
+                  Automatische Vorprüfung. Dies ersetzt keine anwaltliche Markenberatung
+                  oder Recherche in DPMAregister / TMview.
                 </p>
               )}
             </>
@@ -589,9 +661,9 @@ export default function Home() {
         </section>
       </main>
 
-      <footer className="mx-auto w-full max-w-3xl px-5 py-6 text-xs text-muted">
-        MarkenFrei ist Open Source (MIT). Daten von OpenThesaurus, Datamuse,
-        RDAP, Wikidata und iTunes Search.
+      <footer className="mx-auto w-full max-w-3xl px-5 py-6 text-xs text-muted flex items-center justify-between">
+        <span>MarkenFrei · Open Source (MIT)</span>
+        <span>DENIC, Verisign, OpenThesaurus, Apple App Store</span>
       </footer>
 
       {selected && (

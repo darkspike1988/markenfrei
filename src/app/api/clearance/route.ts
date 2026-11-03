@@ -65,6 +65,8 @@ export type ClearanceReport = {
     githubHandle: "available" | "taken" | "unknown";
     npmPackage: "available" | "taken" | "unknown";
     pypiPackage: "available" | "taken" | "unknown";
+    cratesIo: "available" | "taken" | "unknown";
+    homebrew: "available" | "taken" | "unknown";
     topRepos: GitHubRepoHit[];
   };
   aiGroundedTm?: {
@@ -259,7 +261,7 @@ async function checkDevAndSocial(name: string): Promise<ClearanceReport["devAndS
     ghHeaders.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
   }
 
-  const [ghUserRes, npmRes, pypiRes, ghRepoRes] = await Promise.allSettled([
+  const [ghUserRes, npmRes, pypiRes, cratesRes, brewRes, ghRepoRes] = await Promise.allSettled([
     fetch(`https://api.github.com/users/${encodeURIComponent(name)}`, {
       headers: ghHeaders,
       signal: AbortSignal.timeout(3000),
@@ -269,6 +271,14 @@ async function checkDevAndSocial(name: string): Promise<ClearanceReport["devAndS
       signal: AbortSignal.timeout(3000),
     }),
     fetch(`https://pypi.org/pypi/${encodeURIComponent(name)}/json`, {
+      headers: { "User-Agent": UA },
+      signal: AbortSignal.timeout(3000),
+    }),
+    fetch(`https://crates.io/api/v1/crates/${encodeURIComponent(name)}`, {
+      headers: { "User-Agent": UA },
+      signal: AbortSignal.timeout(3000),
+    }),
+    fetch(`https://formulae.brew.sh/api/formula/${encodeURIComponent(name)}.json`, {
       headers: { "User-Agent": UA },
       signal: AbortSignal.timeout(3000),
     }),
@@ -313,6 +323,8 @@ async function checkDevAndSocial(name: string): Promise<ClearanceReport["devAndS
     githubHandle: mapStatus(ghUserRes),
     npmPackage: mapStatus(npmRes),
     pypiPackage: mapStatus(pypiRes),
+    cratesIo: mapStatus(cratesRes),
+    homebrew: mapStatus(brewRes),
     topRepos,
   };
 }

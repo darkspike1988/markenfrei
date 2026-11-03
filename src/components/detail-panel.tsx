@@ -297,9 +297,17 @@ export function DetailPanel({
               <dd>
                 <Status value={report.devAndSocial.npmPackage} />
               </dd>
-              <dt className="text-muted">PyPI</dt>
+              <dt className="text-muted">PyPI (Python)</dt>
               <dd>
                 <Status value={report.devAndSocial.pypiPackage} />
+              </dd>
+              <dt className="text-muted">Crates.io (Rust)</dt>
+              <dd>
+                <Status value={report.devAndSocial.cratesIo} />
+              </dd>
+              <dt className="text-muted">Homebrew Formula</dt>
+              <dd>
+                <Status value={report.devAndSocial.homebrew} />
               </dd>
             </dl>
             {report.devAndSocial.topRepos.length > 0 && (
