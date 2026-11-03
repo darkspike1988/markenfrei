@@ -174,8 +174,13 @@ export function DetailPanel({
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <ExternalLink href={t.registryLinks.dpma}>DPMAregister</ExternalLink>
-              <ExternalLink href={t.registryLinks.euipo}>TMview</ExternalLink>
-              <ExternalLink href={t.registryLinks.wipo}>WIPO</ExternalLink>
+              <ExternalLink href={t.registryLinks.tmview}>TMview (EU & DE)</ExternalLink>
+              <ExternalLink href={t.registryLinks.euipo}>EUIPO eSearch</ExternalLink>
+              <ExternalLink href={t.registryLinks.wipo}>WIPO Global Brand</ExternalLink>
+              <ExternalLink href={t.registryLinks.uspto}>USPTO (USA)</ExternalLink>
+              <ExternalLink href={t.registryLinks.unternehmensregister}>
+                Handelsregister
+              </ExternalLink>
               <ExternalLink href={t.registryLinks.offeneRegister}>
                 OffeneRegister
               </ExternalLink>
@@ -217,24 +222,72 @@ export function DetailPanel({
               <dd>{t.distinctivenessType}</dd>
             </dl>
 
+            {t.officialFees && (
+              <div className="mt-4 rounded-md border border-line bg-wash/50 p-3 text-xs">
+                <p className="font-medium text-ink mb-1">Offizielle Amtsgebühren</p>
+                <ul className="space-y-1 text-muted">
+                  <li><strong className="text-soft">DPMA (DE):</strong> {t.officialFees.dpma}</li>
+                  <li><strong className="text-soft">EUIPO (EU):</strong> {t.officialFees.euipo}</li>
+                  <li><strong className="text-soft">USPTO (US):</strong> {t.officialFees.uspto}</li>
+                </ul>
+              </div>
+            )}
+
             <div className="mt-4">
               <p className="mb-1.5 text-xs text-muted">
                 Empfohlene Nizza-Klassen
               </p>
-              <ul className="space-y-1.5">
+              <ul className="space-y-2">
                 {t.niceClasses.map((c) => (
-                  <li key={c.classNumber} className="text-xs">
-                    <span className="font-medium">{c.title}</span>
-                    <span className="text-muted"> · {c.reason}</span>
+                  <li key={c.classNumber} className="text-xs rounded border border-line p-2">
+                    <span className="font-medium text-ink">{c.title}</span>
+                    <p className="mt-0.5 text-muted">{c.reason}</p>
+                    {c.officialScope && (
+                      <p className="mt-1 text-[11px] text-muted/80 italic leading-snug">
+                        {c.officialScope}
+                      </p>
+                    )}
                   </li>
                 ))}
               </ul>
             </div>
           </Section>
 
-          <Section title={`Apple App Store (${report.appStore.hits.length})`}>
+          <Section title={`App Stores & Bundle-IDs (${report.appStore.hits.length})`} defaultOpen>
+            <div className="mb-3 text-xs text-muted">
+              Werktitelschutz (§ 5 Abs. 3 MarkenG): App-Titel und Software genießen
+              Schutz ab Veröffentlichung oder Titelschutzanzeige.
+            </div>
+
+            {report.appStore.bundleIds && report.appStore.bundleIds.length > 0 && (
+              <div className="mb-4">
+                <span className="mb-1.5 block text-xs font-medium text-soft">
+                  Kanonische Bundle-IDs (iOS & Android)
+                </span>
+                <div className="space-y-1.5">
+                  {report.appStore.bundleIds.map((b) => (
+                    <div
+                      key={b.bundleId}
+                      className="flex items-center justify-between rounded border border-line bg-surface px-2.5 py-1.5 text-xs font-mono"
+                    >
+                      <span>{b.bundleId}</span>
+                      <div className="flex items-center gap-2 text-[11px]">
+                        <span className="text-muted">iOS:</span>
+                        <Status value={b.appleStatus} />
+                        <span className="text-muted ml-1">Play:</span>
+                        <Status value={b.googlePlayStatus} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <span className="mb-1.5 block text-xs font-medium text-soft">
+              Apple App Store Treffer
+            </span>
             {report.appStore.hits.length === 0 ? (
-              <p className="text-muted">Keine App mit diesem Namen gefunden.</p>
+              <p className="text-muted text-xs">Keine gleichnamige App im deutschen App Store.</p>
             ) : (
               <ul className="divide-y divide-line">
                 {report.appStore.hits.map((a, i) => (
@@ -327,6 +380,21 @@ export function DetailPanel({
                 ))}
               </ul>
             )}
+          </Section>
+
+          <Section title="Open Source & Methodik">
+            <div className="space-y-2 text-xs text-muted">
+              <p>
+                MarkenFrei nutzt verifizierte Datenquellen und Algorithmen:
+              </p>
+              <ul className="list-disc pl-4 space-y-1">
+                <li><strong className="text-soft">RDAP & DoH:</strong> DENIC, Verisign, Google Registry, Identity Digital & Cloudflare DNS</li>
+                <li><strong className="text-soft">Werktitelschutz (§ 5 MarkenG):</strong> Apple iTunes API & Google Play Store</li>
+                <li><strong className="text-soft">Phonetik:</strong> Kölner Phonetik (Hans Joachim Postel) & Soundex</li>
+                <li><strong className="text-soft">Brandability:</strong> 6-Faktoren-Modell inspiriert von r13i/dodomains</li>
+                <li><strong className="text-soft">App-Inspektion:</strong> REA (Reverse Engineering Anything) Bundle-ID-Bridge</li>
+              </ul>
+            </div>
           </Section>
         </div>
       </aside>

@@ -19,6 +19,7 @@ flowchart TD
 
     subgraph API ["Gateway & Route Handler (src/app/api)"]
         ClearanceRoute["api/clearance/route.ts"]
+        ReaRoute["api/rea-inspect/route.ts (REA Bridge)"]
         GenerateRoute["api/generate/route.ts"]
         OpenDataRoute["api/opendata-words/route.ts"]
         OllamaRoute["api/ollama-models/route.ts"]
@@ -28,6 +29,8 @@ flowchart TD
         OpenDataLib["opendata.ts (Lexik & Synthese)"]
         PhoneticsLib["phonetics.ts (Phonetik & Markenrecht)"]
         ScoringLib["scoring.ts (Brandability & Matrix)"]
+        ReaLib["rea.ts (Bundle-IDs & Plist Inspector)"]
+        DohLib["doh.ts (DNS-over-HTTPS Fallback)"]
         ProvidersLib["providers.ts (Multi-Provider Registry)"]
         VerdictLib["verdict.ts (Signal- & Ampel-Logik)"]
     end
@@ -36,23 +39,32 @@ flowchart TD
         OpenThesaurus["OpenThesaurus.de API"]
         Datamuse["Datamuse / WordNet API"]
         RDAP["Autoritative RDAP-Server (DENIC, Verisign, Google, Identity Digital)"]
-        AppStore["Apple iTunes Search API"]
+        DoH_DNS["Google & Cloudflare DNS-over-HTTPS"]
+        AppStore["Apple iTunes & Google Play Store"]
         Wikidata["Wikidata Entity Search API"]
-        GitHub_npm["GitHub, npm & PyPI APIs"]
+        GitHub_npm["GitHub, npm, PyPI, Crates.io, Homebrew"]
         LLM_APIs["Google Gemini / Anthropic / OpenAI / Ollama"]
     end
 
     Page -->|POST /api/clearance| ClearanceRoute
+    Page -->|POST /api/rea-inspect| ReaRoute
     Page -->|POST /api/generate| GenerateRoute
     Page -->|POST /api/opendata-words| OpenDataRoute
     Page -->|GET /api/ollama-models| OllamaRoute
 
     ClearanceRoute --> PhoneticsLib
     ClearanceRoute --> ScoringLib
+    ClearanceRoute --> ReaLib
+    ClearanceRoute --> DohLib
     ClearanceRoute --> RDAP
+    ClearanceRoute --> DoH_DNS
     ClearanceRoute --> AppStore
     ClearanceRoute --> Wikidata
     ClearanceRoute --> GitHub_npm
+
+    ReaRoute --> ReaLib
+    ReaRoute --> PhoneticsLib
+    ReaRoute --> AppStore
 
     GenerateRoute --> OpenDataLib
     GenerateRoute --> ProvidersLib

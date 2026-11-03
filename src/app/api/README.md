@@ -74,17 +74,45 @@ Führt eine vollständige Multi-Vektor-Prüfung für einen konkreten Namen durch
      - Fragt `https://www.wikidata.org/w/api.php?action=wbsearchentities` ab.
      - Filtert nach bestehenden Unternehmen, Marken, Webseiten, Apps oder Software-Projekten.
      - Automatischer Retry bei HTTP 429.
-  4. **Entwickler- & Paket-Handles (`checkDevAndSocial`):**
+  4. **Entwickler- & Paket-Namensräume (`checkDevAndSocial`):**
      - Prüft `api.github.com/users/{name}` und sucht Repositories mit hoher Star-Anzahl.
-     - Prüft `registry.npmjs.org/{name}` und `pypi.org/pypi/{name}/json`.
-  5. **KI-Marken-Grounding (`checkGeminiGroundedTrademark`):**
+     - Prüft `registry.npmjs.org/{name}`, `pypi.org/pypi/{name}/json`, `crates.io/api/v1/crates/{name}` und `formulae.brew.sh/api/formula/{name}.json`.
+  5. **Mobile App Bundle-IDs & Werktitelschutz (`auditCandidateBundleIds`):**
+     - Prüft kanonische Identifiers (`de.{name}.app`, `com.{name}.app`, `io.{name}.app`) live gegen Apple App Store und Google Play Store.
+  6. **KI-Marken-Grounding (`checkGeminiGroundedTrademark`):**
      - Optional bei Google Gemini: Nutzt `google_search` Tool-Grounding zur Erkennung real existierender, noch nicht im DPMA eingetragener Brands.
 
 - **Response:** `ClearanceReport`
 
 ---
 
-### B. `POST /api/generate` (`generate/route.ts`)
+### B. `POST /api/rea-inspect` (`rea-inspect/route.ts`)
+Inspiziert Shipped-Binaries, lokale macOS/iOS `.app`-Bundles, `Info.plist`-Dateien oder mobile Bundle-IDs unter Einbindung der REA-Architektur.
+
+- **Request Body:**
+  ```typescript
+  {
+    appPath?: string;     // z. B. "/Applications/MyApp.app" oder Pfad zur Info.plist
+    bundleId?: string;    // z. B. "de.firma.wachwerk" oder "com.example.app"
+  }
+  ```
+- **Funktionsweise:**
+  1. Extrahiert App-Identität (`bundleId`, `displayName`, `version`, `minOsVersion`) über natives `/usr/bin/plutil` oder XML-Parsing.
+  2. Prüft die extrahierte Bundle-ID parallel auf Apple App Store und Google Play Store.
+  3. Führt sofort eine markenrechtliche Schutzfähigkeits- und Kollisionsprüfung für den App-Titel durch (§ 5 & § 9 MarkenG).
+- **Response:**
+  ```json
+  {
+    "identity": { "bundleId": "...", "displayName": "...", "sourceType": "local-plist" },
+    "stores": { "appleAppStore": { "status": "..." }, "googlePlay": { "status": "..." } },
+    "trademark": { "cleanName": "...", "niceClasses": [...], "officialFees": {...} },
+    "verdict": "frei" | "kollision" | "markenkonflikt"
+  }
+  ```
+
+---
+
+### C. `POST /api/generate` (`generate/route.ts`)
 Generiert markenrechtlich starke Namenskandidaten über Open-Data oder Bring-Your-Own-Key LLMs.
 
 - **Request Body:**

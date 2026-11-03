@@ -36,8 +36,8 @@ const STYLES = [
 
 const EXAMPLES = [
   { label: "WachWerk", q: "WachWerk" },
+  { label: "de.wachwerk.app", q: "de.wachwerk.app" },
   { label: "Rettungswache App", q: "Wachbuch und Schichtplaner für Rettungsdienst" },
-  { label: "Praxis-Portal", q: "Patientenportal und Terminkoordination für Arztpraxen" },
   { label: "Fiskalo", q: "Fiskalo" },
 ];
 
@@ -74,10 +74,16 @@ export default function Home() {
   const inputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLElement>(null);
 
-  // Intent-Erkennung: 1 Wort = Sofort-Einzelprüfung, Mehrere Wörter = Namensgenerierung
+  // Intent-Erkennung: Bundle-ID vs. 1 Wort (Einzelprüfung) vs. Mehrere Wörter (Generierung)
   const trimmed = query.trim();
+  const isBundleId =
+    trimmed.includes(".") &&
+    /^[a-z][a-z0-9_]*(\.[a-z0-9_]+)+$/i.test(trimmed);
   const isSingleWord =
-    trimmed.length >= 2 && !trimmed.includes(" ") && !trimmed.includes("\n");
+    !isBundleId &&
+    trimmed.length >= 2 &&
+    !trimmed.includes(" ") &&
+    !trimmed.includes("\n");
 
   // Gespeicherte Konfiguration aus localStorage lesen
   useEffect(() => {
@@ -234,9 +240,52 @@ export default function Home() {
       );
 
       try {
-        const isSingle = !input.includes(" ") && !input.includes("\n");
+        const isBundle =
+          input.includes(".") &&
+          /^[a-z][a-z0-9_]*(\.[a-z0-9_]+)+$/i.test(input);
+        const isSingle = !isBundle && !input.includes(" ") && !input.includes("\n");
 
-        if (isSingle) {
+        if (isBundle) {
+          // --- 0. BUNDLE-ID & APP-PAKET PRÜFUNG (REA BRIDGE) ---
+          setPhase("checking");
+          setTotal(1);
+
+          const reaRes = await fetch("/api/rea-inspect", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ bundleId: input }),
+          });
+          const reaData = reaRes.ok ? await reaRes.json() : null;
+          const targetName =
+            reaData?.identity?.displayName || input.split(".").pop() || input;
+          const report = await checkOne(targetName);
+
+          if (id !== runId.current) return;
+          if (report) {
+            if (reaData?.stores) {
+              const currentBundle = report.appStore.bundleIds?.find(
+                (b) => b.bundleId === input,
+              );
+              if (!currentBundle) {
+                report.appStore.bundleIds = [
+                  {
+                    bundleId: input,
+                    appleStatus: reaData.stores.appleAppStore?.status || "unknown",
+                    googlePlayStatus: reaData.stores.googlePlay?.status || "unknown",
+                    appleApp: reaData.stores.appleAppStore?.app,
+                    googlePlayUrl: reaData.stores.googlePlay?.playUrl,
+                  },
+                  ...(report.appStore.bundleIds || []),
+                ];
+              }
+            }
+            setReports([report]);
+            setSelected(report);
+          } else {
+            setError(`Prüfung für Bundle-ID „${input}“ fehlgeschlagen.`);
+          }
+          setPhase("done");
+        } else if (isSingle) {
           // --- 1. SOFORT-EINZELPRÜFUNG ---
           setPhase("checking");
           setTotal(1);
@@ -408,7 +457,12 @@ export default function Home() {
               <div className="flex flex-wrap items-center gap-1.5 text-muted">
                 {trimmed ? (
                   <span className="inline-flex items-center gap-1 rounded bg-wash px-2 py-0.5 text-soft font-mono">
-                    {isSingleWord ? (
+                    {isBundleId ? (
+                      <>
+                        <ShieldCheck size={12} weight="bold" className="text-ok" />
+                        App-Bundle & Werktitelschutz für „{trimmed}“
+                      </>
+                    ) : isSingleWord ? (
                       <>
                         <Lightning size={12} weight="bold" className="text-warn" />
                         Sofort-Einzelprüfung für „{clean(trimmed)}“

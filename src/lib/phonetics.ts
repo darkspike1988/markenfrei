@@ -8,6 +8,7 @@ export type NiceClassInfo = {
   classNumber: number;
   title: string;
   reason: string;
+  officialScope: string;
 };
 
 export type ProtectedCollision = {
@@ -28,12 +29,19 @@ export type TrademarkAnalysis = {
   protectedCollisions: ProtectedCollision[];
   niceClasses: NiceClassInfo[];
   dpmaExpertQuery: string;
+  officialFees: {
+    dpma: string;
+    euipo: string;
+    uspto: string;
+  };
   registryLinks: {
     dpma: string;
     euipo: string;
+    tmview: string;
     wipo: string;
     uspto: string;
     offeneRegister: string;
+    unternehmensregister: string;
   };
 };
 
@@ -336,11 +344,13 @@ export function analyzeTrademarkSafety(
       classNumber: 9,
       title: "Klasse 9 · Apps & herunterladbare Software",
       reason: "Pflichtklasse für Mobile Apps (iOS/Android), Desktop-Software & KI-Modelle.",
+      officialScope: "Wissenschaftliche, Schifffahrts-, Vermessungs-, fotografische, Film-, optische, Wäge-, Mess-, Signal-, Kontroll-, Rettungs- und Unterrichtsapparate; Datenverarbeitungsgeräte und Computer; Computersoftware.",
     },
     {
       classNumber: 42,
       title: "Klasse 42 · SaaS, Web-Apps & IT-Dienste",
       reason: "Pflichtklasse für Webseiten, Cloud-Plattformen, APIs und Software-as-a-Service.",
+      officialScope: "Wissenschaftliche und technologische Dienstleistungen und Forschungsarbeiten; industrielle Analyse- und Forschungsdienstleistungen; Entwurf und Entwicklung von Computerhardware und -software.",
     },
   ];
 
@@ -349,6 +359,7 @@ export function analyzeTrademarkSafety(
       classNumber: 35,
       title: "Klasse 35 · Online-Marktplätze, Werbung & Business",
       reason: "Empfohlen für E-Commerce, Unternehmensverwaltung und Preis-/Produktportale.",
+      officialScope: "Werbung; Geschäftsführung; Unternehmensverwaltung; Büroarbeiten; Groß- und Einzelhandelsdienstleistungen.",
     });
   }
   if (/(chat|kommunikation|mail|messag|forum|social|community|netzwerk)/.test(textContext)) {
@@ -356,6 +367,7 @@ export function analyzeTrademarkSafety(
       classNumber: 38,
       title: "Klasse 38 · Telekommunikation & Messaging",
       reason: "Empfohlen bei Chat-, Community-, Streaming- oder Kommunikationsfunktionen.",
+      officialScope: "Telekommunikation; Bereitstellung des Zugriffs auf globale Computernetzwerke; elektronische Nachrichtenübermittlung.",
     });
   }
   if (/(lernen|schule|kurs|wissen|training|buch|game|spiel|musik|medien|coaching)/.test(textContext)) {
@@ -363,6 +375,7 @@ export function analyzeTrademarkSafety(
       classNumber: 41,
       title: "Klasse 41 · Bildung, Coaching & Entertainment",
       reason: "Empfohlen für Lern-Apps, Kurse, Medien und Spiele.",
+      officialScope: "Erziehung; Ausbildung; Unterhaltung; sportliche und kulturelle Aktivitäten; Bereitstellung elektronischer Veröffentlichungen.",
     });
   }
   if (/(gesundheit|medizin|pflege|rettung|klinik|arzt|therapie|fitness|ernährung)/.test(textContext)) {
@@ -370,6 +383,7 @@ export function analyzeTrademarkSafety(
       classNumber: 44,
       title: "Klasse 44 · Gesundheit, Medizin & Pflege",
       reason: "Empfohlen bei Gesundheits-, Medizin- oder Pflege-Bezug.",
+      officialScope: "Medizinische Dienstleistungen; tierärztliche Dienstleistungen; Gesundheits- und Schönheitspflege für Menschen.",
     });
   }
 
@@ -390,12 +404,19 @@ export function analyzeTrademarkSafety(
     protectedCollisions,
     niceClasses,
     dpmaExpertQuery,
+    officialFees: {
+      dpma: "290 € (elektronische Anmeldung, bis zu 3 Klassen inklusive)",
+      euipo: "850 € (1. Klasse) + 50 € (2. Klasse) + 150 € (ab 3. Klasse) – EU-weiter Schutz",
+      uspto: "250 $ - 350 $ pro Waren-/Dienstleistungsklasse (TEAS)",
+    },
     registryLinks: {
       dpma: `https://register.dpma.de/DPMAregister/marke/einsteiger`,
-      euipo: `https://www.tmdn.org/tmview/#/tmview/results?page=1&pageSize=30&criteria=C&basicSearch=${encodeURIComponent(cleanName)}`,
+      euipo: `https://euipo.europa.eu/eSearch/#details/trademarks/${encodeURIComponent(cleanName)}`,
+      tmview: `https://www.tmdn.org/tmview/#/tmview/results?page=1&pageSize=30&criteria=C&basicSearch=${encodeURIComponent(cleanName)}`,
       wipo: `https://branddb.wipo.int/en/quicksearch/results?by=brandName&v=${encodeURIComponent(cleanName)}`,
-      uspto: `https://tmsearch.uspto.gov/search/search-results`,
+      uspto: `https://tmsearch.uspto.gov/search/search-results?field=COMBINED&search_type=SEARCH_ALL&text=${encodeURIComponent(cleanName)}`,
       offeneRegister: `https://offeneregister.de/?q=${encodeURIComponent(cleanName)}`,
+      unternehmensregister: `https://www.unternehmensregister.de/ureg/search1.3.html?search-analyt-submit=Suche+starten&submit=Suche+starten&searchWord=${encodeURIComponent(cleanName)}`,
     },
   };
 }

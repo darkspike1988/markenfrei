@@ -11,6 +11,11 @@ import {
   type AgentCriteriaScores,
   type DodoDomainScore,
 } from "@/lib/scoring";
+import { dohLookup } from "@/lib/doh";
+import {
+  auditCandidateBundleIds,
+  type AppBundleCheckResult,
+} from "@/lib/rea";
 
 const UA =
   "MarkenFrei/1.0 (+https://github.com/darkspike1988/markenfrei; Namens-Vorpruefung)";
@@ -60,6 +65,7 @@ export type ClearanceReport = {
   appStore: {
     status: "clear" | "similar" | "collision";
     hits: AppStoreHit[];
+    bundleIds: AppBundleCheckResult[];
   };
   devAndSocial: {
     githubHandle: "available" | "taken" | "unknown";
@@ -123,17 +129,25 @@ async function rdapLookup(
 }
 
 /**
- * Verfügbarkeit nur über autoritative Registry-Auskunft. Fehlt eine Auskunft,
- * lautet das Ergebnis "unknown" und nie "available".
+ * Verfügbarkeit primär über autoritative Registry-Auskunft (RDAP).
+ * Bei RDAP-Ausfall/Rate-Limit greift autoritatives DNS-over-HTTPS (DoH).
  */
 async function checkSingleDomain(name: string, tld: string): Promise<TldCheckResult> {
   const domain = `${name}.${tld}`;
   const registrarLinks = getRegistrarLinks(domain);
   const base = RDAP_BASE[tld];
 
-  const status = base
+  let status = base
     ? await rdapLookup(`${base}${encodeURIComponent(domain)}`)
     : "unknown";
+
+  // Wenn RDAP keine definitive Auskunft liefert, DoH-Abfrage auf NS/SOA-Einträge
+  if (status === "unknown") {
+    const doh = await dohLookup(domain);
+    if (doh.status === "taken") {
+      status = "taken";
+    }
+  }
 
   return { tld, domain, status, method: "rdap", registrarLinks };
 }
@@ -406,17 +420,26 @@ export async function POST(req: Request) {
         : process.env.GEMINI_API_KEY || "";
 
     // Run all live checks in parallel!
-    const [domains, wikidata, appStoreRaw, devAndSocial, aiGroundedTm] =
+    const [domains, wikidata, appStoreRaw, candidateBundleIds, devAndSocial, aiGroundedTm] =
       await Promise.all([
         Promise.all(tlds.map((tld) => checkSingleDomain(clean, tld))),
         checkWikidata(clean),
         checkAppleAppStore(clean),
+        auditCandidateBundleIds(clean),
         checkDevAndSocial(clean),
         geminiApiKey ? checkGeminiGroundedTrademark(clean, geminiApiKey) : Promise.resolve(null),
       ]);
 
     const wikidataHits = wikidata.hits;
-    const { ok: appStoreOk, ...appStore } = appStoreRaw;
+    const { ok: appStoreOk, ...appStoreBase } = appStoreRaw;
+    const anyBundleTaken = candidateBundleIds.some(
+      (b) => b.appleStatus === "taken" || b.googlePlayStatus === "taken",
+    );
+
+    const appStore = {
+      ...appStoreBase,
+      bundleIds: candidateBundleIds,
+    };
 
     const incomplete: string[] = [];
     if (domains.every((d) => d.status === "unknown")) incomplete.push("Domains");
@@ -462,6 +485,9 @@ export async function POST(req: Request) {
       appStoreScore = 2;
     } else if (appStore.status === "similar") {
       appStoreScore = 7;
+    }
+    if (anyBundleTaken) {
+      appStoreScore = Math.min(appStoreScore, 5);
     }
 
     // Compute Dev & Social handle score (1..10)

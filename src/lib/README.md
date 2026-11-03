@@ -131,7 +131,26 @@ Wandelt die Rohdaten der Prüf-Pipeline in verständliche, hierarchisch sortiert
 
 ---
 
-### E. `providers.ts` · Multi-Provider Registry
+### E. `doh.ts` · DNS-over-HTTPS Dual-Layer Fallback
+Dient als zuverlässige Gegenprüfung und Ausfallabsicherung für RDAP.
+- **`dohLookup(domain: string): Promise<DohLookupResult>`**
+  - Fragt Google DoH (`https://dns.google/resolve?name={domain}&type=NS`) und Cloudflare DoH (`https://cloudflare-dns.com/dns-query`) ab.
+  - Erkennt `Status === 0` mit aktiven Nameserver-Einträgen (`status: "taken"`).
+  - Erkennt `Status === 3` (`NXDOMAIN`, `status: "likely-available"`).
+  - Verhindert, dass RDAP-Rate-Limits (HTTP 429) zu falschen Annahmen führen.
+
+---
+
+### F. `rea.ts` · Reverse Engineering & App Ecosystem Bridge
+Brücke zu Mobile App Stores und Shipped Binary Identifiers (§ 5 Abs. 3 MarkenG).
+- **`checkAppleBundleId(bundleId)`**: Live-Abfrage des Apple iTunes Lookup API für iOS/macOS Bundle Identifiers (`country=de`).
+- **`checkGooglePlayPackage(packageId)`**: Live-Abfrage des Google Play Store Package Namensraums (`status 200 = taken`, `404 = available`).
+- **`auditCandidateBundleIds(cleanName)`**: Generiert und prüft kanonische Identifiers (`de.{name}.app`, `com.{name}.app`, `io.{name}.app`) parallel auf beiden Stores.
+- **`inspectLocalAppBundle(targetPath)`**: Liest macOS/iOS `.app` Bundles und `Info.plist` Dateien via nativem macOS `/usr/bin/plutil` oder XML-Fallback aus und extrahiert `CFBundleIdentifier`, `CFBundleDisplayName`, `version` und Mindest-OS.
+
+---
+
+### G. `providers.ts` · Multi-Provider Registry
 Definiert 11 unterstützte Provider-Profile:
 1. `opendata`: Zero-Key, 100% lokal & kostenlos.
 2. `google`: Gemini 2.5 Flash / Flash Lite / Pro mit Web-Search Grounding.
