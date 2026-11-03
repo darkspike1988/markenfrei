@@ -205,12 +205,18 @@ export function DetailPanel({
                         </div>
 
                         <div className="divide-y divide-line/60">
-                          {comp.registrars.slice(0, 3).map((r) => (
+                          {comp.registrars.slice(0, 6).map((r) => (
                             <div
                               key={r.id}
                               className="py-1 flex items-center justify-between text-[11px]"
                             >
                               <div className="flex items-center gap-1.5">
+                                <span
+                                  className="text-[11px]"
+                                  title={r.region === "EU" ? "Europäischer Hoster" : r.region === "US" ? "US-amerikanischer Registrar" : "Global"}
+                                >
+                                  {r.region === "EU" ? "🇪🇺" : r.region === "US" ? "🇺🇸" : "🌐"}
+                                </span>
                                 <span className="font-medium text-soft">{r.name}</span>
                                 {r.isAtCost && (
                                   <span className="rounded bg-ok/10 text-ok px-1 text-[10px]">
@@ -528,7 +534,7 @@ export function DetailPanel({
           <Section title="Open Source & Methodik">
             <div className="space-y-2 text-xs text-muted">
               <p>
-                MarkenFrei nutzt verifizierte Datenquellen und Algorithmen:
+                Markenfrei nutzt verifizierte Datenquellen und Algorithmen:
               </p>
               <ul className="list-disc pl-4 space-y-1">
                 <li><strong className="text-soft">RDAP & DoH:</strong> DENIC, Verisign, Google Registry, Identity Digital & Cloudflare DNS</li>

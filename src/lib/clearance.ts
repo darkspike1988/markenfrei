@@ -21,7 +21,7 @@ import {
 } from "@/lib/domain-pricing";
 
 export const MARKENFREI_UA =
-  "MarkenFrei/1.0 (+https://markenfrei.app; https://github.com/darkspike1988/markenfrei; Namens-Vorpruefung)";
+  "Markenfrei/1.0 (+https://markenfrei.app; https://github.com/darkspike1988/markenfrei; Namens-Vorpruefung)";
 
 export type TldCheckResult = {
   tld: string;
@@ -122,6 +122,10 @@ export const RDAP_BASE: Record<string, string> = {
   dev: "https://pubapi.registry.google/rdap/domain/",
   io: "https://rdap.identitydigital.services/rdap/domain/",
   ai: "https://rdap.identitydigital.services/rdap/domain/",
+  fr: "https://rdap.afnic.fr/rdap/domain/",
+  uk: "https://rdap.nominet.uk/rdap/domain/",
+  jp: "https://rdap.jprs.jp/rdap/domain/",
+  kr: "https://rdap.krnic.or.kr/rdap/domain/",
 };
 
 export async function rdapLookup(

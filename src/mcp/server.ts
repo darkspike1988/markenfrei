@@ -62,7 +62,7 @@ export function createMarkenfreiMcpServer(): McpServer {
           .map((d) => `.${d.tld}`);
 
         const summaryText = [
-          `# MarkenFrei Vorab-Prüfung: „${report.name}“`,
+          `# Markenfrei Vorab-Prüfung: „${report.name}“`,
           ``,
           `* **Gesamt-Urteil:** ${report.matrixScore.verdict.toUpperCase()} (${report.matrixScore.verdictLabel})`,
           `* **Clearance-Score:** ${report.matrixScore.totalScore} / 100 Punkte`,
@@ -216,7 +216,7 @@ export function createMarkenfreiMcpServer(): McpServer {
       const candidates = wordField.synthesizedCandidates.slice(0, count);
 
       const lines = [
-        `# MarkenFrei Namens-Generierung für: „${query}“`,
+        `# Markenfrei Namens-Generierung für: „${query}“`,
         ``,
         `Hier sind ${candidates.length} konstruierte Kunstwörter und Portmanteaus (generiert aus OpenThesaurus & Datamuse), bereit für die Sofort-Clearance-Prüfung:`,
         ``,
@@ -307,21 +307,21 @@ export function createMarkenfreiMcpServer(): McpServer {
   // Tool 5: List all 25+ Open APIs used
   server.tool(
     "markenfrei_list_open_apis",
-    "Liefert das vollständige Verzeichnis aller 25+ von MarkenFrei genutzten Open APIs und autoritativen Register mit Endpunkten und Dokumentations-URLs.",
+    "Liefert das vollständige Verzeichnis aller weltweiten (europäischen, amerikanischen & asiatischen) von Markenfrei genutzten Open APIs und autoritativen Register mit Endpunkten und Dokumentations-URLs.",
     {
       category: z
         .string()
         .optional()
-        .describe("Optionale Kategorie-Filterung (z. B. 'Domain Registries & DoH', 'App Stores & Werktitel', etc.)"),
+        .describe("Optionale Kategorie-Filterung (z. B. 'Domains & DNS', 'Mobile App Stores', etc.)"),
     },
     async ({ category }) => {
       const categories = getApiCategories();
       const selectedCategories = category ? [category] : categories;
 
       const lines: string[] = [
-        `# MarkenFrei: Verwendete Open APIs & Datenquellen (25+)`,
+        `# Markenfrei: Verwendete weltweite Open APIs & Datenquellen (Europa, Amerika, Asien)`,
         ``,
-        `MarkenFrei arbeitet nach dem Open-Data-First-Prinzip: Alle Kernabfragen erfolgen direkt gegen offizielle, kostenfreie Register und autoritative Schnittstellen ohne Tracking und ohne Paywall.`,
+        `Markenfrei arbeitet nach dem Open-Data-First-Prinzip: Alle Kernabfragen erfolgen direkt gegen offizielle, kostenfreie Register und autoritative Schnittstellen ohne Tracking und ohne Paywall.`,
         ``,
       ];
 

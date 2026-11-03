@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
+  ArrowsClockwise,
   CaretDown,
   Check,
   Database,
@@ -16,7 +17,11 @@ import {
   X,
 } from "@phosphor-icons/react";
 import type { ClearanceReport } from "@/app/api/clearance/route";
-import type { OpenDataWordField } from "@/lib/opendata";
+import {
+  DEFAULT_OPEN_DATA_EXAMPLES,
+  generateRandomOpenDataExamples,
+  type OpenDataWordField,
+} from "@/lib/opendata";
 import {
   LLM_STORAGE_KEY,
   getDefaultConfig,
@@ -37,13 +42,6 @@ const STYLES = [
   { id: "short", label: "Sehr kurz" },
 ];
 
-const EXAMPLES = [
-  { label: "WachWerk", q: "WachWerk" },
-  { label: "de.wachwerk.app", q: "de.wachwerk.app" },
-  { label: "Rettungswache App", q: "Wachbuch und Schichtplaner für Rettungsdienst" },
-  { label: "Fiskalo", q: "Fiskalo" },
-];
-
 const clean = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 
 type Phase = "idle" | "generating" | "checking" | "done";
@@ -52,10 +50,23 @@ export default function Home() {
   const [config, setConfig] = useState<LlmConfig>(getDefaultConfig());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
+  const [examples, setExamples] = useState<Array<{ label: string; q: string }>>(
+    DEFAULT_OPEN_DATA_EXAMPLES,
+  );
   const [ollama, setOllama] = useState<{ running: boolean; models: string[] }>({
     running: false,
     models: [],
   });
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      setExamples(generateRandomOpenDataExamples(5));
+    });
+  }, []);
+
+  const refreshExamples = useCallback(() => {
+    setExamples(generateRandomOpenDataExamples(5));
+  }, []);
 
   // Omnibar-Eingabe (kann ein einzelner Name oder eine Projektbeschreibung sein)
   const [query, setQuery] = useState("");
@@ -400,7 +411,7 @@ export default function Home() {
         .join(", ");
       return `| ${r.name} | ${r.matrixScore.verdict} | ${r.matrixScore.totalScore} | ${doms} | ${r.appStore.status} |`;
     });
-    const md = `# MarkenFrei Clearance-Bericht\n\nAbfrage: ${query || "-"}\nStand: ${new Date().toLocaleString("de-DE")}\n\n| Name | Ampel | Score | Domains | App Store |\n|---|---|---|---|---|\n${rows.join("\n")}\n\nVorprüfung, keine Rechtsberatung.\n`;
+    const md = `# Markenfrei Clearance-Bericht\n\nAbfrage: ${query || "-"}\nStand: ${new Date().toLocaleString("de-DE")}\n\n| Name | Ampel | Score | Domains | App Store |\n|---|---|---|---|---|\n${rows.join("\n")}\n\nVorprüfung, keine Rechtsberatung.\n`;
     const url = URL.createObjectURL(new Blob([md], { type: "text/markdown" }));
     const a = document.createElement("a");
     a.href = url;
@@ -424,7 +435,7 @@ export default function Home() {
           type="button"
           onClick={resetToStart}
           className="flex items-center gap-2.5 cursor-pointer text-left group"
-          title="MarkenFrei zurücksetzen (Zurück zur Startseite)"
+          title="Markenfrei zurücksetzen (Zurück zur Startseite)"
         >
           <ShieldCheck
             size={20}
@@ -433,7 +444,7 @@ export default function Home() {
             aria-hidden
           />
           <span className="text-[15px] font-medium tracking-tight text-ink group-hover:text-soft">
-            MarkenFrei
+            Markenfrei
           </span>
         </button>
         <div className="flex items-center gap-2">
@@ -566,8 +577,19 @@ export default function Home() {
                   </span>
                 ) : (
                   <>
-                    <span>Beispiele:</span>
-                    {EXAMPLES.map((ex) => (
+                    <span className="flex items-center gap-1 text-muted">
+                      <span>Zufalls-Beispiele (Open-Data):</span>
+                      <button
+                        type="button"
+                        onClick={refreshExamples}
+                        title="5 neue Zufallsnamen aus Open APIs generieren"
+                        className="cursor-pointer text-muted hover:text-ink p-0.5 rounded transition-transform active:rotate-180"
+                        aria-label="Neue Zufallsnamen generieren"
+                      >
+                        <ArrowsClockwise size={12} weight="bold" />
+                      </button>
+                    </span>
+                    {examples.map((ex) => (
                       <button
                         key={ex.label}
                         type="button"
@@ -575,7 +597,7 @@ export default function Home() {
                           setQuery(ex.q);
                           runWithQuery(ex.q);
                         }}
-                        className="cursor-pointer rounded px-1.5 py-0.5 text-soft underline-offset-2 hover:bg-wash hover:underline"
+                        className="cursor-pointer rounded px-1.5 py-0.5 text-soft underline-offset-2 hover:bg-wash hover:underline font-mono"
                       >
                         {ex.label}
                       </button>
@@ -807,16 +829,15 @@ export default function Home() {
 
       <footer className="mx-auto w-full max-w-3xl px-5 py-6 text-xs text-muted flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <span>MarkenFrei · Open Source (MIT)</span>
+          <span>Markenfrei · Open Source (MIT)</span>
           <button
             type="button"
             onClick={() => setInfoOpen(true)}
             className="underline underline-offset-2 hover:text-ink cursor-pointer"
           >
-            Infos, 25+ Open APIs & MCP-Server
+            Infos, Open APIs & MCP-Server
           </button>
         </div>
-        <span className="hidden sm:inline">DENIC, Verisign, Wikipedia, App Store, DuckDuckGo</span>
       </footer>
 
       {selected && (

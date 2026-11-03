@@ -7,6 +7,7 @@ import {
   CheckCircle,
   Copy,
   Cpu,
+  Globe,
   Lightning,
   ShieldCheck,
   X,
@@ -17,6 +18,7 @@ type TabId = "mcp" | "apis" | "free";
 
 export function InfoModal({ onClose }: { onClose: () => void }) {
   const [activeTab, setActiveTab] = useState<TabId>("mcp");
+  const [selectedRegion, setSelectedRegion] = useState<string>("Alle");
   const [selectedCategory, setSelectedCategory] = useState<string>("Alle");
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
@@ -43,12 +45,21 @@ export function InfoModal({ onClose }: { onClose: () => void }) {
     }
   };
 
+  const regions: { id: string; label: string }[] = [
+    { id: "Alle", label: "Alle Regionen" },
+    { id: "Europa", label: "🇪🇺 Europa" },
+    { id: "Amerika", label: "🇺🇸 Amerika" },
+    { id: "Asien", label: "🌏 Asien" },
+    { id: "Global", label: "🌐 Global" },
+  ];
+
   const categories = ["Alle", ...Array.from(new Set(OPEN_APIS.map((a) => a.category)))];
 
-  const filteredApis =
-    selectedCategory === "Alle"
-      ? OPEN_APIS
-      : OPEN_APIS.filter((a) => a.category === selectedCategory);
+  const filteredApis = OPEN_APIS.filter((a) => {
+    const matchRegion = selectedRegion === "Alle" || a.region === selectedRegion;
+    const matchCategory = selectedCategory === "Alle" || a.category === selectedCategory;
+    return matchRegion && matchCategory;
+  });
 
   const claudeConfig = JSON.stringify(
     {
@@ -97,7 +108,7 @@ export function InfoModal({ onClose }: { onClose: () => void }) {
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="MarkenFrei Infos, Open APIs & MCP Server"
+        aria-label="Markenfrei Infos, Open APIs & MCP Server"
         onClick={(e) => e.stopPropagation()}
         className="fade-up flex max-h-[90vh] w-full max-w-2xl flex-col rounded-2xl border border-line bg-surface shadow-2xl"
       >
@@ -108,9 +119,9 @@ export function InfoModal({ onClose }: { onClose: () => void }) {
               <Cpu size={18} weight="bold" className="text-ink" />
             </div>
             <div>
-              <h2 className="text-base font-medium text-ink">MarkenFrei Infos & MCP-Server</h2>
+              <h2 className="text-base font-medium text-ink">Markenfrei Infos & MCP-Server</h2>
               <p className="text-xs text-muted">
-                Zero-Key Open Data · 25+ APIs · Model Context Protocol für KI-Agenten
+                Zero-Key Open Data · Globale APIs (Europa, Amerika, Asien) · MCP für KI-Agenten
               </p>
             </div>
           </div>
@@ -146,7 +157,7 @@ export function InfoModal({ onClose }: { onClose: () => void }) {
                 : "border-transparent text-muted hover:text-ink"
             }`}
           >
-            🌐 25+ Open APIs
+            🌐 Globale Open APIs ({OPEN_APIS.length})
           </button>
           <button
             type="button"
@@ -170,7 +181,7 @@ export function InfoModal({ onClose }: { onClose: () => void }) {
                 <h3 className="font-medium text-ink text-sm">Model Context Protocol (MCP) für Agenten</h3>
               </div>
               <p className="text-soft leading-relaxed">
-                Integriere MarkenFrei direkt in deinen individuellen KI-Agenten (Claude Desktop, Claude Code, Cursor, Codex, Gemini CLI / Antigravity, Windsurf). Dein Agent kann selbstständig Markennamen prüfen, Domains vergleichen und Ideen generieren.
+                Integriere Markenfrei direkt in deinen individuellen KI-Agenten (Claude Desktop, Claude Code, Cursor, Codex, Gemini CLI / Antigravity, Windsurf). Dein Agent kann selbstständig Markennamen prüfen, Domains vergleichen und Ideen generieren.
               </p>
             </div>
 
@@ -236,7 +247,7 @@ export function InfoModal({ onClose }: { onClose: () => void }) {
                 </div>
                 <div className="rounded-lg border border-line p-2.5 bg-surface">
                   <span className="font-mono font-medium text-ink">markenfrei_domain_pricing</span>
-                  <p className="mt-1 text-muted text-[11px]">Vergleicht Netcup, Hetzner, Cloudflare Wholesale & warnt vor 1-€-Lockvogelangeboten.</p>
+                  <p className="mt-1 text-muted text-[11px]">Vergleicht Netcup, Hetzner, OVHcloud, Cloudflare Wholesale & warnt vor Lockvogelangeboten.</p>
                 </div>
                 <div className="rounded-lg border border-line p-2.5 bg-surface">
                   <span className="font-mono font-medium text-ink">markenfrei_generate_ideas</span>
@@ -254,17 +265,38 @@ export function InfoModal({ onClose }: { onClose: () => void }) {
         {/* Tab Content: Open APIs */}
         {activeTab === "apis" && (
           <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Region Filter Bar */}
+            <div className="border-b border-line px-6 py-2 bg-wash/40 flex flex-wrap items-center gap-1.5 text-xs">
+              <span className="text-[11px] font-medium text-muted mr-1 flex items-center gap-1">
+                <Globe size={13} weight="bold" /> Region:
+              </span>
+              {regions.map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => setSelectedRegion(r.id)}
+                  className={`cursor-pointer rounded-md px-2.5 py-1 transition-colors text-[11px] ${
+                    selectedRegion === r.id
+                      ? "bg-ink text-white font-medium"
+                      : "bg-surface border border-line text-soft hover:bg-wash"
+                  }`}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+
             {/* Category Filter */}
-            <div className="border-b border-line px-6 py-2.5 bg-wash/20 flex flex-wrap gap-1.5 text-xs">
+            <div className="border-b border-line px-6 py-2 bg-wash/20 flex flex-wrap gap-1.5 text-xs">
               {categories.map((c) => (
                 <button
                   key={c}
                   type="button"
                   onClick={() => setSelectedCategory(c)}
-                  className={`cursor-pointer rounded-md px-2.5 py-1 transition-colors text-[11px] ${
+                  className={`cursor-pointer rounded-md px-2 py-0.5 transition-colors text-[10px] ${
                     selectedCategory === c
-                      ? "bg-ink text-white font-medium"
-                      : "bg-surface border border-line text-soft hover:bg-wash"
+                      ? "bg-soft text-white font-medium"
+                      : "bg-surface border border-line text-muted hover:bg-wash hover:text-ink"
                   }`}
                 >
                   {c}
@@ -277,13 +309,16 @@ export function InfoModal({ onClose }: { onClose: () => void }) {
                 {filteredApis.map((api: OpenApiEntry) => (
                   <div key={api.id} className="p-3.5 space-y-1 hover:bg-wash/30 transition-colors text-xs">
                     <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="rounded bg-wash px-1.5 py-0.5 text-[10px] font-medium text-ink border border-line">
+                          {api.region === "Europa" ? "🇪🇺 Europa" : api.region === "Amerika" ? "🇺🇸 Amerika" : api.region === "Asien" ? "🌏 Asien" : "🌐 Global"}
+                        </span>
                         <span className="font-semibold text-ink">{api.name}</span>
                         <span className="rounded bg-wash px-1.5 py-0.5 text-[10px] font-mono text-muted border border-line">
                           {api.protocol}
                         </span>
                       </div>
-                      <span className="inline-flex items-center gap-1 text-[11px] text-ok font-medium">
+                      <span className="inline-flex items-center gap-1 text-[11px] text-ok font-medium shrink-0">
                         <CheckCircle size={12} weight="fill" />
                         {api.auth}
                       </span>
@@ -319,7 +354,7 @@ export function InfoModal({ onClose }: { onClose: () => void }) {
                 <h3 className="font-medium text-ink text-sm">100% Kostenlos · Ohne LLM nutzbar</h3>
               </div>
               <p className="text-soft leading-relaxed">
-                MarkenFrei ist für jeden kostenlos und sofort nutzbar. Die Kernprüfung erfolgt rein algorithmisch über freie Open-Data Protokolle (RDAP, DNS-over-HTTPS, offizielle Register und Store APIs). Niemand benötigt ein Abonnement, ein Benutzerkonto oder API-Keys.
+                Markenfrei ist für jeden kostenlos und sofort nutzbar. Die Kernprüfung erfolgt rein algorithmisch über freie Open-Data Protokolle (RDAP, DNS-over-HTTPS, offizielle Register und Store APIs). Niemand benötigt ein Abonnement, ein Benutzerkonto oder API-Keys.
               </p>
             </div>
 
@@ -354,7 +389,7 @@ export function InfoModal({ onClose }: { onClose: () => void }) {
 
         {/* Footer */}
         <footer className="border-t border-line px-6 py-3.5 flex items-center justify-between text-xs text-muted bg-wash/30">
-          <span>MarkenFrei · Open Source (MIT)</span>
+          <span>Markenfrei · Open Source (MIT)</span>
           <button
             type="button"
             onClick={onClose}

@@ -56,7 +56,7 @@ const MCP_TOOLS = [
   },
   {
     name: "markenfrei_list_open_apis",
-    description: "Liefert das Verzeichnis aller 25+ von MarkenFrei genutzten Open APIs mit Endpunkten und Dokumentation.",
+    description: "Liefert das Verzeichnis aller von Markenfrei genutzten weltweiten Open APIs mit Endpunkten und Dokumentation.",
     inputSchema: {
       type: "object",
       properties: {
@@ -109,7 +109,7 @@ export async function POST(req: Request) {
             content: [
               {
                 type: "text",
-                text: `# MarkenFrei Vorab-Prüfung: „${report.name}“\n* Urteil: ${report.matrixScore.verdict.toUpperCase()} (${report.matrixScore.verdictLabel})\n* Score: ${report.matrixScore.totalScore}/100\n* Kölner Phonetik: \`${report.trademark.koelnerPhonetik}\`\n* § 8 Freihaltebedürfnis: ${report.trademark.descriptivenessRisk}`,
+                text: `# Markenfrei Vorab-Prüfung: „${report.name}“\n* Urteil: ${report.matrixScore.verdict.toUpperCase()} (${report.matrixScore.verdictLabel})\n* Score: ${report.matrixScore.totalScore}/100\n* Kölner Phonetik: \`${report.trademark.koelnerPhonetik}\`\n* § 8 Freihaltebedürfnis: ${report.trademark.descriptivenessRisk}`,
               },
               {
                 type: "text",
@@ -237,7 +237,7 @@ export async function POST(req: Request) {
             content: [
               {
                 type: "text",
-                text: `# MarkenFrei 25+ Open APIs\n${apis.map((a) => `- **${a.name}** (${a.protocol} | ${a.auth}): ${a.purpose}`).join("\n")}`,
+                text: `# Markenfrei Open APIs\n${apis.map((a) => `- **${a.name}** (${a.protocol} | ${a.auth}): ${a.purpose}`).join("\n")}`,
               },
               {
                 type: "text",

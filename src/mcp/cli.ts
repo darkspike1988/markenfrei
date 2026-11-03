@@ -6,10 +6,10 @@ async function main() {
   const server = createMarkenfreiMcpServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("MarkenFrei MCP Server running on stdio (PID: " + process.pid + ")");
+  console.error("Markenfrei MCP Server running on stdio (PID: " + process.pid + ")");
 }
 
 main().catch((err) => {
-  console.error("MarkenFrei MCP Server Fatal Error:", err);
+  console.error("Markenfrei MCP Server Fatal Error:", err);
   process.exit(1);
 });

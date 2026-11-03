@@ -1,12 +1,12 @@
-# MarkenFrei 🛡️✨
+# Markenfrei 🛡️✨
 
 [![CI](https://github.com/darkspike1988/markenfrei/actions/workflows/ci.yml/badge.svg)](https://github.com/darkspike1988/markenfrei/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Live](https://img.shields.io/badge/Live-markenfrei.app-black?logo=safari&logoColor=white)](https://markenfrei.app)
 
-**MarkenFrei** ([markenfrei.app](https://markenfrei.app)) ist ein minimalistisches, hochperformantes Open-Source Clearinghouse zur Vorab-Prüfung und Generierung unbedenklicher Namen für **Apps, Websites, SaaS-Tools und Bibliotheken**.
+**Markenfrei** ([markenfrei.app](https://markenfrei.app)) ist ein minimalistisches, hochperformantes Open-Source Clearinghouse zur Vorab-Prüfung und Generierung unbedenklicher Namen für **Apps, Websites, SaaS-Tools und Bibliotheken**.
 
-Das Tool prüft Namen und App-Identitäten in Echtzeit gegen **Marken-Kollisionen, phonetische Zwillinge (§ 9 MarkenG), deutsches Freihaltebedürfnis (§ 8 MarkenG), Apple & Google Play Werktitelschutz (§ 5 Abs. 3 MarkenG), autoritative Registries (DENIC, Verisign, Google, Identity Digital), DoH, Enzyklopädien (Wikipedia & DuckDuckGo), Entwickler-Namensräume (GitHub, npm, PyPI, Crates.io, Homebrew, Go Proxy) und liefert einen transparenten Domain-Preisvergleich ohne Lockvogel-Fallen**.
+Das Tool prüft Namen und App-Identitäten in Echtzeit gegen **Marken-Kollisionen, phonetische Zwillinge (§ 9 MarkenG), deutsches Freihaltebedürfnis (§ 8 MarkenG), Apple & Google Play Werktitelschutz (§ 5 Abs. 3 MarkenG), autoritative Registries (Europa, Amerika, Asien), DoH, Enzyklopädien (Wikipedia & DuckDuckGo), globale Entwickler-Namensräume (GitHub, npm, PyPI, Crates.io, Homebrew, Go Proxy) und liefert einen transparenten Preisvergleich für europäische und amerikanische Hoster ohne Lockvogel-Fallen**.
 
 Inspiriert von wegweisenden GitHub-Projekten wie `facundoolano/app-store-scraper`, `DunlapCoddingPC/pyUSPTO`, `r13i/dodomains`, `faizul666/domain-search-agent` und REA (Reverse Engineering Anything).
 
@@ -16,8 +16,9 @@ Inspiriert von wegweisenden GitHub-Projekten wie `facundoolano/app-store-scraper
 
 ### 1. Minimalistischer Omnibar & Smart Intent Detection
 * **Ein einziges Eingabefeld (Linear/Raycast Ästhetik):**
-  * **Einzelname:** Gibt man ein einzelnes Wort ein (z. B. `WachWerk`), startet die Sofort-Einzelprüfung in unter 500 ms.
-  * **Projektidee:** Gibt man eine Beschreibung ein (z. B. `Wachbuch und Schichtplaner für Rettungsdienst`), generiert MarkenFrei passende Kunstwörter, Portmanteaus und prüft sie im Batch.
+  * **Einzelname:** Gibt man ein einzelnes Wort ein (z. B. `Wachwerk`), startet die Sofort-Einzelprüfung in unter 500 ms.
+  * **Projektidee:** Gibt man eine Beschreibung ein (z. B. `Wachbuch und Schichtplaner für Rettungsdienst`), generiert Markenfrei passende Kunstwörter, Portmanteaus und prüft sie im Batch.
+  * **Zufalls-Beispiele:** Generiert dynamisch 5 zufällige Kunstnamen aus dem Open-Data-Morphem-Pool (inkl. 1-Klick-Shuffle).
   * **App Bundle-ID & Paket-Inspektor:** Gibt man eine Bundle-ID ein (z. B. `de.wachwerk.app`), wird die Identität auf Apple App Store und Google Play abgeglichen.
 * **Shareable URL-State:**
   * Jede Recherche wird live synchronisiert (`?q=...`) und kann per 1-Klick-Share-Link geteilt oder als Markdown-Bericht exportiert werden.
@@ -82,7 +83,7 @@ Inspiriert von wegweisenden GitHub-Projekten wie `facundoolano/app-store-scraper
   * `.app` / `.dev`: Direkt über Google Registry `https://pubapi.registry.google/`
   * `.io` / `.ai`: Direkt über Identity Digital `https://rdap.identitydigital.services/`
 * **Dual-Layer DNS-over-HTTPS (DoH) Fallback:**
-  * Falls ein RDAP-Server 429 oder einen Timeout meldet, verifiziert MarkenFrei die Existenz von NS- und SOA-Einträgen über Google & Cloudflare DoH.
+  * Falls ein RDAP-Server 429 oder einen Timeout meldet, verifiziert Markenfrei die Existenz von NS- und SOA-Einträgen über Google & Cloudflare DoH.
 * **Fail-Safe Invariante:**
   * War eine Quelle nicht erreichbar, wird sie als `unknown` und nie als `available` gewertet. Ein grünes Signal gibt es nur bei vollständiger Prüfung.
 
@@ -98,16 +99,17 @@ Inspiriert von wegweisenden GitHub-Projekten wie `facundoolano/app-store-scraper
 
 ---
 
-### 7. Verwendete Open APIs & Quellen-Transparenz
-Über den Button **„Infos & MCP“** im Header zeigt MarkenFrei alle **25 verwendeten Schnittstellen** übersichtlich an:
-* Endpoint-URL, Protokoll (RDAP, DoH, REST)
-* Authentifizierung (100% Kostenlos / Zero-Key)
-* Prüfzweck und Direktlink zur offiziellen Entwickler-Dokumentation.
+### 7. Verwendete Open APIs & Quellen-Transparenz (Europa, Amerika, Asien)
+Über den Button **„Infos & MCP“** im Header zeigt Markenfrei alle verwendeten weltweiten Schnittstellen übersichtlich an:
+* Europa (DENIC, AFNIC, Nominet, EUIPO, TMview, OpenThesaurus, OffeneRegister)
+* Amerika (Verisign, Google Registry, Identity Digital, Apple iTunes, Google Play, USPTO, SEC EDGAR, DuckDuckGo)
+* Asien (JPRS Japan, KISA Korea, TWNIC Taiwan, APNIC, J-PlatPat Japan, IPOS Singapur)
+* Endpoint-URL, Region, Protokoll (RDAP, DoH, REST) und Dokumentationslinks.
 
 ---
 
 ### 8. 🤖 Model Context Protocol (MCP) Server für KI-Agenten
-MarkenFrei liefert einen voll ausgestatteten **MCP-Server**, mit dem autonome KI-Agenten (Claude Desktop, Claude Code, Cursor, Codex, Gemini CLI / Antigravity, Windsurf) direkt Markennamen prüfen, Domains vergleichen und Namensideen generieren können:
+Markenfrei liefert einen voll ausgestatteten **MCP-Server**, mit dem autonome KI-Agenten (Claude Desktop, Claude Code, Cursor, Codex, Gemini CLI / Antigravity, Windsurf) direkt Markennamen prüfen, Domains vergleichen und Namensideen generieren können:
 
 #### Integration in Claude Desktop (`claude_desktop_config.json`) oder Cursor (`.cursor/mcp.json`):
 ```json
@@ -215,4 +217,4 @@ Die Architektur und Schnittstellen sind modular dokumentiert:
 ---
 
 ## ⚖️ Rechtlicher Hinweis
-*MarkenFrei* dient der technischen und algorithmischen Vorab-Recherche. Es ersetzt keine anwaltliche Markenberatung oder verbindliche Ähnlichkeitsrecherche durch einen Fachanwalt für gewerblichen Rechtsschutz.
+*Markenfrei* dient der technischen und algorithmischen Vorab-Recherche. Es ersetzt keine anwaltliche Markenberatung oder verbindliche Ähnlichkeitsrecherche durch einen Fachanwalt für gewerblichen Rechtsschutz.

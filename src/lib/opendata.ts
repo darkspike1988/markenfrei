@@ -302,7 +302,56 @@ export async function discoverOpenDataWords(params: {
     sourcesQueried: [
       "OpenThesaurus.de (Deutsche Open-Data Synonym-Datenbank)",
       "Datamuse / WordNet API (Semantische & Phonetische Wortfelder)",
-      "MarkenFrei Morphem-Synthese (§ 8 MarkenG Fantasiewort-Generator)",
+      "Markenfrei Morphem-Synthese (§ 8 MarkenG Fantasiewort-Generator)",
     ],
   };
+}
+
+const OPEN_DATA_LEXICAL_STEMS = [
+  "wache", "schicht", "plan", "puls", "kern", "werk", "fokus", "strom",
+  "klima", "sinn", "bild", "raum", "klang", "kraft", "licht", "pfad",
+  "nord", "meta", "syn", "nova", "velo", "orbit", "prism", "zentro",
+  "kura", "luma", "vita", "volt", "flow", "apex", "axon", "brio", "fisk",
+  "dat", "tact", "chron", "aero", "omni", "sign", "vis", "lex",
+];
+
+const OPEN_DATA_SUFFIXES = [
+  "werk", "ora", "nova", "flux", "takt", "kura", "luma", "lyx",
+  "vero", "zent", "pakt", "ari", "vio", "vela", "vanta", "nion",
+];
+
+export const DEFAULT_OPEN_DATA_EXAMPLES: Array<{ label: string; q: string }> = [
+  { label: "Wachwerk", q: "Wachwerk" },
+  { label: "Fokusnova", q: "Fokusnova" },
+  { label: "Schichtflux", q: "Schichtflux" },
+  { label: "Planzeit", q: "Planzeit" },
+  { label: "Kliniktakt", q: "Kliniktakt" },
+];
+
+/**
+ * Generiert 5 zufällige Kunstnamen aus dem Open-Data-Morphem-Pool
+ */
+export function generateRandomOpenDataExamples(count: number = 5): Array<{ label: string; q: string }> {
+  const shuffledStems = [...OPEN_DATA_LEXICAL_STEMS].sort(() => 0.5 - Math.random());
+  const shuffledSuffixes = [...OPEN_DATA_SUFFIXES].sort(() => 0.5 - Math.random());
+
+  const results: Array<{ label: string; q: string }> = [];
+  const seen = new Set<string>();
+
+  for (let i = 0; i < shuffledStems.length && results.length < count; i++) {
+    const rawStem = shuffledStems[i];
+    const suf = shuffledSuffixes[i % shuffledSuffixes.length];
+
+    const stemClean = rawStem.slice(0, Math.min(rawStem.length, 5));
+    const capStem = stemClean.charAt(0).toUpperCase() + stemClean.slice(1);
+    const capSuf = suf.charAt(0).toUpperCase() + suf.slice(1);
+
+    const candidate = `${capStem}${capSuf}`;
+    if (!seen.has(candidate.toLowerCase())) {
+      seen.add(candidate.toLowerCase());
+      results.push({ label: candidate, q: candidate });
+    }
+  }
+
+  return results;
 }
