@@ -12,13 +12,14 @@ import {
   type DodoDomainScore,
 } from "@/lib/scoring";
 
-const UA = "MarkenFrei-Clearance-Agent/1.0";
+const UA =
+  "MarkenFrei/1.0 (+https://github.com/darkspike1988/markenfrei; Namens-Vorpruefung)";
 
 export type TldCheckResult = {
   tld: string;
   domain: string;
   status: "available" | "taken" | "unknown";
-  method: "dns+rdap" | "dns";
+  method: "rdap";
   registrarLinks: ReturnType<typeof getRegistrarLinks>;
 };
 
@@ -54,6 +55,8 @@ export type ClearanceReport = {
   domains: TldCheckResult[];
   trademark: TrademarkAnalysis;
   wikidataHits: WikidataHit[];
+  /** Quellen, die nicht antworteten. Ein Ergebnis ohne Treffer bedeutet dort NICHT "frei". */
+  incomplete: string[];
   appStore: {
     status: "clear" | "similar" | "collision";
     hits: AppStoreHit[];
@@ -81,97 +84,80 @@ export type ClearanceReport = {
 };
 
 /**
- * Checks domain availability via Google DNS-over-HTTPS (NXDOMAIN = status 3)
- * with RDAP verification fallback (from faizul666/domain-search-agent).
+ * Autoritative RDAP-Server je Endung. Verifiziert: 200 = registriert, 404 = frei.
+ * rdap.org ist hier bewusst NICHT die Hauptquelle, weil es für einige Endungen
+ * (z. B. .de, .io) 404 auch für vergebene Domains liefert.
+ */
+const RDAP_BASE: Record<string, string> = {
+  de: "https://rdap.denic.de/domain/",
+  com: "https://rdap.verisign.com/com/v1/domain/",
+  net: "https://rdap.verisign.com/net/v1/domain/",
+  app: "https://pubapi.registry.google/rdap/domain/",
+  dev: "https://pubapi.registry.google/rdap/domain/",
+  io: "https://rdap.identitydigital.services/rdap/domain/",
+  ai: "https://rdap.identitydigital.services/rdap/domain/",
+};
+
+async function rdapLookup(
+  url: string,
+): Promise<"available" | "taken" | "unknown"> {
+  // Ein Wiederholungsversuch bei Rate-Limit oder Netzwerkfehler.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await fetch(url, {
+        headers: { Accept: "application/rdap+json" },
+        redirect: "follow",
+        signal: AbortSignal.timeout(4000),
+      });
+      if (res.status === 404) return "available";
+      if (res.status >= 200 && res.status < 300) return "taken";
+      if (res.status !== 429) return "unknown";
+    } catch {
+      /* Netzwerkfehler: erneut versuchen */
+    }
+    await new Promise((r) => setTimeout(r, 400));
+  }
+  return "unknown";
+}
+
+/**
+ * Verfügbarkeit nur über autoritative Registry-Auskunft. Fehlt eine Auskunft,
+ * lautet das Ergebnis "unknown" und nie "available".
  */
 async function checkSingleDomain(name: string, tld: string): Promise<TldCheckResult> {
   const domain = `${name}.${tld}`;
   const registrarLinks = getRegistrarLinks(domain);
+  const base = RDAP_BASE[tld];
 
-  try {
-    // 1. Fast DNS-over-HTTPS NS check
-    const dnsUrl = `https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=NS`;
-    const r = await fetch(dnsUrl, {
-      headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(3000),
-    });
+  const status = base
+    ? await rdapLookup(`${base}${encodeURIComponent(domain)}`)
+    : "unknown";
 
-    if (r.ok) {
-      const j = await r.json();
-      // Status 3 = NXDOMAIN (Domain does not exist in TLD zone -> available)
-      if (j.Status === 3) {
-        return {
-          tld,
-          domain,
-          status: "available",
-          method: "dns",
-          registrarLinks,
-        };
-      }
-      // Status 0 with Answer = active nameservers -> taken
-      if (j.Status === 0 && Array.isArray(j.Answer) && j.Answer.length > 0) {
-        return {
-          tld,
-          domain,
-          status: "taken",
-          method: "dns",
-          registrarLinks,
-        };
-      }
-    }
-
-    // 2. Fallback to RDAP (rdap.org bootstrap from domain-search-agent)
-    const rdapRes = await fetch(
-      `https://rdap.org/domain/${encodeURIComponent(domain)}`,
-      {
-        headers: { Accept: "application/rdap+json" },
-        signal: AbortSignal.timeout(3000),
-      },
-    );
-    if (rdapRes.status === 404) {
-      return {
-        tld,
-        domain,
-        status: "available",
-        method: "dns+rdap",
-        registrarLinks,
-      };
-    }
-    if (rdapRes.status >= 200 && rdapRes.status < 300) {
-      return {
-        tld,
-        domain,
-        status: "taken",
-        method: "dns+rdap",
-        registrarLinks,
-      };
-    }
-  } catch {
-    // ignore timeout
-  }
-
-  return {
-    tld,
-    domain,
-    status: "unknown",
-    method: "dns",
-    registrarLinks,
-  };
+  return { tld, domain, status, method: "rdap", registrarLinks };
 }
 
 /**
  * Queries Wikidata Open Data API for existing companies, brands, software, or trademarks
  */
-async function checkWikidata(name: string): Promise<WikidataHit[]> {
+async function checkWikidata(
+  name: string,
+): Promise<{ hits: WikidataHit[]; ok: boolean }> {
   try {
     const url = `https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${encodeURIComponent(
       name,
     )}&language=de&uselang=de&format=json&limit=6`;
-    const res = await fetch(url, {
+    let res = await fetch(url, {
       headers: { "User-Agent": UA },
       signal: AbortSignal.timeout(3500),
     });
-    if (!res.ok) return [];
+    if (res.status === 429) {
+      await new Promise((r) => setTimeout(r, 900));
+      res = await fetch(url, {
+        headers: { "User-Agent": UA },
+        signal: AbortSignal.timeout(3500),
+      });
+    }
+    if (!res.ok) return { hits: [], ok: false };
     const data = await res.json();
     const items = Array.isArray(data?.search) ? data.search : [];
 
@@ -194,9 +180,9 @@ async function checkWikidata(name: string): Promise<WikidataHit[]> {
         isBrandOrSoftware,
       });
     }
-    return hits;
+    return { hits, ok: true };
   } catch {
-    return [];
+    return { hits: [], ok: false };
   }
 }
 
@@ -204,6 +190,7 @@ async function checkWikidata(name: string): Promise<WikidataHit[]> {
  * Queries Apple iTunes Search API (DE App Store) for Werktitelschutz (§ 5 Abs. 3 MarkenG)
  */
 async function checkAppleAppStore(name: string): Promise<{
+  ok: boolean;
   status: "clear" | "similar" | "collision";
   hits: AppStoreHit[];
 }> {
@@ -215,7 +202,7 @@ async function checkAppleAppStore(name: string): Promise<{
       headers: { "User-Agent": UA },
       signal: AbortSignal.timeout(3500),
     });
-    if (!res.ok) return { status: "clear", hits: [] };
+    if (!res.ok) return { ok: false, status: "clear", hits: [] };
     const data = await res.json();
     const results = Array.isArray(data?.results) ? data.results : [];
 
@@ -254,9 +241,9 @@ async function checkAppleAppStore(name: string): Promise<{
         ? "similar"
         : "clear";
 
-    return { status, hits };
+    return { ok: true, status, hits };
   } catch {
-    return { status: "clear", hits: [] };
+    return { ok: false, status: "clear", hits: [] };
   }
 }
 
@@ -407,7 +394,7 @@ export async function POST(req: Request) {
         : process.env.GEMINI_API_KEY || "";
 
     // Run all live checks in parallel!
-    const [domains, wikidataHits, appStore, devAndSocial, aiGroundedTm] =
+    const [domains, wikidata, appStoreRaw, devAndSocial, aiGroundedTm] =
       await Promise.all([
         Promise.all(tlds.map((tld) => checkSingleDomain(clean, tld))),
         checkWikidata(clean),
@@ -415,6 +402,22 @@ export async function POST(req: Request) {
         checkDevAndSocial(clean),
         geminiApiKey ? checkGeminiGroundedTrademark(clean, geminiApiKey) : Promise.resolve(null),
       ]);
+
+    const wikidataHits = wikidata.hits;
+    const { ok: appStoreOk, ...appStore } = appStoreRaw;
+
+    const incomplete: string[] = [];
+    if (domains.every((d) => d.status === "unknown")) incomplete.push("Domains");
+    else if (domains.some((d) => d.status === "unknown"))
+      incomplete.push("einzelne Domains");
+    if (!wikidata.ok) incomplete.push("Wikidata");
+    if (!appStoreOk) incomplete.push("App Store");
+    if (
+      devAndSocial.npmPackage === "unknown" &&
+      devAndSocial.githubHandle === "unknown" &&
+      devAndSocial.pypiPackage === "unknown"
+    )
+      incomplete.push("Entwickler-Namensräume");
 
     const trademark = analyzeTrademarkSafety(clean, description, keywords);
     const dodoBrandability = scoreDodoBrandability(
@@ -489,6 +492,12 @@ export async function POST(req: Request) {
       socialDevScore,
     });
 
+    // Ein "grün" darf es nur geben, wenn die wesentlichen Quellen geantwortet haben.
+    if (incomplete.length > 0 && matrixScore.verdict === "grün") {
+      matrixScore.verdict = "gelb";
+      matrixScore.verdictLabel = `Unvollständig geprüft (${incomplete.join(", ")})`;
+    }
+
     const report: ClearanceReport = {
       name: clean,
       tagline: body.tagline,
@@ -497,6 +506,7 @@ export async function POST(req: Request) {
       domains,
       trademark,
       wikidataHits,
+      incomplete,
       appStore,
       devAndSocial,
       aiGroundedTm,

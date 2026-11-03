@@ -42,7 +42,7 @@ export type TrademarkAnalysis = {
  * Standard-Algorithmus für deutsche Klangähnlichkeit (z. B. "Klarna" == "Clarna" -> "4576").
  */
 export function koelnerPhonetik(input: string): string {
-  let word = input
+  const word = input
     .toLowerCase()
     .replace(/ä/g, "a")
     .replace(/ö/g, "o")

@@ -1,48 +1,88 @@
 @import "tailwindcss";
 
-@layer base {
-  :root {
-    --bg-main: #0a0d14;
-    --bg-card: #111622;
-    --bg-elevated: #182030;
-    --border: #222d42;
-    --border-accent: #334466;
-    --text-primary: #f1f5f9;
-    --text-muted: #94a3b8;
-    --accent: #10b981;
-    --accent-glow: rgba(16, 185, 129, 0.15);
+@theme inline {
+  --color-canvas: #fbfbfa;
+  --color-surface: #ffffff;
+  --color-wash: #f7f6f3;
+  --color-ink: #111111;
+  --color-soft: #2f3437;
+  --color-muted: #787774;
+  --color-line: #eaeaea;
+  --color-ok: #346538;
+  --color-ok-bg: #edf3ec;
+  --color-warn: #956400;
+  --color-warn-bg: #fbf3db;
+  --color-bad: #9f2f2d;
+  --color-bad-bg: #fdebec;
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-geist-sans), "SF Pro Display", "Helvetica Neue", sans-serif;
+  line-height: 1.6;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
   }
-
-  body {
-    background-color: var(--bg-main);
-    color: var(--text-primary);
-    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
-/* Custom polished scrollbar */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-::-webkit-scrollbar-track {
-  background: #0d111a;
-}
-::-webkit-scrollbar-thumb {
-  background: #1e293b;
-  border-radius: 4px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #334155;
+@keyframes slide-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }
 
-/* Subtle glow helpers */
-.glow-emerald {
-  box-shadow: 0 0 35px -5px rgba(16, 185, 129, 0.2);
+@keyframes shimmer {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
 }
-.glow-amber {
-  box-shadow: 0 0 35px -5px rgba(245, 158, 11, 0.2);
+
+.fade-up {
+  animation: fade-up 500ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(var(--i, 0) * 60ms);
 }
-.glow-rose {
-  box-shadow: 0 0 35px -5px rgba(244, 63, 94, 0.2);
+
+.slide-in {
+  animation: slide-in 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.skeleton {
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fade-up,
+  .slide-in,
+  .skeleton {
+    animation: none;
+  }
 }

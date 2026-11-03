@@ -13,9 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MarkenFrei · KI & Open-Data App-Namensfinder mit Marken- & Domain-Prüfung",
+  title: "MarkenFrei · Namen für Apps und Webseiten prüfen",
   description:
-    "Finde rechtssichere, unbelastete Namen für Apps, SaaS & Webseiten per Multi-Provider-LLM, OpenThesaurus, Datamuse, RDAP/DNS, Kölner Phonetik, Wikidata, Apple App Store & DPMA/EUIPO-Check.",
+    "Namensideen generieren und direkt auf Marken-, Domain-, App-Store- und Paketkonflikte prüfen. Open Source.",
 };
 
 export default function RootLayout({
@@ -26,9 +26,9 @@ export default function RootLayout({
   return (
     <html
       lang="de"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased dark`}
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-[#0b0e17] text-slate-100 selection:bg-emerald-500/30 selection:text-emerald-200">
+      <body className="min-h-full flex flex-col bg-canvas text-ink">
         {children}
       </body>
     </html>
