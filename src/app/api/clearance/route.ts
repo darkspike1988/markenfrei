@@ -1,0 +1,519 @@
+import { NextResponse } from "next/server";
+import {
+  analyzeTrademarkSafety,
+  koelnerPhonetik,
+  type TrademarkAnalysis,
+} from "@/lib/phonetics";
+import {
+  computeWeightedClearanceScore,
+  getRegistrarLinks,
+  scoreDodoBrandability,
+  type AgentCriteriaScores,
+  type DodoDomainScore,
+} from "@/lib/scoring";
+
+const UA = "MarkenFrei-Clearance-Agent/1.0";
+
+export type TldCheckResult = {
+  tld: string;
+  domain: string;
+  status: "available" | "taken" | "unknown";
+  method: "dns+rdap" | "dns";
+  registrarLinks: ReturnType<typeof getRegistrarLinks>;
+};
+
+export type AppStoreHit = {
+  trackName: string;
+  sellerName: string;
+  primaryGenreName: string;
+  artworkUrl60: string;
+  trackViewUrl: string;
+  exactOrPhoneticMatch: boolean;
+};
+
+export type WikidataHit = {
+  id: string;
+  label: string;
+  description: string;
+  url: string;
+  isBrandOrSoftware: boolean;
+};
+
+export type GitHubRepoHit = {
+  fullName: string;
+  stars: number;
+  description: string;
+  url: string;
+};
+
+export type ClearanceReport = {
+  name: string;
+  tagline?: string;
+  category?: string;
+  checkedAt: string;
+  domains: TldCheckResult[];
+  trademark: TrademarkAnalysis;
+  wikidataHits: WikidataHit[];
+  appStore: {
+    status: "clear" | "similar" | "collision";
+    hits: AppStoreHit[];
+  };
+  devAndSocial: {
+    githubHandle: "available" | "taken" | "unknown";
+    npmPackage: "available" | "taken" | "unknown";
+    pypiPackage: "available" | "taken" | "unknown";
+    topRepos: GitHubRepoHit[];
+  };
+  aiGroundedTm?: {
+    riskScore: number;
+    status: string;
+    notes: string;
+    sources: string[];
+    verifiedByWebSearch: boolean;
+  } | null;
+  dodoBrandability: DodoDomainScore;
+  matrixScore: {
+    criteria: AgentCriteriaScores;
+    totalScore: number;
+    verdict: "grün" | "gelb" | "rot";
+    verdictLabel: string;
+  };
+};
+
+/**
+ * Checks domain availability via Google DNS-over-HTTPS (NXDOMAIN = status 3)
+ * with RDAP verification fallback (from faizul666/domain-search-agent).
+ */
+async function checkSingleDomain(name: string, tld: string): Promise<TldCheckResult> {
+  const domain = `${name}.${tld}`;
+  const registrarLinks = getRegistrarLinks(domain);
+
+  try {
+    // 1. Fast DNS-over-HTTPS NS check
+    const dnsUrl = `https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=NS`;
+    const r = await fetch(dnsUrl, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(3000),
+    });
+
+    if (r.ok) {
+      const j = await r.json();
+      // Status 3 = NXDOMAIN (Domain does not exist in TLD zone -> available)
+      if (j.Status === 3) {
+        return {
+          tld,
+          domain,
+          status: "available",
+          method: "dns",
+          registrarLinks,
+        };
+      }
+      // Status 0 with Answer = active nameservers -> taken
+      if (j.Status === 0 && Array.isArray(j.Answer) && j.Answer.length > 0) {
+        return {
+          tld,
+          domain,
+          status: "taken",
+          method: "dns",
+          registrarLinks,
+        };
+      }
+    }
+
+    // 2. Fallback to RDAP (rdap.org bootstrap from domain-search-agent)
+    const rdapRes = await fetch(
+      `https://rdap.org/domain/${encodeURIComponent(domain)}`,
+      {
+        headers: { Accept: "application/rdap+json" },
+        signal: AbortSignal.timeout(3000),
+      },
+    );
+    if (rdapRes.status === 404) {
+      return {
+        tld,
+        domain,
+        status: "available",
+        method: "dns+rdap",
+        registrarLinks,
+      };
+    }
+    if (rdapRes.status >= 200 && rdapRes.status < 300) {
+      return {
+        tld,
+        domain,
+        status: "taken",
+        method: "dns+rdap",
+        registrarLinks,
+      };
+    }
+  } catch {
+    // ignore timeout
+  }
+
+  return {
+    tld,
+    domain,
+    status: "unknown",
+    method: "dns",
+    registrarLinks,
+  };
+}
+
+/**
+ * Queries Wikidata Open Data API for existing companies, brands, software, or trademarks
+ */
+async function checkWikidata(name: string): Promise<WikidataHit[]> {
+  try {
+    const url = `https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${encodeURIComponent(
+      name,
+    )}&language=de&uselang=de&format=json&limit=6`;
+    const res = await fetch(url, {
+      headers: { "User-Agent": UA },
+      signal: AbortSignal.timeout(3500),
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const items = Array.isArray(data?.search) ? data.search : [];
+
+    const hits: WikidataHit[] = [];
+    for (const item of items) {
+      const label = String(item.label || "");
+      const desc = String(item.description || "");
+      if (!label) continue;
+
+      const isBrandOrSoftware =
+        /(unternehmen|firma|marke|software|app|website|konzern|plattform|dienst|company|brand|trademark|application|video game|bank|startup)/i.test(
+          desc,
+        ) || label.toLowerCase() === name.toLowerCase();
+
+      hits.push({
+        id: String(item.id || ""),
+        label,
+        description: desc || "Wikidata-Eintrag",
+        url: `https://www.wikidata.org/wiki/${encodeURIComponent(item.id)}`,
+        isBrandOrSoftware,
+      });
+    }
+    return hits;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Queries Apple iTunes Search API (DE App Store) for Werktitelschutz (§ 5 Abs. 3 MarkenG)
+ */
+async function checkAppleAppStore(name: string): Promise<{
+  status: "clear" | "similar" | "collision";
+  hits: AppStoreHit[];
+}> {
+  try {
+    const url = `https://itunes.apple.com/search?term=${encodeURIComponent(
+      name,
+    )}&country=de&entity=software&limit=5`;
+    const res = await fetch(url, {
+      headers: { "User-Agent": UA },
+      signal: AbortSignal.timeout(3500),
+    });
+    if (!res.ok) return { status: "clear", hits: [] };
+    const data = await res.json();
+    const results = Array.isArray(data?.results) ? data.results : [];
+
+    const targetKp = koelnerPhonetik(name);
+    let hasExactCollision = false;
+
+    const hits: AppStoreHit[] = results.map((app: Record<string, unknown>) => {
+      const trackName = String(app.trackName || "");
+      // Extract main title before ":" or "-"
+      const mainTitle = trackName
+        .split(/[:\-–|]/)[0]
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "");
+      const exactOrPhoneticMatch =
+        mainTitle === name.toLowerCase() ||
+        (targetKp.length >= 3 && koelnerPhonetik(mainTitle) === targetKp);
+
+      if (exactOrPhoneticMatch) {
+        hasExactCollision = true;
+      }
+
+      return {
+        trackName,
+        sellerName: String(app.sellerName || ""),
+        primaryGenreName: String(app.primaryGenreName || "App"),
+        artworkUrl60: String(app.artworkUrl60 || ""),
+        trackViewUrl: String(app.trackViewUrl || ""),
+        exactOrPhoneticMatch,
+      };
+    });
+
+    const status = hasExactCollision
+      ? "collision"
+      : hits.length > 0
+        ? "similar"
+        : "clear";
+
+    return { status, hits };
+  } catch {
+    return { status: "clear", hits: [] };
+  }
+}
+
+/**
+ * Checks GitHub user/org handle, top GitHub repos, npm registry, and PyPI registry
+ */
+async function checkDevAndSocial(name: string): Promise<ClearanceReport["devAndSocial"]> {
+  const ghHeaders: Record<string, string> = {
+    "User-Agent": UA,
+    Accept: "application/vnd.github+json",
+  };
+  if (process.env.GITHUB_TOKEN) {
+    ghHeaders.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
+  }
+
+  const [ghUserRes, npmRes, pypiRes, ghRepoRes] = await Promise.allSettled([
+    fetch(`https://api.github.com/users/${encodeURIComponent(name)}`, {
+      headers: ghHeaders,
+      signal: AbortSignal.timeout(3000),
+    }),
+    fetch(`https://registry.npmjs.org/${encodeURIComponent(name)}`, {
+      headers: { "User-Agent": UA },
+      signal: AbortSignal.timeout(3000),
+    }),
+    fetch(`https://pypi.org/pypi/${encodeURIComponent(name)}/json`, {
+      headers: { "User-Agent": UA },
+      signal: AbortSignal.timeout(3000),
+    }),
+    fetch(
+      `https://api.github.com/search/repositories?q=${encodeURIComponent(
+        name,
+      )}+in:name&sort=stars&order=desc&per_page=3`,
+      {
+        headers: ghHeaders,
+        signal: AbortSignal.timeout(3000),
+      },
+    ),
+  ]);
+
+  const mapStatus = (
+    settled: PromiseSettledResult<Response>,
+  ): "available" | "taken" | "unknown" => {
+    if (settled.status !== "fulfilled") return "unknown";
+    if (settled.value.status === 404) return "available";
+    if (settled.value.status === 200) return "taken";
+    return "unknown";
+  };
+
+  let topRepos: GitHubRepoHit[] = [];
+  if (ghRepoRes.status === "fulfilled" && ghRepoRes.value.ok) {
+    try {
+      const repoJson = await ghRepoRes.value.json();
+      if (Array.isArray(repoJson?.items)) {
+        topRepos = repoJson.items.slice(0, 3).map((r: Record<string, unknown>) => ({
+          fullName: String(r.full_name || ""),
+          stars: Number(r.stargazers_count || 0),
+          description: String(r.description || "").slice(0, 100),
+          url: String(r.html_url || ""),
+        }));
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return {
+    githubHandle: mapStatus(ghUserRes),
+    npmPackage: mapStatus(npmRes),
+    pypiPackage: mapStatus(pypiRes),
+    topRepos,
+  };
+}
+
+/**
+ * Optional Gemini Web-Grounded Trademark Check (ported from faizul666/domain-search-agent)
+ */
+async function checkGeminiGroundedTrademark(
+  word: string,
+  apiKey: string,
+): Promise<ClearanceReport["aiGroundedTm"]> {
+  if (!apiKey) return null;
+  const prompt = `Recherchiere im Web nach bestehenden Marken, Unternehmen oder Apps mit dem Namen "${word}" (oder klanggleichen Varianten im deutschen/EU/US Raum). Bewerte das Markenrechts- und Verwechslungsrisiko für eine neue App oder Webseite.
+Antworte NUR als kompaktes JSON-Objekt:
+{"riskScore": <Zahl 1-10, wobei 10 = sehr sicher/keine bekannten Konflikte, 1 = starker Konflikt>, "status": "clear" | "possible-conflict" | "high-risk", "notes": "<1 kurzer deutscher Satz>", "sources": ["<Gefundene Firma/Marke>", ...]}`;
+
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(
+      apiKey,
+    )}`;
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        tools: [{ google_search: {} }],
+      }),
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!r.ok) return null;
+    const j = await r.json();
+    const parts = j?.candidates?.[0]?.content?.parts || [];
+    const text = parts
+      .map((p: { text?: string }) => p.text || "")
+      .join("")
+      .replace(/```(?:json)?/gi, "")
+      .trim();
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return null;
+    const parsed = JSON.parse(match[0]);
+    return {
+      riskScore: Math.max(1, Math.min(10, Number(parsed.riskScore) || 7)),
+      status: String(parsed.status || "unknown"),
+      notes: String(parsed.notes || ""),
+      sources: Array.isArray(parsed.sources) ? parsed.sources.slice(0, 4) : [],
+      verifiedByWebSearch: Boolean(j?.candidates?.[0]?.groundingMetadata),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function POST(req: Request) {
+  try {
+    const body = await req.json();
+    const rawName = String(body.name || "").trim();
+    const clean = rawName
+      .toLowerCase()
+      .replace(/\.[a-z]+$/, "")
+      .replace(/[^a-z0-9-]/g, "");
+
+    if (!clean || clean.length < 2) {
+      return NextResponse.json(
+        { error: "Bitte einen gültigen Namen (mind. 2 Zeichen) angeben." },
+        { status: 400 },
+      );
+    }
+
+    const tlds: string[] =
+      Array.isArray(body.tlds) && body.tlds.length > 0
+        ? body.tlds
+        : ["de", "com", "app", "ai", "io"];
+
+    const description = String(body.description || "");
+    const keywords = Array.isArray(body.keywords) ? body.keywords : [];
+    const geminiApiKey =
+      body.provider === "google" && body.apiKey
+        ? String(body.apiKey)
+        : process.env.GEMINI_API_KEY || "";
+
+    // Run all live checks in parallel!
+    const [domains, wikidataHits, appStore, devAndSocial, aiGroundedTm] =
+      await Promise.all([
+        Promise.all(tlds.map((tld) => checkSingleDomain(clean, tld))),
+        checkWikidata(clean),
+        checkAppleAppStore(clean),
+        checkDevAndSocial(clean),
+        geminiApiKey ? checkGeminiGroundedTrademark(clean, geminiApiKey) : Promise.resolve(null),
+      ]);
+
+    const trademark = analyzeTrademarkSafety(clean, description, keywords);
+    const dodoBrandability = scoreDodoBrandability(
+      `${clean}.${tlds[0] || "de"}`,
+    );
+
+    // Compute TM safety score (1..10, 10 = safest)
+    let tmRiskScore = 9;
+    if (trademark.protectedCollisions.length > 0) {
+      const hasExactOrPhonetic = trademark.protectedCollisions.some(
+        (c) => c.matchType === "identisch" || c.matchType === "klangidentisch",
+      );
+      tmRiskScore = hasExactOrPhonetic ? 1 : 3;
+    } else {
+      if (trademark.descriptivenessRisk === "hoch") tmRiskScore -= 3;
+      else if (trademark.descriptivenessRisk === "mittel") tmRiskScore -= 1;
+
+      const brandWikidataHits = wikidataHits.filter((w) => w.isBrandOrSoftware);
+      if (brandWikidataHits.length >= 2) tmRiskScore -= 3;
+      else if (brandWikidataHits.length === 1) tmRiskScore -= 2;
+    }
+
+    if (aiGroundedTm && typeof aiGroundedTm.riskScore === "number") {
+      tmRiskScore = Math.round((tmRiskScore + aiGroundedTm.riskScore) / 2);
+    }
+
+    // Compute App Store Werktitelschutz score (1..10)
+    let appStoreScore = 10;
+    if (appStore.status === "collision") {
+      appStoreScore = 2;
+    } else if (appStore.status === "similar") {
+      appStoreScore = 7;
+    }
+
+    // Compute Dev & Social handle score (1..10)
+    let freeHandles = 0;
+    let knownHandles = 0;
+    for (const st of [
+      devAndSocial.githubHandle,
+      devAndSocial.npmPackage,
+      devAndSocial.pypiPackage,
+    ]) {
+      if (st === "available") {
+        freeHandles++;
+        knownHandles++;
+      } else if (st === "taken") {
+        knownHandles++;
+      }
+    }
+    const highStarRepo = devAndSocial.topRepos.some(
+      (r) =>
+        r.fullName.split("/")[1]?.toLowerCase() === clean && r.stars >= 100,
+    );
+    let socialDevScore =
+      knownHandles > 0 ? Math.round(3 + (freeHandles / knownHandles) * 7) : 7;
+    if (highStarRepo) socialDevScore = Math.max(2, socialDevScore - 3);
+
+    // Domain availability ratio
+    const availableCount = domains.filter((d) => d.status === "available").length;
+    const domainAvailableRatio =
+      domains.length > 0 ? availableCount / domains.length : 0;
+    const primaryDomainsFree = domains.some(
+      (d) => (d.tld === "de" || d.tld === "com") && d.status === "available",
+    );
+
+    const matrixScore = computeWeightedClearanceScore({
+      word: clean,
+      domainAvailableRatio,
+      primaryDomainsFree,
+      tmRiskScore,
+      appStoreScore,
+      socialDevScore,
+    });
+
+    const report: ClearanceReport = {
+      name: clean,
+      tagline: body.tagline,
+      category: body.category,
+      checkedAt: new Date().toISOString(),
+      domains,
+      trademark,
+      wikidataHits,
+      appStore,
+      devAndSocial,
+      aiGroundedTm,
+      dodoBrandability,
+      matrixScore,
+    };
+
+    return NextResponse.json(report);
+  } catch (err) {
+    return NextResponse.json(
+      {
+        error:
+          err instanceof Error
+            ? err.message
+            : "Fehler bei der Marken- & Domain-Prüfung",
+      },
+      { status: 500 },
+    );
+  }
+}
