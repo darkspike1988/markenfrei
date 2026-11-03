@@ -339,6 +339,7 @@ export default function Home() {
 
   // Zurück zur Startseite (Logo-Klick oder Löschen)
   const resetToStart = useCallback(() => {
+    runId.current += 1;
     setQuery("");
     setReports([]);
     setSelected(null);
@@ -514,10 +515,11 @@ export default function Home() {
               />
 
               <div className="absolute right-2 flex items-center gap-1.5">
-                {query && !busy && (
+                {query && (
                   <button
                     type="button"
                     onClick={() => {
+                      runId.current += 1;
                       setQuery("");
                       if (typeof window !== "undefined") {
                         const url = new URL(window.location.href);
@@ -525,10 +527,8 @@ export default function Home() {
                         window.history.replaceState(null, "", url.pathname);
                       }
                       setError(null);
-                      if (reports.length === 1) {
-                        setReports([]);
-                        setPhase("idle");
-                      }
+                      setReports([]);
+                      setPhase("idle");
                       inputRef.current?.focus();
                     }}
                     className="cursor-pointer rounded p-1.5 text-muted transition-colors hover:bg-wash hover:text-ink"
