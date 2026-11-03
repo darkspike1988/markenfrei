@@ -1,6 +1,10 @@
 # MarkenFrei 🛡️✨
 
-**MarkenFrei** ist ein minimalistisches, hochperformantes Open-Source Clearinghouse zur Vorab-Prüfung und Generierung unbedenklicher Namen für **Apps, Websites, SaaS-Tools und Bibliotheken**.
+[![CI](https://github.com/darkspike1988/markenfrei/actions/workflows/ci.yml/badge.svg)](https://github.com/darkspike1988/markenfrei/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Live](https://img.shields.io/badge/Live-markenfrei.app-black?logo=safari&logoColor=white)](https://markenfrei.app)
+
+**MarkenFrei** ([markenfrei.app](https://markenfrei.app)) ist ein minimalistisches, hochperformantes Open-Source Clearinghouse zur Vorab-Prüfung und Generierung unbedenklicher Namen für **Apps, Websites, SaaS-Tools und Bibliotheken**.
 
 Das Tool prüft Namen und App-Identitäten in Echtzeit gegen **Marken-Kollisionen, phonetische Zwillinge (§ 9 MarkenG), deutsches Freihaltebedürfnis (§ 8 MarkenG), Apple & Google Play Werktitelschutz (§ 5 Abs. 3 MarkenG), autoritative Registries (DENIC, Verisign, Google, Identity Digital), DoH, Enzyklopädien (Wikipedia & DuckDuckGo), Entwickler-Namensräume (GitHub, npm, PyPI, Crates.io, Homebrew, Go Proxy) und liefert einen transparenten Domain-Preisvergleich ohne Lockvogel-Fallen**.
 
@@ -104,6 +108,8 @@ Inspiriert von wegweisenden GitHub-Projekten wie `facundoolano/app-store-scraper
 
 ## 🚀 Installation & Start
 
+### Lokal ausführen
+
 ```bash
 # 1. Klonen
 git clone https://github.com/darkspike1988/markenfrei.git
@@ -119,6 +125,35 @@ npm run build && npm run start
 ```
 
 Im Browser öffnen: **`http://localhost:3000`**
+
+---
+
+### Mit Docker ausführen
+
+```bash
+docker compose up -d --build
+```
+
+---
+
+### Deployment auf `markenfrei.app`
+
+#### Option A: Vercel (Empfohlen für Next.js)
+1. Repository `https://github.com/darkspike1988/markenfrei` bei [Vercel](https://vercel.com) importieren.
+2. In den Vercel-Projekteinstellungen unter **Domains** `markenfrei.app` und `www.markenfrei.app` hinzufügen.
+3. Bei deinem Domain-Registrar die DNS-Einträge hinterlegen:
+   * **A-Record** für `@` auf `76.76.21.21`
+   * **CNAME-Record** für `www` auf `cname.vercel-dns.com`
+
+#### Option B: Docker / VPS (Hetzner, Netcup, etc.)
+1. Git-Repository auf den Server klonen.
+2. `docker compose up -d` starten.
+3. Nginx / Caddy als Reverse-Proxy mit automatischem Let's Encrypt SSL vorschalten:
+   ```caddy
+   markenfrei.app, www.markenfrei.app {
+       reverse_proxy 127.0.0.1:3000
+   }
+   ```
 
 ---
 
