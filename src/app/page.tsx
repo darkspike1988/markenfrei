@@ -13,6 +13,7 @@ import {
   Plus,
   ShieldCheck,
   Sparkle,
+  X,
 } from "@phosphor-icons/react";
 import type { ClearanceReport } from "@/app/api/clearance/route";
 import type { OpenDataWordField } from "@/lib/opendata";
@@ -74,6 +75,7 @@ export default function Home() {
   const [copiedLink, setCopiedLink] = useState(false);
 
   const runId = useRef(0);
+  const initialLoadedRef = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLElement>(null);
 
@@ -335,18 +337,37 @@ export default function Home() {
     [checkOne, generateIdeas],
   );
 
-  // Initialer Start via URL-Parameter ?q=... (Shareable Link)
+  // Zurück zur Startseite (Logo-Klick oder Löschen)
+  const resetToStart = useCallback(() => {
+    setQuery("");
+    setReports([]);
+    setSelected(null);
+    setError(null);
+    setNotice(null);
+    setPhase("idle");
+    setTotal(0);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("q");
+      window.history.replaceState(null, "", url.pathname);
+    }
+    inputRef.current?.focus();
+  }, []);
+
+  // Initialer Start via URL-Parameter ?q=... (nur 1x beim initialen Laden!)
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || initialLoadedRef.current) return;
+    initialLoadedRef.current = true;
+
     const params = new URLSearchParams(window.location.search);
     const initialQ = params.get("q");
-    if (initialQ && !query) {
+    if (initialQ && initialQ.trim()) {
       queueMicrotask(() => {
         setQuery(initialQ);
         runWithQuery(initialQ);
       });
     }
-  }, [runWithQuery, query]);
+  }, [runWithQuery]);
 
   // Share-Link kopieren
   const copyShareLink = async () => {
@@ -390,7 +411,7 @@ export default function Home() {
   const busy = phase === "generating" || phase === "checking";
   const providerLabel =
     config.provider === "opendata"
-      ? "Open-Data"
+      ? "Kostenlos (Open-Data)"
       : (getProvider(config.provider)?.label.split(" (")[0] ?? "Modell");
   const pending = phase === "checking" ? Math.max(total - reports.length, 0) : 0;
 
@@ -398,10 +419,22 @@ export default function Home() {
     <div className="flex min-h-[100dvh] flex-col">
       {/* Header */}
       <header className="mx-auto flex w-full max-w-3xl items-center justify-between px-5 py-5">
-        <div className="flex items-center gap-2.5">
-          <ShieldCheck size={20} weight="bold" aria-hidden />
-          <span className="text-[15px] font-medium tracking-tight">MarkenFrei</span>
-        </div>
+        <button
+          type="button"
+          onClick={resetToStart}
+          className="flex items-center gap-2.5 cursor-pointer text-left group"
+          title="MarkenFrei zurücksetzen (Zurück zur Startseite)"
+        >
+          <ShieldCheck
+            size={20}
+            weight="bold"
+            className="text-ink transition-transform group-hover:scale-105"
+            aria-hidden
+          />
+          <span className="text-[15px] font-medium tracking-tight text-ink group-hover:text-soft">
+            MarkenFrei
+          </span>
+        </button>
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -419,7 +452,11 @@ export default function Home() {
             className="inline-flex cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-muted transition-colors hover:bg-wash hover:text-ink"
             title="Modell konfigurieren (⌘K)"
           >
-            <GearSix size={14} weight="bold" aria-hidden />
+            {config.provider === "opendata" ? (
+              <span className="size-1.5 rounded-full bg-ok" aria-hidden />
+            ) : (
+              <GearSix size={14} weight="bold" aria-hidden />
+            )}
             <span>{providerLabel}</span>
             <kbd className="hidden sm:inline rounded bg-wash px-1 py-0.5 font-mono text-[10px] text-muted border border-line">
               ⌘K
@@ -431,6 +468,13 @@ export default function Home() {
       {/* Main Omnibar Interface */}
       <main className="mx-auto w-full max-w-3xl flex-1 px-5 pb-24">
         <section className="pt-10 sm:pt-16">
+          <div className="flex flex-wrap items-center gap-2 mb-3">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-ok-bg/50 px-2.5 py-0.5 text-xs text-ok font-medium border border-ok/20">
+              <Check size={12} weight="bold" />
+              100% Kostenlos · Ohne LLM & ohne Key nutzbar (Open-Data)
+            </span>
+          </div>
+
           <h1 className="max-w-xl text-3xl font-medium leading-[1.15] tracking-tight sm:text-5xl">
             Ein Name, der dir niemand streitig macht.
           </h1>
@@ -446,15 +490,54 @@ export default function Home() {
                 ref={inputRef}
                 type="text"
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setQuery(val);
+                  if (!val.trim()) {
+                    if (typeof window !== "undefined") {
+                      const url = new URL(window.location.href);
+                      url.searchParams.delete("q");
+                      window.history.replaceState(null, "", url.pathname);
+                    }
+                    setError(null);
+                    if (reports.length === 1) {
+                      setReports([]);
+                      setPhase("idle");
+                    }
+                  }
+                }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !busy) runWithQuery(query);
                 }}
                 placeholder="Name oder Idee eintippen (z. B. „WachWerk“ oder „Wachbuch für Hilfsorganisationen“)…"
-                className="w-full bg-transparent px-4 py-3.5 pr-28 text-base text-ink placeholder:text-muted/60 focus:outline-none"
+                className="w-full bg-transparent px-4 py-3.5 pr-32 text-base text-ink placeholder:text-muted/60 focus:outline-none"
               />
 
               <div className="absolute right-2 flex items-center gap-1.5">
+                {query && !busy && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQuery("");
+                      if (typeof window !== "undefined") {
+                        const url = new URL(window.location.href);
+                        url.searchParams.delete("q");
+                        window.history.replaceState(null, "", url.pathname);
+                      }
+                      setError(null);
+                      if (reports.length === 1) {
+                        setReports([]);
+                        setPhase("idle");
+                      }
+                      inputRef.current?.focus();
+                    }}
+                    className="cursor-pointer rounded p-1.5 text-muted transition-colors hover:bg-wash hover:text-ink"
+                    title="Eingabe löschen"
+                    aria-label="Eingabe löschen"
+                  >
+                    <X size={14} weight="bold" />
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => runWithQuery(query)}
