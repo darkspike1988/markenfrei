@@ -24,10 +24,16 @@ import {
 import { ResultRow, ResultSkeleton } from "@/components/result-row";
 import { DetailPanel } from "@/components/detail-panel";
 import { InfoModal } from "@/components/info-modal";
+import { normalizeName } from "@/lib/name";
 
 const TLDS = ["de", "com", "app", "ai", "io", "dev"];
 
-const clean = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+// Gleiche Regeln wie auf dem Server (Umlaute ausschreiben, keine Sonderzeichen).
+// Bei ungültiger Eingabe leer, die Fehlermeldung kommt dann vom Server.
+const clean = (s: string) => {
+  const r = normalizeName(s);
+  return r.ok ? r.name : "";
+};
 
 type Phase = "idle" | "generating" | "checking" | "done";
 
@@ -111,14 +117,21 @@ export default function Home() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            name: clean(name),
+            name: clean(name) || name,
             description: isSingleWord ? "" : trimmed,
             keywords: isSingleWord ? [] : trimmed.split(/[\s,]+/).slice(0, 5),
             tlds,
           }),
         });
-        return res.ok ? await res.json() : null;
-      } catch {
+        if (res.ok) return await res.json();
+        if (res.status === 400 || res.status === 429) {
+          // Eingabefehler und Limit haben eine verständliche Meldung vom Server
+          const body = await res.json().catch(() => null);
+          if (body?.error) throw new Error(String(body.error));
+        }
+        return null;
+      } catch (err) {
+        if (err instanceof Error && err.message && !(err instanceof TypeError)) throw err;
         return null;
       }
     },
@@ -219,7 +232,7 @@ export default function Home() {
           // --- 1. SOFORT-EINZELPRÜFUNG ---
           setPhase("checking");
           setTotal(1);
-          const singleName = clean(input);
+          const singleName = clean(input) || input;
           const report = await checkOne(singleName);
           if (id !== runId.current) return;
           if (report) {
@@ -328,7 +341,7 @@ export default function Home() {
     const url = URL.createObjectURL(new Blob([md], { type: "text/markdown" }));
     const a = document.createElement("a");
     a.href = url;
-    a.download = `markenfrei-${clean(query || "export")}.md`;
+    a.download = `markenfrei-${clean(query || "export") || "export"}.md`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -459,7 +472,7 @@ export default function Home() {
                     ) : isSingleWord ? (
                       <>
                         <Lightning size={12} weight="bold" className="text-warn" />
-                        Sofort-Einzelprüfung für „{clean(trimmed)}“
+                        Sofort-Einzelprüfung für „{clean(trimmed) || trimmed}“
                       </>
                     ) : (
                       <>

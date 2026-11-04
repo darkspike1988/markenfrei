@@ -4,6 +4,8 @@
  * Phonetic Twin generation, and Nice Classification (Nizza-Klassen) mapping.
  */
 
+import { foldToAscii } from "@/lib/name";
+
 export type NiceClassInfo = {
   classNumber: number;
   title: string;
@@ -259,7 +261,7 @@ export function analyzeTrademarkSafety(
   description = "",
   keywords: string[] = [],
 ): TrademarkAnalysis {
-  const cleanName = rawName.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const cleanName = foldToAscii(rawName).replace(/[^a-z0-9]/g, "");
   const kp = koelnerPhonetik(cleanName);
   const sdx = soundex(cleanName);
   const twins = generatePhoneticTwins(cleanName);

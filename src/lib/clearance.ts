@@ -11,6 +11,8 @@ import {
   type DodoDomainScore,
 } from "@/lib/scoring";
 import { dohLookup } from "@/lib/doh";
+import { normalizeName } from "@/lib/name";
+import { parseTlds } from "@/lib/tlds";
 import {
   auditCandidateBundleIds,
   type AppBundleCheckResult,
@@ -418,13 +420,21 @@ export async function checkDevAndSocial(name: string): Promise<ClearanceReport["
   };
 }
 
+/** Fehler in der Eingabe (Name oder Endungen). Die API antwortet darauf mit 400. */
+export class ClearanceInputError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ClearanceInputError";
+  }
+}
+
 export type PerformClearanceOptions = {
   name: string;
   tagline?: string;
   category?: string;
   description?: string;
   keywords?: string[];
-  tlds?: string[];
+  tlds?: unknown;
 };
 
 /**
@@ -433,20 +443,13 @@ export type PerformClearanceOptions = {
 export async function performClearanceCheck(
   options: PerformClearanceOptions,
 ): Promise<ClearanceReport> {
-  const rawName = String(options.name || "").trim();
-  const clean = rawName
-    .toLowerCase()
-    .replace(/\.[a-z]+$/, "")
-    .replace(/[^a-z0-9-]/g, "");
+  const nameResult = normalizeName(options.name);
+  if (!nameResult.ok) throw new ClearanceInputError(nameResult.error);
+  const clean = nameResult.name;
 
-  if (!clean || clean.length < 2) {
-    throw new Error("Bitte einen gültigen Namen (mind. 2 Zeichen) angeben.");
-  }
-
-  const tlds: string[] =
-    Array.isArray(options.tlds) && options.tlds.length > 0
-      ? options.tlds
-      : ["de", "com", "app", "ai", "io"];
+  const tldResult = parseTlds(options.tlds);
+  if (!tldResult.ok) throw new ClearanceInputError(tldResult.error);
+  const tlds = tldResult.tlds;
 
   const description = String(options.description || "");
   const keywords = Array.isArray(options.keywords) ? options.keywords : [];
