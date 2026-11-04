@@ -6,9 +6,13 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { clearAllCaches } from "@/lib/cache";
 import { clearResultCache } from "@/lib/engine/check";
 import { NameReportSchema } from "@/lib/engine/report-schema";
+import type { NameReport } from "@/lib/engine/check";
+import { rankReports } from "@/lib/engine/verdict";
 import {
   CheckNamesOutputSchema,
   createMarkenfreiMcpServer,
+  formatRanking,
+  prepareShortlist,
   SuggestNamesOutputSchema,
   TOOL_NAMES,
   TrademarkPrepOutputSchema,
@@ -109,6 +113,66 @@ test("markenfrei_check_name: kompakter Text und NameReport", async () => {
   assert.ok(lines.includes("Domains: .de vergeben"), text(res));
   assert.ok(lines.some((l) => l.startsWith("Pakete: npm nicht gefunden")), text(res));
   assert.equal(lines.at(-1), "Marke: nicht geprüft → markenfrei_trademark_prep");
+
+  // Links stehen auch im Text, nicht nur in structuredContent
+  const deUrl = report.results.find((r) => r.sourceId === "rdap:de")?.url;
+  assert.ok(deUrl, "rdap:de liefert einen Link");
+  assert.ok(lines.includes("Nachprüfen:"), text(res));
+  assert.ok(lines.includes(`- .de vergeben: ${deUrl}`), text(res));
+  assert.ok(!lines.some((l) => l.startsWith("- npm")), "nicht gefundene Quellen ohne Link-Zeile");
+  const manual = lines.find((l) => l.startsWith("Manuell prüfen (nicht abgefragt): "));
+  assert.ok(manual?.includes("Instagram https://www.instagram.com/vergeben/"), text(res));
+});
+
+test("not_found wird überall eindeutig erklärt (heißt nicht frei oder registrierbar)", async () => {
+  const { tools } = await client.listTools();
+  const texts = [client.getInstructions() ?? "", JSON.stringify(tools)];
+  for (const t of texts) {
+    assert.doesNotMatch(t, /heißt nicht registrierbar/);
+    assert.doesNotMatch(t, /\(heißt nicht/);
+  }
+  assert.match(texts[0], /not_found = die Quelle kennt den Namen nicht, das heißt nicht, dass er frei oder registrierbar ist/);
+  for (const name of ["markenfrei_check_name", "markenfrei_check_names"]) {
+    const d = tools.find((t) => t.name === name)?.description ?? "";
+    assert.match(d, /not_found = nicht gefunden \(das heißt nicht, dass der Name frei oder registrierbar ist\)/, name);
+  }
+  const check = tools.find((t) => t.name === "markenfrei_check_name");
+  const status = JSON.stringify(check?.outputSchema);
+  assert.match(status, /das heißt nicht, dass er frei oder registrierbar ist/);
+});
+
+test("namespaces [social] ohne sources fragt Bluesky und Mastodon ab", async () => {
+  const res = await call("markenfrei_check_name", { name: "zzqxkvjwabc", namespaces: ["social"] });
+  assert.notEqual(res.isError, true, text(res));
+  const report = NameReportSchema.parse(res.structuredContent);
+  assert.deepEqual(
+    report.results.map((r) => r.sourceId),
+    ["bluesky", "mastodon"],
+  );
+  assert.ok(text(res).split("\n").some((l) => l.startsWith("Social: Bluesky ")), text(res));
+
+  // Zusammen mit anderen Namensräumen bleiben deren Standardquellen erhalten
+  const mixed = await call("markenfrei_check_name", { name: "zzqxkvjwabc", namespaces: ["packages", "social"] });
+  const ids = NameReportSchema.parse(mixed.structuredContent).results.map((r) => r.sourceId);
+  assert.ok(ids.includes("npm") && ids.includes("bluesky") && ids.includes("mastodon"), ids.join(","));
+  assert.ok(!ids.includes("hackernews"), "Hacker News nur über sources");
+  assert.ok(!ids.some((id) => id.startsWith("rdap:")), "ohne domains keine Domains");
+
+  // Ausdrückliche sources gelten unverändert
+  const explicit = await call("markenfrei_check_name", { name: "zzqxkvjwabc", namespaces: ["social"], sources: ["hackernews"] });
+  assert.deepEqual(
+    NameReportSchema.parse(explicit.structuredContent).results.map((r) => r.sourceId),
+    ["hackernews"],
+  );
+});
+
+test("ohne abgefragte Quelle erklärt der Text die gelbe Ampel", async () => {
+  const res = await call("markenfrei_check_name", { name: "zzqxkvjwabc", namespaces: ["social"], sources: [] });
+  assert.notEqual(res.isError, true, text(res));
+  const report = NameReportSchema.parse(res.structuredContent);
+  assert.equal(report.results.length, 0);
+  assert.match(text(res), /Keine Quelle abgefragt, Gelb heißt hier nur: nichts geprüft/);
+  assert.match(text(res), /Manuell prüfen \(nicht abgefragt\): Instagram/);
 });
 
 test("markenfrei_check_names: Rangliste und Berichte", async () => {
@@ -132,6 +196,102 @@ test("markenfrei_check_names: Rangliste und Berichte", async () => {
   assert.match(t, /^Rangliste \(2 Namen/);
   assert.match(t, /1\. wachwerk: GRÜN/);
   assert.match(t, /2\. vergeben: ROT · vergeben: \.de/);
+  const deUrl = out.reports.find((r) => r.name === "vergeben")?.results.find((r) => r.sourceId === "rdap:de")?.url;
+  assert.ok(t.includes(`   .de vergeben: ${deUrl}`), t);
+
+  // Shortlist-Berichte ohne Markenvorbereitung (die kommt über markenfrei_trademark_prep)
+  for (const r of out.reports) assert.ok(!("trademark" in r), `${r.name}: trademark im Bericht`);
+  for (const r of (res.structuredContent as { reports: object[] }).reports) assert.ok(!("trademark" in r));
+  assert.ok(Array.isArray(out.reports[0].manualLinks));
+});
+
+test("markenfrei_check_names: outputSchema ohne trademark, kurze sources-Beschreibung", async () => {
+  const { tools } = await client.listTools();
+  const names = tools.find((t) => t.name === "markenfrei_check_names");
+  const schema = names?.outputSchema as unknown as {
+    properties: { reports: { items: { properties: Record<string, unknown>; required?: string[] } } };
+  };
+  const reportProps = schema.properties.reports.items.properties;
+  assert.ok(!("trademark" in reportProps));
+  assert.ok("results" in reportProps && "manualLinks" in reportProps);
+  assert.ok(!(schema.properties.reports.items.required ?? []).includes("trademark"));
+
+  const single = tools.find((t) => t.name === "markenfrei_check_name");
+  assert.ok("trademark" in ((single?.outputSchema as { properties: object }).properties), "check_name behält trademark");
+  const sources = (single?.inputSchema.properties as Record<string, { description?: string }>).sources;
+  assert.ok((sources.description ?? "").length < 300, `sources-Beschreibung: ${sources.description?.length}`);
+});
+
+test("markenfrei_check_names: ungültiger Name mit Position, ohne Netzabfrage", async () => {
+  const before = requested.length;
+  const res = await call("markenfrei_check_names", { names: ["frischname", "--"], tlds: ["de"], sources: ["npm"] });
+  assert.equal(res.isError, true);
+  assert.equal(
+    text(res),
+    "Eingabefehler: Name 2 („--“): Der Name darf nicht mit einem Bindestrich beginnen oder enden.",
+  );
+  assert.equal(requested.length, before, "keine Abfrage für die gültigen Namen");
+
+  const dotted = await call("markenfrei_check_names", { names: ["frischname", "frisch2", "a.b.c"], tlds: ["de"], sources: ["npm"] });
+  assert.match(text(dotted), /^Eingabefehler: Name 3 \(„a\.b\.c“\): Bitte nur den Namen ohne Punkte/);
+  assert.equal(requested.length, before);
+});
+
+test("markenfrei_check_names: gleiche Namen nach der Normalisierung werden einmal geprüft", async () => {
+  const before = requested.length;
+  const res = await call("markenfrei_check_names", {
+    names: ["Dopplung", "dopplung", "dopplung.de", "Dopplung"],
+    tlds: ["de"],
+    sources: ["npm"],
+  });
+  assert.notEqual(res.isError, true, text(res));
+  const out = CheckNamesOutputSchema.parse(res.structuredContent);
+  assert.deepEqual(
+    out.ranking.map((e) => e.name),
+    ["dopplung"],
+  );
+  assert.equal(out.reports.length, 1);
+  assert.equal(out.reports[0].input, "Dopplung");
+  assert.equal(requested.length - before, 2, "je eine Abfrage für .de und npm");
+  assert.match(text(res), /^Rangliste \(1 Name,/);
+  assert.match(text(res), /Zusammengefasst: „Dopplung“, „dopplung“, „dopplung\.de“ → dopplung/);
+});
+
+test("prepareShortlist: Reihenfolge, erste Schreibweise, Fehler mit Position", () => {
+  assert.deepEqual(prepareShortlist(["Bb", "aa", "bb.com", "Bb"]), {
+    ok: true,
+    inputs: ["Bb", "aa"],
+    merged: [{ name: "bb", inputs: ["Bb", "bb.com"] }],
+  });
+  const long = `${"x".repeat(50)}.a.b`;
+  const bad = prepareShortlist(["gut", "gut2", long]);
+  assert.equal(bad.ok, false);
+  assert.match(bad.ok ? "" : bad.error, /^Name 3 \(„x{39}…“\): Bitte nur den Namen ohne Punkte/);
+});
+
+test("formatRanking begründet Gelb mit ähnlich und schwachem Treffer und verlinkt Treffer", () => {
+  const base = { namespace: "known_names" as const, target: "gelbname" };
+  const report = {
+    name: "gelbname",
+    verdict: "yellow",
+    results: [
+      { ...base, sourceId: "known_brands", label: "Bekannte Marken", status: "similar", url: "https://example.org/brands", note: "klingt wie Gelbnahme" },
+      { ...base, sourceId: "wikipedia", label: "Wikipedia", status: "taken", weak: true, url: "https://de.wikipedia.org/wiki/Gelbname" },
+      { ...base, sourceId: "gleif", label: "GLEIF", status: "unknown", url: "https://search.gleif.org/" },
+      { ...base, sourceId: "wikidata", label: "Wikidata", status: "not_found", url: "https://www.wikidata.org/" },
+      { ...base, namespace: "packages", sourceId: "npm", label: "npm", status: "invalid", url: "https://www.npmjs.com/package/gelbname" },
+    ],
+    manualLinks: [],
+  } as unknown as NameReport;
+  const lines = formatRanking(rankReports([report]), [report]).split("\n");
+  assert.equal(
+    lines[1],
+    "1. gelbname: GELB · nicht zulässig: npm · ähnlich: Bekannte Marken · schwacher Treffer: Wikipedia · Lücken: GLEIF",
+  );
+  assert.equal(lines[2], "   Bekannte Marken ähnlich: https://example.org/brands");
+  assert.equal(lines[3], "   Wikipedia schwacher Treffer: https://de.wikipedia.org/wiki/Gelbname");
+  assert.equal(lines[4], "   npm nicht zulässig: https://www.npmjs.com/package/gelbname");
+  assert.ok(!lines.some((l) => l.includes("gleif.org") || l.includes("wikidata.org")), "Lücken und nicht gefunden ohne Link");
 });
 
 test("markenfrei_trademark_prep: ohne Netz, mit vorgegebenen Klassen", async () => {

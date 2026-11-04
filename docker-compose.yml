@@ -10,3 +10,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
+    # Optionale Variablen (siehe .env.example) aus .env übernehmen, falls vorhanden
+    env_file:
+      - path: .env
+        required: false

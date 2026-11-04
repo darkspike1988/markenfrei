@@ -3,7 +3,8 @@
 [![CI](https://github.com/darkspike1988/markenfrei/actions/workflows/ci.yml/badge.svg)](https://github.com/darkspike1988/markenfrei/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-**Kann ich diesen Namen überall nutzen, und wo muss ich für Marken selbst nachsehen?**
+**Kann ich diesen Namen in den gängigen Namensräumen nutzen, und wo muss ich für Marken selbst
+nachsehen?**
 
 Markenfrei ([markenfrei.app](https://markenfrei.app)) prüft einen Namen oder eine Shortlist,
 kurz bevor du dich festlegst: vor `npm init`, dem App-Store-Eintrag, dem Domain-Kauf oder dem
@@ -11,7 +12,8 @@ Repo. Gedacht für Entwickler, Indie-Gründer und kleine Teams im DACH-Raum.
 
 Du bekommst je Name:
 
-- eine Zeile pro Quelle mit Status als Text und Farbe und einem Link zum Nachprüfen,
+- eine Zeile pro Quelle mit Status als Text und Farbe und einem Link zum Nachprüfen, wo es
+  einen gibt,
 - eine Ampel, die nur aus diesen Status entsteht (kein Score, keine Geschmackskriterien),
 - eine Vorbereitung für die Markenrecherche: Registerlinks, DPMA-Expertensuchstring,
   Schreibvarianten, Klassenvorschlag und Checkliste.
@@ -37,6 +39,12 @@ RubyGems, Maven Central, Packagist, pub.dev, JSR, Hex.pm, CRAN, Open VSX, F-Droi
 Firefox Add-ons, Bluesky, Mastodon (mastodon.social), Hacker News sowie Wikipedia und
 Show HN als schwache Signale. Für Instagram, TikTok, X, YouTube und den Chrome Web Store
 gibt es nur Links zur Prüfung von Hand.
+
+**Achtung bei `sources`:** Die Liste ersetzt die Standardquellen außerhalb von Domains, sie
+ergänzt sie nicht. `sources: ["nuget"]` prüft nur noch die Domains und NuGet. Wer Quellen
+hinzufügen will, schickt die Standardquellen-IDs mit: `npm`, `pypi`, `github`, `crates`,
+`homebrew`, `appstore`, `googleplay`, `known_brands`, `wikidata`, `gleif`, dazu die
+gewünschten Zusatzquellen. Alle IDs stehen auf der Seite `/quellen`.
 
 Alle 21 Endungen und alle Quellen mit Endpunkt stehen auf der Seite `/quellen`.
 
@@ -81,6 +89,9 @@ Gelb, dann Rot, innerhalb davon nach Zahl der Treffer und dann der Lücken.
 
 Voraussetzung: Node.js 20.9 oder neuer.
 
+Hinweis: Solange das GitHub-Repository nicht öffentlich ist, funktionieren `git clone`, das
+CI-Badge und die Repository-Links im npm-Paket nur mit Zugriff auf das Repository.
+
 ```bash
 git clone https://github.com/darkspike1988/markenfrei.git
 cd markenfrei
@@ -100,6 +111,9 @@ Oder mit Docker:
 ```bash
 docker compose up -d --build
 ```
+
+Der Container liest keine `.env.local`. Umgebungsvariablen (siehe unten) trägst du in
+`docker-compose.yml` unter `environment:` ein oder bindest sie dort mit `env_file:` ein.
 
 Hinter einem Reverse-Proxy (z. B. Caddy oder Nginx) betreiben und `x-forwarded-for` nur von
 diesem Proxy setzen lassen, weil das Rate-Limit die IP daraus liest.
@@ -124,7 +138,9 @@ Vier Tools, alle schreibgeschützt und mit `outputSchema`:
 ### Über HTTP
 
 Jede laufende Instanz stellt den Server unter `POST /api/mcp` bereit (Streamable HTTP,
-zustandslos). Für Claude Code:
+zustandslos). Die öffentliche Adresse unten funktioniert erst nach dem Deployment auf
+markenfrei.app (Stand 4. November 2026: noch nicht erreichbar); lokal ersetzt du sie durch
+`http://localhost:3000/api/mcp`. Für Claude Code:
 
 ```bash
 claude mcp add --transport http markenfrei https://markenfrei.app/api/mcp
@@ -169,9 +185,10 @@ Markenfrei braucht keine API-Schlüssel. Alle Variablen sind optional, eine Vorl
 
 | Variable | Wirkung |
 |---|---|
-| `MARKENFREI_CONTACT` | Kontakt im User-Agent, z. B. `mailto:ops@example.org`. Der User-Agent lautet dann `Markenfrei/2.0 (+https://markenfrei.app; mailto:ops@example.org)`. Packagist wird nur mit einer E-Mail-Adresse abgefragt, sonst meldet die Quelle `unknown`. |
+| `MARKENFREI_CONTACT` | Kontakt im User-Agent, z. B. `mailto:ops@example.org`. Der User-Agent lautet dann `Markenfrei/2.0 (+https://markenfrei.app; mailto:ops@example.org)`. Packagist wird nur mit einer E-Mail-Adresse abgefragt (mit oder ohne `mailto:`), sonst meldet die Quelle `unknown`. |
 | `MARKENFREI_ALLOWED_ORIGINS` | Kommagetrennte Liste zusätzlicher Origins (z. B. `https://example.org`), die `/api/mcp` aufrufen dürfen. Ohne `Origin`-Header ist der Aufruf immer erlaubt; mit Header sind sonst nur der eigene Host, `localhost` und `127.0.0.1` erlaubt. |
 | `GITHUB_TOKEN` | Token für die GitHub-Abfrage (Nutzer und Organisationen). Ohne Token gilt das Limit von 60 Anfragen pro Stunde und IP. Das Token braucht keine Berechtigungen. |
+| `MARKENFREI_TRUSTED_PROXIES` | Anzahl vertrauenswürdiger Proxys vor der App (Standard 1). `x-forwarded-for` wird von rechts gelesen, damit Clients ihre Adresse nicht fälschen können. `0` ignoriert den Header. |
 | `MARKENFREI_RATE_LIMIT` | Anfragen pro Minute und IP für alle öffentlichen Routen (Standard 60). Bei `/api/check` und `markenfrei_check_names` zählt jeder Name einzeln. Der Zähler gilt pro Serverprozess; bei mehreren Instanzen zusätzlich am Reverse-Proxy begrenzen. |
 | `MARKENFREI_CACHE_TTL_SEC` | Lebensdauer des Zwischenspeichers für eindeutige Quellenantworten im Arbeitsspeicher, Standard 600 Sekunden, `0` schaltet ihn aus. `unknown` wird nie zwischengespeichert, nichts wird auf die Platte geschrieben. |
 

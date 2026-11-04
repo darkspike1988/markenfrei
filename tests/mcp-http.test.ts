@@ -165,6 +165,55 @@ test("Rate-Limit: markenfrei_check_names kostet so viel wie Namen", { skip: cust
   assert.ok(limited.headers.get("retry-after"));
 });
 
+test("Rate-Limit: Schreibvarianten desselben Namens kosten nur einmal", { skip: customLimit }, async () => {
+  const ip = nextIp();
+  const names = ["dupname", "Dupname", "DUPNAME", "dupname.de", "dupname.com", "DupName", "dUpname", "dupName", "dupname.io", "DUPname"];
+  const call = (id: number) =>
+    rpc(
+      {
+        jsonrpc: "2.0",
+        id,
+        method: "tools/call",
+        params: { name: "markenfrei_check_names", arguments: { names, tlds: ["de"], sources: ["npm"] } },
+      },
+      { ip },
+    );
+  // Mit Kosten 10 je Aufruf wäre der siebte gesperrt; nach der Normalisierung ist es ein Name.
+  for (let i = 0; i < 8; i++) assert.equal((await call(i)).status, 200, `Aufruf ${i + 1}`);
+  const body = (await (await call(50)).json()) as { result: { structuredContent: { ranking: { name: string }[] } } };
+  assert.deepEqual(
+    body.result.structuredContent.ranking.map((e) => e.name),
+    ["dupname"],
+  );
+});
+
+test("check_names über HTTP: Berichte ohne trademark, Lücken im Text", async () => {
+  const res = await rpc({
+    jsonrpc: "2.0",
+    id: 7,
+    method: "tools/call",
+    params: { name: "markenfrei_check_names", arguments: { names: ["httpname", "anderer"], tlds: ["de"], sources: ["npm"] } },
+  });
+  const body = (await res.json()) as {
+    result: { content: { text: string }[]; structuredContent: { reports: Record<string, unknown>[] } };
+  };
+  assert.equal(body.result.structuredContent.reports.length, 2);
+  for (const r of body.result.structuredContent.reports) assert.ok(!("trademark" in r));
+  assert.match(body.result.content[0].text, /Lücken: \.de, npm/);
+});
+
+test("initialize: not_found ist eindeutig erklärt", async () => {
+  const res = await rpc({
+    jsonrpc: "2.0",
+    id: 8,
+    method: "initialize",
+    params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "test", version: "0" } },
+  });
+  const body = (await res.json()) as { result: { instructions?: string } };
+  assert.match(body.result.instructions ?? "", /das heißt nicht, dass er frei oder registrierbar ist/);
+  assert.doesNotMatch(body.result.instructions ?? "", /das heißt nicht registrierbar/);
+});
+
 test("Werkzeugaufruf über HTTP liefert structuredContent (offline: Lücken statt frei)", async () => {
   const res = await rpc({
     jsonrpc: "2.0",

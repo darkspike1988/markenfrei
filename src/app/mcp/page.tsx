@@ -36,7 +36,7 @@ const TOOLS: { name: string; input: string; text: string }[] = [
   {
     name: "markenfrei_check_names",
     input: "names (1 bis 10), sonst wie oben",
-    text: "Prüft eine Shortlist und sortiert sie: frei in allen gewählten Quellen zuerst, dann wenige Treffer, dann wenige Lücken.",
+    text: "Prüft eine Shortlist und sortiert sie: ohne Treffer in allen gewählten Quellen zuerst, dann wenige Treffer, dann wenige unzulässige Namensräume, dann wenige Lücken.",
   },
   {
     name: "markenfrei_trademark_prep",
@@ -77,15 +77,18 @@ export default function McpPage() {
     <div className="pt-8 sm:pt-14">
       <h1 className="font-serif text-4xl leading-[1.1] tracking-[-0.02em] text-ink sm:text-5xl">MCP einrichten</h1>
       <p className="mt-4 max-w-2xl text-soft">
-        Ein Coding-Agent kann vor dem Anlegen eines Projekts oder Pakets prüfen, ob der Name in den benötigten
-        Namensräumen frei ist. Beim Benennen erzeugt das Sprachmodell deines Clients die Kandidaten, Markenfrei prüft
-        sie deterministisch. Grün heißt nicht markenrechtlich frei; „unbekannt“ ist nie frei.
+        Ein Coding-Agent kann vor dem Anlegen eines Projekts oder Pakets prüfen, wo der Name in den benötigten
+        Namensräumen schon vergeben ist. Beim Benennen erzeugt das Sprachmodell deines Clients die Kandidaten,
+        Markenfrei prüft sie deterministisch. Grün heißt nicht markenrechtlich frei; „unbekannt“ ist nie frei.
       </p>
 
       <div className="mt-6 rounded-lg border border-line bg-warn-bg px-4 py-3 text-sm text-warn">
         Das npm-Paket <code className="font-mono">markenfrei-mcp</code> muss erst vom Betreiber veröffentlicht werden.
         Bis dahin funktioniert <code className="font-mono">npx</code> nicht; starte den Server lokal aus dem
-        Repository mit <code className="font-mono">node mcp/dist/markenfrei-mcp.mjs</code> oder nutze die HTTP-Variante.
+        Repository mit <code className="font-mono">node mcp/dist/markenfrei-mcp.mjs</code>. Die HTTP-Adresse{" "}
+        <code className="font-mono">{HTTP_URL}</code> funktioniert erst, wenn diese Instanz unter markenfrei.app
+        erreichbar ist (Stand 4. November 2026: noch nicht). Jede selbst betriebene Instanz bietet sie unter{" "}
+        <code className="font-mono">/api/mcp</code>.
       </div>
 
       <section aria-labelledby="claude-code">

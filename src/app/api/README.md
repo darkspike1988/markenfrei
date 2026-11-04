@@ -1,13 +1,29 @@
 # `src/app/api/`: HTTP-Routen
 
 Drei Route Handler, alle nur `POST`. Keine LLM-Aufrufe, keine Speicherung von Anfragen.
+Gemeinsame Bausteine liegen in `_lib/http.ts` (der Ordner beginnt mit `_` und ist keine Route):
+Body-Grenze, Content-Type, Origin-Prüfung, Kosten und Rate-Limit.
+
 Jede Route geht durch `guardRequest` aus `src/lib/rate-limit.ts` (Standard 60 Einheiten pro
-Minute und IP). Bei Überschreitung kommt `429` mit `Retry-After`.
+Minute und Client). Anfragen mit ausgehenden Abfragen zählen zusätzlich gegen ein Limit pro
+Prozess (`MARKENFREI_GLOBAL_RATE_LIMIT`, Standard 600 Einheiten pro Minute). Es greift auch,
+wenn jemand das Limit pro Client umgeht, und schützt die Server-IP vor Sperren bei den
+abgefragten Diensten. Bei Überschreitung kommt `429` mit `Retry-After`.
+
+**Kosten einer Prüfung:** verschiedene Namen (nach Normalisierung) × `ceil(aufgelöste Quellen /
+Quellen der Standardauswahl)`. Die Standardauswahl kostet 1 je Name, alle Quellen mit 8 Endungen
+kosten ein Vielfaches.
+
+**Origin:** Eigene Origins kommen nur aus der Konfiguration, nie aus `Host` oder
+`X-Forwarded-Host` (die setzt der Client, bei DNS-Rebinding passen sie immer zum Origin):
+`MARKENFREI_PUBLIC_URL` (Standard `https://markenfrei.app`), `MARKENFREI_ALLOWED_ORIGINS`
+sowie `localhost`, `127.0.0.1` und `[::1]` mit beliebigem Port. Ein fehlender Origin ist erlaubt
+(Kommandozeile, Server).
 
 | Route | Zweck | Kosten fürs Rate-Limit |
 |---|---|---|
-| `POST /api/check` | Prüfung eines Namens oder einer Shortlist für die Oberfläche | Anzahl der Namen |
-| `POST /api/mcp` | MCP über Streamable HTTP, derselbe Server wie bei stdio | Anzahl der Namen bei `markenfrei_check_names`, sonst 1 |
+| `POST /api/check` | Prüfung eines Namens oder einer Shortlist für die Oberfläche | Namen × Quellenumfang |
+| `POST /api/mcp` | MCP über Streamable HTTP, derselbe Server wie bei stdio | Namen × Quellenumfang bei `markenfrei_check_name` und `markenfrei_check_names`, sonst 1 |
 | `POST /api/opendata-words` | Wortfeld und regelbasierte Vorschläge für „Keine Idee?“ | 1 |
 
 ```mermaid
@@ -19,13 +35,13 @@ sequenceDiagram
     participant Quellen as Offene Schnittstellen
 
     Client->>Route: POST (JSON)
-    Route->>Route: Größe, Schema, Rate-Limit prüfen
+    Route->>Route: Origin, Content-Type, Größe, Schema, Kosten, Rate-Limit
     Route->>Engine: checkNames(names, { tlds, namespaces, sources })
     par je Quelle, höchstens 8 s
         Engine->>Quellen: RDAP, Register, Stores, Wikidata, GLEIF ...
     end
     Engine-->>Route: { ranking, reports }
-    Route-->>Client: JSON (Cache-Control: no-store bei /api/check)
+    Route-->>Client: JSON (Cache-Control: no-store bei /api/check und /api/opendata-words)
 ```
 
 ---
@@ -50,6 +66,11 @@ Eingabe (mit zod geprüft):
 - `sources` ersetzt die Standardauswahl außerhalb von Domains. Wer Zusatzquellen will, schickt
   die gewünschten Standardquellen mit (so macht es die Oberfläche).
 
+Nur mit `Content-Type: application/json` (fremde Seiten lösen damit immer einen Preflight aus,
+den die Route nicht beantwortet). Ein Origin muss konfiguriert sein (siehe oben) oder der Browser
+meldet `Sec-Fetch-Site: same-origin`; so funktioniert die Oberfläche auch unter einer Domain, die
+nicht eingetragen ist.
+
 Ausgabe: `{ "ranking": ShortlistEntry[], "reports": NameReport[] }` aus `checkNames`.
 `NameReport` hat `schemaVersion: 2`, `verdict`, `results` (ein `SourceResult` je Quelle),
 `incomplete`, `trademark` und `manualLinks`. Die Antwort trägt `Cache-Control: no-store`.
@@ -59,7 +80,9 @@ Fehler, jeweils `{ "error": "<deutsche Meldung>" }`:
 | Status | Fall |
 |---|---|
 | 400 | kaputtes JSON, falsche Typen, keine oder mehr als 10 Namen, unbekannte Endung, Quelle oder Namensraum, ungültiger Name |
+| 403 | fremder Origin |
 | 413 | Body größer als 16 KB (auch ohne `Content-Length`, der Body wird beim Lesen gezählt) |
+| 415 | Content-Type ist nicht `application/json` |
 | 429 | Rate-Limit erreicht |
 | 500 | unerwarteter Fehler, allgemeine Meldung |
 
@@ -72,9 +95,9 @@ Der Server kommt aus `src/mcp/server.ts`, damit stdio und HTTP dieselben vier To
 
 Prüfungen in dieser Reihenfolge:
 
-1. **Origin:** fehlt der Header, ist der Aufruf erlaubt. Sonst nur der eigene Host (`Host`,
-   `x-forwarded-host`), `localhost`, `127.0.0.1` und die Einträge aus
-   `MARKENFREI_ALLOWED_ORIGINS`. Andernfalls `403` mit JSON-RPC-Fehler `-32000`.
+1. **Origin:** fehlt der Header, ist der Aufruf erlaubt. Sonst nur die konfigurierten Origins
+   und localhost (siehe oben), `Sec-Fetch-Site` zählt hier nicht. Andernfalls `403` mit
+   JSON-RPC-Fehler `-32000`.
 2. **Größe:** Body höchstens 64 KB, sonst `413` mit `-32600`.
 3. **Rate-Limit:** Kosten wie in der Tabelle oben.
 4. **Batch:** ein JSON-Array wird mit `400` und `-32600` abgelehnt.
@@ -86,7 +109,11 @@ Prüfungen in dieser Reihenfolge:
 
 ## `POST /api/opendata-words` (`opendata-words/route.ts`)
 
-Eingabe: `{ "keywords": ["schicht", "plan"] }` (Liste oder kommagetrennter Text), optional
-`description`, `brandSeed`, `maxLen` (Standard 11) und `avoid`. Ausgabe ist das
+Eingabe (mit zod geprüft, Body höchstens 8 KB, nur `application/json`, Origin wie bei
+`/api/check`): `{ "keywords": ["schicht", "plan"] }` (Liste oder kommagetrennter Text, 1 bis 6
+Stichwörter mit 2 bis 40 Zeichen; kürzere fallen weg), optional `description` (bis 500 Zeichen),
+`brandSeed` (bis 40), `maxLen` (ganze Zahl 4 bis 16, Standard 11) und `avoid` (bis 50 × 40).
+Fehler kommen als `{ "error": "<deutsche Meldung>" }` mit 400, 403, 413, 415, 429 oder 500, nie
+mit internen Meldungen. Alle Antworten tragen `Cache-Control: no-store`. Ausgabe ist das
 `OpenDataWordField` aus `src/lib/opendata.ts`, darin `synthesizedCandidates`. Die Vorschläge
 sind regelbasiert und ungeprüft; die Oberfläche prüft sie erst auf Klick über `/api/check`.

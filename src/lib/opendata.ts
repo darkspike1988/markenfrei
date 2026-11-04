@@ -6,6 +6,9 @@
  * 3) Algorithmic Morpheme & Portmanteau Synthesizer (Fantasiewort-Generator nach § 8 MarkenG)
  */
 
+import { buildUserAgent, createHttpClient } from "@/lib/engine/http";
+import type { HttpClient } from "@/lib/engine/types";
+
 export type OpenDataWordField = {
   germanSynonyms: string[];
   semanticRelated: string[];
@@ -18,7 +21,39 @@ export type OpenDataWordField = {
   sourcesQueried: string[];
 };
 
-const UA = "MarkenFrei-OpenSource-NameFinder/1.0 (https://github.com/local/markenfrei)";
+/** Gesamtzeit für alle Wortfeld-Anfragen eines Aufrufs */
+const OPENDATA_DEADLINE_MS = 5000;
+const OPENDATA_TIMEOUT_MS = 3500;
+/** Antworten von OpenThesaurus und Datamuse sind klein; mehr wird nicht gelesen */
+const OPENDATA_MAX_BYTES = 256 * 1024;
+
+export type OpenDataOptions = {
+  contact?: string;
+  fetchImpl?: typeof fetch;
+  now?: () => number;
+};
+
+/** Derselbe HTTP-Client wie bei der Prüfung: gleicher User-Agent, Größenlimit, Deadline. */
+function openDataClient(opts: OpenDataOptions): HttpClient {
+  const now = opts.now ?? Date.now;
+  return createHttpClient({
+    deadlineAt: now() + OPENDATA_DEADLINE_MS,
+    userAgent: buildUserAgent(opts.contact ?? process.env.MARKENFREI_CONTACT ?? ""),
+    fetchImpl: opts.fetchImpl,
+    now,
+  });
+}
+
+async function getJson(http: HttpClient, url: string, headers?: Record<string, string>): Promise<unknown> {
+  const res = await http.request(url, {
+    read: "json",
+    headers,
+    timeoutMs: OPENDATA_TIMEOUT_MS,
+    maxBytes: OPENDATA_MAX_BYTES,
+  });
+  if (res.error || res.status < 200 || res.status >= 300) return undefined;
+  return res.json;
+}
 
 function normalizeStem(word: string): string {
   return word
@@ -35,7 +70,7 @@ function normalizeStem(word: string): string {
 /**
  * Fetches German synonyms & associations from OpenThesaurus.de (Open Data)
  */
-async function fetchOpenThesaurus(terms: string[]): Promise<string[]> {
+async function fetchOpenThesaurus(http: HttpClient, terms: string[]): Promise<string[]> {
   const results = new Set<string>();
   const slice = terms.slice(0, 4);
 
@@ -45,12 +80,9 @@ async function fetchOpenThesaurus(terms: string[]): Promise<string[]> {
         const url = `https://www.openthesaurus.de/synonyme/search?q=${encodeURIComponent(
           term,
         )}&format=application/json&similar=true`;
-        const res = await fetch(url, {
-          headers: { "User-Agent": UA, Accept: "application/json" },
-          signal: AbortSignal.timeout(3500),
-        });
-        if (!res.ok) return;
-        const data = await res.json();
+        const data = (await getJson(http, url, { Accept: "application/json" })) as
+          | { synsets?: { terms?: { term?: unknown }[] }[] }
+          | undefined;
         const synsets = Array.isArray(data?.synsets) ? data.synsets : [];
         for (const synset of synsets.slice(0, 4)) {
           const synTerms = Array.isArray(synset?.terms) ? synset.terms : [];
@@ -75,43 +107,21 @@ async function fetchOpenThesaurus(terms: string[]): Promise<string[]> {
 /**
  * Fetches semantic & phonetic associations from Datamuse API (WordNet + Google Books Ngrams)
  */
-async function fetchDatamuse(terms: string[]): Promise<string[]> {
+async function fetchDatamuse(http: HttpClient, terms: string[]): Promise<string[]> {
   const results = new Set<string>();
   const query = terms.slice(0, 4).join(" ");
   if (!query) return [];
 
   try {
-    const [mlRes, trgRes] = await Promise.all([
-      fetch(`https://api.datamuse.com/words?ml=${encodeURIComponent(query)}&max=20`, {
-        headers: { "User-Agent": UA },
-        signal: AbortSignal.timeout(3500),
-      }),
-      fetch(
-        `https://api.datamuse.com/words?rel_trg=${encodeURIComponent(terms[0] || query)}&max=12`,
-        {
-          headers: { "User-Agent": UA },
-          signal: AbortSignal.timeout(3500),
-        },
-      ),
+    const lists = await Promise.all([
+      getJson(http, `https://api.datamuse.com/words?ml=${encodeURIComponent(query)}&max=20`),
+      getJson(http, `https://api.datamuse.com/words?rel_trg=${encodeURIComponent(terms[0] || query)}&max=12`),
     ]);
-
-    if (mlRes.ok) {
-      const mlData = await mlRes.json();
-      if (Array.isArray(mlData)) {
-        for (const item of mlData) {
-          if (typeof item?.word === "string" && /^[a-z]{3,10}$/.test(item.word)) {
-            results.add(item.word);
-          }
-        }
-      }
-    }
-    if (trgRes.ok) {
-      const trgData = await trgRes.json();
-      if (Array.isArray(trgData)) {
-        for (const item of trgData) {
-          if (typeof item?.word === "string" && /^[a-z]{3,10}$/.test(item.word)) {
-            results.add(item.word);
-          }
+    for (const data of lists) {
+      if (!Array.isArray(data)) continue;
+      for (const item of data) {
+        if (typeof item?.word === "string" && /^[a-z]{3,10}$/.test(item.word)) {
+          results.add(item.word);
         }
       }
     }
@@ -155,7 +165,7 @@ export async function discoverOpenDataWords(params: {
   brandSeed?: string;
   maxLen?: number;
   avoid?: string[];
-}): Promise<OpenDataWordField> {
+}, opts: OpenDataOptions = {}): Promise<OpenDataWordField> {
   const maxLen = params.maxLen || 11;
   const avoidSet = new Set(
     (params.avoid || []).map((a) => a.toLowerCase().trim()).filter(Boolean),
@@ -180,9 +190,10 @@ export async function discoverOpenDataWords(params: {
 
   const uniqueSearchTerms = Array.from(new Set(rawTokens)).slice(0, 6);
 
+  const http = openDataClient(opts);
   const [germanSynonyms, semanticRelated] = await Promise.all([
-    fetchOpenThesaurus(uniqueSearchTerms),
-    fetchDatamuse(uniqueSearchTerms),
+    fetchOpenThesaurus(http, uniqueSearchTerms),
+    fetchDatamuse(http, uniqueSearchTerms),
   ]);
 
   // Extract short pronounceable stems (3 to 5 chars)

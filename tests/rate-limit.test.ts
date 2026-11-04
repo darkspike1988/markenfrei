@@ -33,10 +33,28 @@ test("Schlüssel zählen getrennt", () => {
   assert.equal(rl.check("a").allowed, false);
 });
 
-test("clientKey nimmt die erste Adresse aus x-forwarded-for", () => {
-  const req = new Request("http://x", { headers: { "x-forwarded-for": "1.2.3.4, 10.0.0.1" } });
-  assert.equal(clientKey(req), "1.2.3.4");
-  assert.equal(clientKey(new Request("http://x")), "local");
+test("clientKey liest x-forwarded-for von rechts, gefälschte Einträge links zählen nicht", () => {
+  const req = (xff: string) => new Request("http://x", { headers: { "x-forwarded-for": xff } });
+  // Ein Proxy (Standard): der rechte Eintrag ist die Adresse, die der Proxy gesehen hat
+  assert.equal(clientKey(req("1.2.3.4"), 1), "1.2.3.4");
+  assert.equal(clientKey(req("6.6.6.6, 1.2.3.4"), 1), "1.2.3.4", "links gefälschte Adresse wird ignoriert");
+  // Zwei Proxys (z. B. CDN und nginx)
+  assert.equal(clientKey(req("6.6.6.6, 1.2.3.4, 10.0.0.2"), 2), "1.2.3.4");
+  // Weniger Einträge als Proxys: den linkesten nehmen statt undefined
+  assert.equal(clientKey(req("1.2.3.4"), 3), "1.2.3.4");
+  // Ohne vertraute Proxys werden Header ignoriert
+  assert.equal(clientKey(req("6.6.6.6"), 0), "local");
+  assert.equal(clientKey(new Request("http://x"), 1), "local");
+  assert.equal(clientKey(new Request("http://x", { headers: { "x-real-ip": "5.5.5.5" } }), 1), "5.5.5.5");
+});
+
+test("die Map bleibt auch bei sehr vielen Schlüsseln begrenzt", () => {
+  const c = clock();
+  const rl = createRateLimiter({ limit: 1, windowMs: 60_000, now: c.now });
+  for (let i = 0; i < 12_000; i++) rl.check(`k${i}`);
+  // Der jüngste Schlüssel ist noch gesperrt, der älteste wurde verdrängt und ist wieder frei
+  assert.equal(rl.check("k11999").allowed, false);
+  assert.equal(rl.check("k0").allowed, true);
 });
 
 test("Wächter antwortet mit 429, Retry-After und deutschem Text", async () => {

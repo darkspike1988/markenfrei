@@ -7,9 +7,10 @@ Konkurrenzanalyse, 21 live gegengeprüfte Quellen). Stand 4. November 2026.
 
 **Menschen:** Entwickler, Indie-Gründer und kleine Teams im DACH-Raum, kurz bevor sie sich
 auf einen Namen festlegen (vor `npm init`, App-Store-Eintrag, Domain-Kauf, Repo). Frage:
-„Kann ich diesen Namen überall nutzen, und wo muss ich für Marken selbst nachsehen?“
+„Kann ich diesen Namen in den gängigen Namensräumen nutzen, und wo muss ich für Marken selbst
+nachsehen?“
 Antwort in wenigen Sekunden: eine Zeile pro Namensraum mit Quelle und Link zum
-Nachprüfen, eine ehrliche Ampel, und eine fertige Vorbereitung für die Markenrecherche.
+Nachprüfen (wo die Quelle einen liefert), eine ehrliche Ampel, und eine fertige Vorbereitung für die Markenrecherche.
 
 **Agenten (MCP):** Ein Coding-Agent prüft vor dem Anlegen eines Projekts oder Pakets, ob
 der Name in den benötigten Namensräumen frei ist. Beim Benennen erzeugt das LLM des Clients

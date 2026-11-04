@@ -61,8 +61,9 @@ In `~/.cursor/mcp.json` (für alle Projekte) oder `.cursor/mcp.json` (nur dieses
 
 ### Ohne Installation
 
-Derselbe Server läuft auch über HTTP unter `https://markenfrei.app/api/mcp` (MCP Streamable
-HTTP, zustandslos, mit Rate-Limit):
+Derselbe Server läuft auch über HTTP unter `/api/mcp` jeder Markenfrei-Instanz (MCP Streamable
+HTTP, zustandslos, mit Rate-Limit). Die öffentliche Adresse `https://markenfrei.app/api/mcp` ist
+erst nach dem Deployment erreichbar (Stand 4. November 2026: noch nicht):
 
 ```sh
 claude mcp add --transport http markenfrei https://markenfrei.app/api/mcp
@@ -72,13 +73,18 @@ claude mcp add --transport http markenfrei https://markenfrei.app/api/mcp
 
 | Tool | Eingabe | Ergebnis |
 |---|---|---|
-| `markenfrei_check_name` | `name`, optional `namespaces`, `tlds`, `sources` | Ampel, Status je Quelle mit Link zum Nachprüfen, Lücken, Markenvorbereitung |
+| `markenfrei_check_name` | `name`, optional `namespaces`, `tlds`, `sources` | Ampel, Status je Quelle mit Link zum Nachprüfen (wo es einen gibt), Lücken, Markenvorbereitung |
 | `markenfrei_check_names` | `names` (1 bis 10), sonst wie oben | Rangliste der Kandidaten und ein Bericht je Name |
 | `markenfrei_trademark_prep` | `name`, optional `classes` (Nizza 1 bis 45) | Links zu DPMAregister, TMview, EUIPO, WIPO, TMDB und USPTO, DPMA-Expertensuchstring, Schreibvarianten, Klassen, Checkliste; ohne Netzabfrage |
 | `markenfrei_suggest_names` | `keywords` (1 bis 6), optional `count` (1 bis 20) | ungeprüfte Kandidaten aus dem Wortfeld (OpenThesaurus, Datamuse, feste Regeln), zum Weiterreichen an `markenfrei_check_names` |
 
 Namensräume: `domains`, `packages`, `stores`, `known_names` (Standard) und `social` (nur auf
 Wunsch). Standard-Endungen: .de, .com, .dev, .app, .io; höchstens 8 je Prüfung.
+
+`sources` ersetzt die Standardquellen außerhalb von Domains, es ergänzt sie nicht.
+`sources: ["nuget"]` prüft nur noch Domains und NuGet. Für Zusatzquellen die
+Standardquellen-IDs mitschicken: `npm`, `pypi`, `github`, `crates`, `homebrew`, `appstore`,
+`googleplay`, `known_brands`, `wikidata`, `gleif`.
 
 Status je Quelle:
 
@@ -94,7 +100,7 @@ Jedes Ergebnis hat zusätzlich `structuredContent` passend zum `outputSchema` de
 
 | Variable | Wirkung |
 |---|---|
-| `MARKENFREI_CONTACT` | Kontakt im User-Agent, z. B. `mailto:du@example.org`. Der User-Agent lautet dann `Markenfrei/2.0 (+https://markenfrei.app; mailto:du@example.org)`. Packagist wird nur mit einer `mailto:`-Adresse abgefragt, sonst ist das Ergebnis `unknown`. |
+| `MARKENFREI_CONTACT` | Kontakt im User-Agent, z. B. `mailto:du@example.org`. Der User-Agent lautet dann `Markenfrei/2.0 (+https://markenfrei.app; mailto:du@example.org)`. Packagist wird nur mit einer E-Mail-Adresse abgefragt (mit oder ohne `mailto:`), sonst ist das Ergebnis `unknown`. |
 | `GITHUB_TOKEN` | Optionales GitHub-Token für die Abfrage von Nutzern und Organisationen. Ohne Token gilt das GitHub-Limit von 60 Anfragen pro Stunde und IP; danach meldet die Quelle `unknown`. Das Token braucht keine Berechtigungen. |
 | `MARKENFREI_CACHE_TTL_SEC` | Lebensdauer des Zwischenspeichers im Arbeitsspeicher, Standard 600 Sekunden. `0` schaltet ihn aus. Nichts wird auf die Platte geschrieben. |
 

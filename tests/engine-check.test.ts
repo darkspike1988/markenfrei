@@ -2,7 +2,7 @@ import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { CheckInputError, checkName, checkNames, clearResultCache, resolveSources } from "@/lib/engine/check";
 import type { Source, Status } from "@/lib/engine/types";
-import { computeVerdict } from "@/lib/engine/verdict";
+import { computeVerdict, rankReports } from "@/lib/engine/verdict";
 
 function fake(id: string, status: Status | ((n: string) => Status), opts: Partial<Source> & { weak?: boolean; throws?: boolean } = {}) {
   let calls = 0;
@@ -26,11 +26,13 @@ function fake(id: string, status: Status | ((n: string) => Status), opts: Partia
 
 beforeEach(() => clearResultCache());
 
-test("Ampel: rot bei vergeben oder unzulässig, grün nur wenn alles nicht gefunden", () => {
+test("Ampel: rot nur bei hartem vergeben, grün nur wenn alles nicht gefunden (v2-spec)", () => {
   const r = (status: Status, weak = false) => ({ sourceId: "x", namespace: "packages" as const, label: "x", target: "n", status, weak });
   assert.equal(computeVerdict([r("not_found"), r("not_found")]), "green");
   assert.equal(computeVerdict([r("not_found"), r("taken")]), "red");
-  assert.equal(computeVerdict([r("not_found"), r("invalid")]), "red");
+  assert.equal(computeVerdict([r("not_found"), r("invalid")]), "yellow", "unzulässig ist nicht vergeben");
+  assert.equal(computeVerdict([r("invalid"), r("invalid")]), "yellow");
+  assert.equal(computeVerdict([r("invalid"), r("taken")]), "red");
   assert.equal(computeVerdict([r("not_found"), r("unknown")]), "yellow");
   assert.equal(computeVerdict([r("not_found"), r("similar")]), "yellow");
   assert.equal(computeVerdict([r("not_found"), r("taken", true)]), "yellow", "schwacher Treffer höchstens gelb");
@@ -88,4 +90,64 @@ test("Shortlist: frei zuerst, dann wenige Treffer; Grenzen werden geprüft", asy
   assert.deepEqual(ranking[2].taken, ["p"]);
   await assert.rejects(checkNames([], { registry: reg }), CheckInputError);
   await assert.rejects(checkNames(Array.from({ length: 11 }, (_, i) => `n${i}x`), { registry: reg }), CheckInputError);
+});
+
+test("Shortlist: unzulässig zählt nicht als vergeben, rangiert aber hinter sauberen Namen", () => {
+  const r = (label: string, status: Status) => ({ sourceId: label, namespace: "packages" as const, label, target: "n", status });
+  const ranking = rankReports([
+    { name: "inv", verdict: computeVerdict([r("a", "invalid"), r("b", "not_found")]), results: [r("a", "invalid"), r("b", "not_found")] },
+    { name: "gap", verdict: computeVerdict([r("a", "unknown"), r("b", "not_found")]), results: [r("a", "unknown"), r("b", "not_found")] },
+    { name: "hit", verdict: computeVerdict([r("a", "taken"), r("b", "invalid")]), results: [r("a", "taken"), r("b", "invalid")] },
+  ]);
+  assert.deepEqual(ranking.map((e) => e.name), ["gap", "inv", "hit"]);
+  const inv = ranking.find((e) => e.name === "inv")!;
+  assert.equal(inv.verdict, "yellow");
+  assert.deepEqual(inv.taken, []);
+  assert.deepEqual(inv.invalid, ["a"]);
+  const hit = ranking.find((e) => e.name === "hit")!;
+  assert.deepEqual(hit.taken, ["a"]);
+  assert.deepEqual(hit.invalid, ["b"]);
+});
+
+test("Shortlist: ein ungültiger Name bricht ab, bevor irgendeine Quelle abgefragt wird", async () => {
+  const p = fake("p", "not_found");
+  const names = [...Array.from({ length: 9 }, (_, i) => `name${i}x`), "!"];
+  await assert.rejects(checkNames(names, { registry: [p] }), CheckInputError);
+  assert.equal(p.calls(), 0);
+  await assert.rejects(checkNames(["gut", "-x-"], { registry: [p] }), CheckInputError);
+  assert.equal(p.calls(), 0);
+});
+
+test("Shortlist: ungültige Optionen brechen ab, bevor eine Quelle abgefragt wird", async () => {
+  const p = fake("p", "not_found");
+  await assert.rejects(checkNames(["gut"], { registry: [p], sources: ["gibtsnicht"] }), CheckInputError);
+  assert.equal(p.calls(), 0);
+});
+
+test("Shortlist: alle Namen teilen sich die Slot-Grenze je Host", async () => {
+  let active = 0;
+  let peak = 0;
+  const fetchImpl = (async () => {
+    active++;
+    peak = Math.max(peak, active);
+    await new Promise((r) => setTimeout(r, 15));
+    active--;
+    return new Response(null, { status: 404 });
+  }) as unknown as typeof fetch;
+  const src: Source = {
+    id: "h",
+    namespace: "packages",
+    label: "h",
+    defaultEnabled: true,
+    description: "",
+    endpoint: "",
+    async check(name, ctx) {
+      const res = await ctx.http.request(`https://shared-owner.test/${name}`);
+      return { sourceId: "h", namespace: "packages", label: "h", target: name, status: res.status === 404 ? "not_found" : "unknown" };
+    },
+  };
+  const names = Array.from({ length: 8 }, (_, i) => `owner${i}x`);
+  const { reports } = await checkNames(names, { registry: [src], fetchImpl });
+  assert.ok(reports.every((r) => r.verdict === "green"));
+  assert.ok(peak <= 3, `peak ${peak}`);
 });

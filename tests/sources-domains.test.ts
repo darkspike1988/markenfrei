@@ -160,7 +160,7 @@ test(".com not_found: HTTP 404, Hinweis nicht registrierbar, ICANN-Link", async 
   assert.equal(r.status, "not_found");
   assert.equal(r.evidence, "RDAP HTTP 404");
   assert.match(r.note ?? "", /nicht sicher registrierbar/);
-  assert.equal(r.url, "https://lookup.icann.org/de/lookup?name=zzqxkvjwabc.com");
+  assert.equal(r.url, "https://lookup.icann.org/en/lookup?name=zzqxkvjwabc.com");
   assert.ok(!calls.some((c) => c.url.includes("type=NS")), "bei 404 kein DNS");
 });
 
