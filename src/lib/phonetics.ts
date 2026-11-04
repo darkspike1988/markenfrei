@@ -50,22 +50,29 @@ export type TrademarkAnalysis = {
 };
 
 /**
- * Kölner Phonetik (Hans Joachim Postel, 1969)
- * Standard-Algorithmus für deutsche Klangähnlichkeit (z. B. "Klarna" == "Clarna" -> "4576").
+ * Prüft, ob ein einzelnes Zeichen in einer Zeichenmenge liegt.
+ * Ein fehlendes Nachbarzeichen ("") liegt nie in der Menge
+ * (Achtung: "csz".includes("") wäre true).
  */
-export function koelnerPhonetik(input: string): string {
+function oneOf(set: string, ch: string): boolean {
+  return ch.length === 1 && set.includes(ch);
+}
+
+/**
+ * Rohe Ziffernfolge der Kölner Phonetik vor dem Zusammenfassen und dem Entfernen der Nullen
+ * (z. B. "Müller-Lüdenscheidt" -> "60550750206880022").
+ */
+export function koelnerPhonetikRaw(input: string): string {
   const word = input
     .toLowerCase()
     .replace(/ä/g, "a")
     .replace(/ö/g, "o")
     .replace(/ü/g, "u")
-    .replace(/ß/g, "ss")
-    .replace(/ph/g, "f")
+    .replace(/ß/g, "s")
+    .normalize("NFD")
     .replace(/[^a-z]/g, "");
 
-  if (!word) return "";
-
-  const codes: string[] = [];
+  let codes = "";
   const len = word.length;
 
   for (let i = 0; i < len; i++) {
@@ -73,47 +80,51 @@ export function koelnerPhonetik(input: string): string {
     const prev = i > 0 ? word[i - 1] : "";
     const next = i < len - 1 ? word[i + 1] : "";
 
-    let code = "";
-    if ("aeijouy".includes(ch)) {
-      code = "0";
+    if (oneOf("aeijouy", ch)) {
+      codes += "0";
     } else if (ch === "h") {
-      code = "";
-    } else if (ch === "b" || (ch === "p" && next !== "h")) {
-      code = "1";
-    } else if ((ch === "d" || ch === "t") && !"csz".includes(next)) {
-      code = "2";
-    } else if ("fvw".includes(ch) || (ch === "p" && next === "h")) {
-      code = "3";
-    } else if ("gkq".includes(ch)) {
-      code = "4";
+      // H erhält keinen Code
+    } else if (ch === "b") {
+      codes += "1";
+    } else if (ch === "p") {
+      codes += next === "h" ? "3" : "1";
+    } else if (ch === "d" || ch === "t") {
+      codes += oneOf("csz", next) ? "8" : "2";
+    } else if (oneOf("fvw", ch)) {
+      codes += "3";
+    } else if (oneOf("gkq", ch)) {
+      codes += "4";
     } else if (ch === "c") {
       if (i === 0) {
-        code = "ahkloqrux".includes(next) ? "4" : "8";
+        codes += oneOf("ahkloqrux", next) ? "4" : "8";
+      } else if (oneOf("sz", prev)) {
+        codes += "8";
       } else {
-        if ("sz".includes(prev)) {
-          code = "8";
-        } else {
-          code = "ahkoqux".includes(next) ? "4" : "8";
-        }
+        codes += oneOf("ahkoqux", next) ? "4" : "8";
       }
     } else if (ch === "x") {
-      code = "ckq".includes(prev) ? "8" : "48";
+      codes += oneOf("ckq", prev) ? "8" : "48";
     } else if (ch === "l") {
-      code = "5";
+      codes += "5";
     } else if (ch === "m" || ch === "n") {
-      code = "6";
+      codes += "6";
     } else if (ch === "r") {
-      code = "7";
-    } else if ("sz".includes(ch)) {
-      code = "8";
-    } else if ((ch === "d" || ch === "t") && "csz".includes(next)) {
-      code = "8";
-    }
-
-    for (const digit of code) {
-      codes.push(digit);
+      codes += "7";
+    } else if (ch === "s" || ch === "z") {
+      codes += "8";
     }
   }
+  return codes;
+}
+
+/**
+ * Kölner Phonetik (Hans Joachim Postel, 1969)
+ * Standard-Algorithmus für deutsche Klangähnlichkeit (z. B. "Klarna" == "Clarna" -> "4576").
+ * Leere Eingabe (ohne Buchstaben) ergibt "".
+ */
+export function koelnerPhonetik(input: string): string {
+  const codes = koelnerPhonetikRaw(input);
+  if (!codes) return "";
 
   // Mehrfache benachbarte gleiche Ziffern zusammenfassen
   const deduped: string[] = [];
@@ -230,7 +241,7 @@ export function generatePhoneticTwins(word: string): string[] {
 /**
  * Bekannte geschützte Marken im Tech-, App- & SaaS-Bereich (Kollisions-Wächter)
  */
-const PROTECTED_TECH_BRANDS = [
+export const PROTECTED_TECH_BRANDS: readonly string[] = [
   "apple", "google", "amazon", "microsoft", "meta", "netflix", "spotify",
   "tesla", "uber", "airbnb", "paypal", "stripe", "klarna", "revolut",
   "notion", "figma", "canva", "linear", "vercel", "supabase", "github",

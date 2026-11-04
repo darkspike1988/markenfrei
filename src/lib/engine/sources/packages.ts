@@ -1,0 +1,749 @@
+import { buildUserAgent } from "@/lib/engine/http";
+import type { CheckContext, HttpResponse, Source, SourceResult } from "@/lib/engine/types";
+
+/**
+ * Paket- und Entwickler-Quellen (Namensraum "packages").
+ * Jede Quelle liefert genau ein SourceResult und wirft nie.
+ * "not_found" heißt nur: die Registry kennt den Namen nicht. Es heißt nicht "registrierbar".
+ */
+
+type Base = Pick<SourceResult, "sourceId" | "namespace" | "label" | "target" | "url">;
+
+const enc = encodeURIComponent;
+
+function base(sourceId: string, label: string, target: string, url: string): Base {
+  return { sourceId, namespace: "packages", label, target, url };
+}
+
+function evidenceOf(res: HttpResponse): string {
+  if (res.error) return res.status ? `HTTP ${res.status}, ${res.error}` : res.error;
+  return `HTTP ${res.status}`;
+}
+
+const ERROR_NOTE: Record<NonNullable<HttpResponse["error"]>, string> = {
+  timeout: "Zeitüberschreitung, später erneut prüfen",
+  deadline: "Gesamtzeit der Prüfung überschritten",
+  network: "Netzwerkfehler, Quelle nicht erreichbar",
+  too_large: "Antwort größer als erwartet",
+  parse: "Antwort nicht lesbar",
+};
+
+function unknownResult(b: Base, res: HttpResponse, note?: string): SourceResult {
+  let n = note;
+  if (!n) {
+    if (res.error) n = ERROR_NOTE[res.error];
+    else if (res.status === 429) n = "Rate-Limit erreicht, später erneut prüfen";
+    else if (res.status >= 500) n = "Dienst gerade nicht verfügbar";
+    else n = "unerwartete Antwort";
+  }
+  return { ...b, status: "unknown", note: n, evidence: evidenceOf(res) };
+}
+
+function invalidResult(b: Base, note: string): SourceResult {
+  return { ...b, status: "invalid", note, evidence: "Syntaxprüfung, keine Abfrage" };
+}
+
+function crashResult(b: Base, err: unknown): SourceResult {
+  const msg = err instanceof Error ? err.message : String(err);
+  return { ...b, status: "unknown", note: "interner Fehler bei der Abfrage", evidence: msg.slice(0, 120) };
+}
+
+/** 200 => taken, 404 => not_found, sonst unknown. */
+function byStatus(
+  b: Base,
+  res: HttpResponse,
+  notes: { taken?: string; notFound: string },
+): SourceResult {
+  if (res.error) return unknownResult(b, res);
+  if (res.status === 200) {
+    return { ...b, status: "taken", evidence: evidenceOf(res), ...(notes.taken ? { note: notes.taken } : {}) };
+  }
+  if (res.status === 404) return { ...b, status: "not_found", note: notes.notFound, evidence: evidenceOf(res) };
+  return unknownResult(b, res);
+}
+
+/** Hilfsquelle: eine GET-Anfrage, nur der Status zählt. */
+function statusSource(def: {
+  id: string;
+  label: string;
+  defaultEnabled: boolean;
+  description: string;
+  endpoint: string;
+  apiUrl: (name: string) => string;
+  humanUrl: (name: string) => string;
+  target?: (name: string) => string;
+  /** Rückgabe eines Hinweises => invalid */
+  validate?: (name: string) => string | null;
+  headers?: () => Record<string, string>;
+  notFound: string;
+  taken?: string;
+}): Source {
+  return {
+    id: def.id,
+    namespace: "packages",
+    label: def.label,
+    defaultEnabled: def.defaultEnabled,
+    description: def.description,
+    endpoint: def.endpoint,
+    async check(name: string, ctx: CheckContext): Promise<SourceResult> {
+      const b = base(def.id, def.label, def.target ? def.target(name) : name, def.humanUrl(name));
+      try {
+        const problem = def.validate?.(name);
+        if (problem) return invalidResult(b, problem);
+        const res = await ctx.http.request(def.apiUrl(name), {
+          method: "GET",
+          read: "none",
+          ...(def.headers ? { headers: def.headers() } : {}),
+        });
+        return byStatus(b, res, { notFound: def.notFound, taken: def.taken });
+      } catch (err) {
+        return crashResult(b, err);
+      }
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Syntaxregeln (Name kommt normalisiert: a-z, 0-9, "-", 2–63 Zeichen)
+
+const NORMALIZED = /^[a-z0-9-]+$/;
+
+function basicProblem(name: string): string | null {
+  if (!NORMALIZED.test(name)) return "nur a-z, 0-9 und Bindestrich erlaubt";
+  return null;
+}
+
+/** npm: höchstens 214 Zeichen, keine Großbuchstaben, nicht mit . oder _ beginnen, URL-sicher. */
+export function npmProblem(name: string): string | null {
+  if (name.length === 0 || name.length > 214) return "npm erlaubt 1 bis 214 Zeichen";
+  if (name !== name.toLowerCase()) return "npm erlaubt keine Großbuchstaben";
+  if (name.startsWith(".") || name.startsWith("_")) return "npm-Namen dürfen nicht mit . oder _ beginnen";
+  if (name.trim() !== name) return "npm-Namen dürfen keine Leerzeichen enthalten";
+  if (encodeURIComponent(name) !== name) return "npm-Namen müssen URL-sicher sein";
+  if (name === "node_modules" || name === "favicon.ico") return "von npm gesperrter Name";
+  return null;
+}
+
+/** PEP 503: Kleinbuchstaben, Folgen aus -, _ und . werden zu einem "-". */
+export function pep503(name: string): string {
+  return name.toLowerCase().replace(/[-_.]+/g, "-");
+}
+
+/** PyPI: muss mit Buchstabe oder Ziffer beginnen und enden. */
+export function pypiProblem(name: string): string | null {
+  if (!/^([a-z0-9]|[a-z0-9][a-z0-9._-]*[a-z0-9])$/i.test(name)) {
+    return "PyPI-Namen müssen mit Buchstabe oder Ziffer beginnen und enden";
+  }
+  return null;
+}
+
+/** GitHub: höchstens 39 Zeichen, kein doppelter Bindestrich, nicht mit Bindestrich beginnen oder enden. */
+export function githubProblem(name: string): string | null {
+  const b = basicProblem(name);
+  if (b) return b;
+  if (name.length > 39) return "GitHub erlaubt höchstens 39 Zeichen";
+  if (name.includes("--")) return "GitHub erlaubt keinen doppelten Bindestrich";
+  if (name.startsWith("-") || name.endsWith("-")) return "GitHub-Namen dürfen nicht mit Bindestrich beginnen oder enden";
+  return null;
+}
+
+/** crates.io: höchstens 64 Zeichen, a-z0-9 - _, muss mit Buchstabe beginnen. */
+export function cratesProblem(name: string): string | null {
+  const b = basicProblem(name);
+  if (b) return b;
+  if (name.length > 64) return "crates.io erlaubt höchstens 64 Zeichen";
+  if (!/^[a-z]/.test(name)) return "crates.io-Namen müssen mit einem Buchstaben beginnen";
+  return null;
+}
+
+/** NuGet: höchstens 100 Zeichen, Segmente aus Wortzeichen getrennt durch . oder -. */
+export function nugetProblem(name: string): string | null {
+  const b = basicProblem(name);
+  if (b) return b;
+  if (name.length > 100) return "NuGet erlaubt höchstens 100 Zeichen";
+  if (!/^\w+([.-]\w+)*$/.test(name)) {
+    return "NuGet-IDs dürfen nicht mit Bindestrich beginnen oder enden und keinen doppelten enthalten";
+  }
+  return null;
+}
+
+/** RubyGems: Buchstaben, Ziffern, - _ ., mindestens ein Buchstabe, beginnt mit Buchstabe oder Ziffer. */
+export function rubygemsProblem(name: string): string | null {
+  const b = basicProblem(name);
+  if (b) return b;
+  if (!/[a-z]/.test(name)) return "RubyGems verlangt mindestens einen Buchstaben";
+  if (!/^[a-z0-9]/.test(name)) return "Gem-Namen müssen mit Buchstabe oder Ziffer beginnen";
+  return null;
+}
+
+/** Composer-Vendor: ^[a-z0-9]([_.-]?[a-z0-9]+)*$ */
+export function packagistProblem(name: string): string | null {
+  const b = basicProblem(name);
+  if (b) return b;
+  if (!/^[a-z0-9]([_.-]?[a-z0-9]+)*$/.test(name)) {
+    return "Composer-Vendor darf nicht mit Bindestrich beginnen oder enden und keinen doppelten enthalten";
+  }
+  return null;
+}
+
+/**
+ * Nur die echten reservierten Wörter von Dart, die pub als Paketnamen ablehnt.
+ * Built-in-Identifier und kontextuelle Schlüsselwörter (async, get, show, type …) sind als Paketname erlaubt.
+ */
+const DART_RESERVED = new Set([
+  "assert", "break", "case", "catch", "class", "const", "continue", "default", "do", "else", "enum",
+  "extends", "false", "final", "finally", "for", "if", "in", "is", "new", "null", "rethrow", "return",
+  "super", "switch", "this", "throw", "true", "try", "var", "void", "while", "with",
+]);
+
+/** pub.dev: gültiger Dart-Bezeichner aus a-z, 0-9, _; beginnt mit Buchstabe; kein reserviertes Wort. */
+export function pubProblem(name: string): string | null {
+  if (name.includes("-")) {
+    return `pub.dev erlaubt keinen Bindestrich (Variante: ${name.replace(/-/g, "_")})`;
+  }
+  if (!/^[a-z_][a-z0-9_]*$/.test(name)) return "pub.dev-Namen müssen mit einem Buchstaben beginnen";
+  if (DART_RESERVED.has(name)) return "reserviertes Dart-Wort";
+  if (name.length > 64) return "pub.dev erlaubt höchstens 64 Zeichen";
+  return null;
+}
+
+/** JSR-Scope: 2–20 Zeichen, a-z0-9 und Bindestrich, nicht mit Bindestrich beginnen. */
+export function jsrProblem(name: string): string | null {
+  const b = basicProblem(name);
+  if (b) return b;
+  if (name.length < 2 || name.length > 20) return "JSR-Scopes haben 2 bis 20 Zeichen";
+  if (name.startsWith("-")) return "JSR-Scopes dürfen nicht mit Bindestrich beginnen";
+  return null;
+}
+
+/** Hex.pm: ^[a-z][a-z0-9_]*$ */
+export function hexProblem(name: string): string | null {
+  if (name.includes("-")) return `Hex.pm erlaubt keinen Bindestrich (Variante: ${name.replace(/-/g, "_")})`;
+  if (!/^[a-z][a-z0-9_]*$/.test(name)) return "Hex.pm-Namen müssen mit einem Buchstaben beginnen";
+  return null;
+}
+
+/** CRAN: Buchstaben, Ziffern und Punkt, beginnt mit Buchstabe, endet nicht mit Punkt, mindestens 2 Zeichen. */
+export function cranProblem(name: string): string | null {
+  if (name.includes("-")) return `CRAN erlaubt keinen Bindestrich (Variante: ${name.replace(/-/g, ".")})`;
+  if (!/^[a-zA-Z][a-zA-Z0-9.]*[a-zA-Z0-9]$/.test(name)) {
+    return "CRAN-Namen müssen mit einem Buchstaben beginnen und mindestens 2 Zeichen haben";
+  }
+  return null;
+}
+
+/** Open VSX-Namespace: Wortzeichen und Bindestrich. */
+export function openvsxProblem(name: string): string | null {
+  const b = basicProblem(name);
+  if (b) return b;
+  if (name.startsWith("-")) return "Open-VSX-Namespaces dürfen nicht mit Bindestrich beginnen";
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// npm
+
+const npm = statusSource({
+  id: "npm",
+  label: "npm",
+  defaultEnabled: true,
+  description: "npm-Registry: existiert ein Paket mit genau diesem Namen?",
+  endpoint: "https://registry.npmjs.org/{name}",
+  apiUrl: (n) => `https://registry.npmjs.org/${enc(n)}`,
+  humanUrl: (n) => `https://www.npmjs.com/package/${enc(n)}`,
+  validate: npmProblem,
+  headers: () => ({ Accept: "application/vnd.npm.install-v1+json" }),
+  notFound: "kein Paket mit diesem Namen; npm kann ähnliche Namen trotzdem ablehnen",
+});
+
+// ---------------------------------------------------------------------------
+// PyPI
+
+const pypi: Source = (() => {
+  const inner = statusSource({
+    id: "pypi",
+    label: "PyPI",
+    defaultEnabled: true,
+    description: "Python Package Index: existiert ein Projekt mit diesem Namen (PEP-503-normalisiert)?",
+    endpoint: "https://pypi.org/pypi/{name}/json",
+    apiUrl: (n) => `https://pypi.org/pypi/${enc(n)}/json`,
+    humanUrl: (n) => `https://pypi.org/project/${enc(n)}/`,
+    validate: pypiProblem,
+    notFound: "kein Projekt mit diesem Namen; PyPI kann gesperrte oder ähnliche Namen trotzdem ablehnen",
+  });
+  return { ...inner, check: (name, ctx) => inner.check(pep503(name), ctx) };
+})();
+
+// ---------------------------------------------------------------------------
+// GitHub (Nutzer oder Organisation) mit modulweiter Sperre nach Rate-Limit
+
+let githubBlockedUntil = 0;
+const GITHUB_FALLBACK_BLOCK_MS = 60_000;
+
+/** Hebt die modulweite GitHub-Sperre auf (für Tests). */
+export function resetGithubRateLimit(): void {
+  githubBlockedUntil = 0;
+}
+
+/** Zeitpunkt (ms), bis zu dem keine GitHub-Anfrage gestellt wird; 0 wenn keine Sperre. */
+export function githubBlockedUntilMs(): number {
+  return githubBlockedUntil;
+}
+
+function clock(ms: number): string {
+  try {
+    return new Intl.DateTimeFormat("de-DE", {
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "Europe/Berlin",
+    }).format(new Date(ms));
+  } catch {
+    return new Date(ms).toISOString();
+  }
+}
+
+const github: Source = {
+  id: "github",
+  namespace: "packages",
+  label: "GitHub",
+  defaultEnabled: true,
+  description: "GitHub: gibt es einen Nutzer oder eine Organisation mit diesem Namen?",
+  endpoint: "https://api.github.com/users/{name}",
+  async check(name, ctx) {
+    const b = base("github", "GitHub", name, `https://github.com/${enc(name)}`);
+    try {
+      const problem = githubProblem(name);
+      if (problem) return invalidResult(b, problem);
+
+      const now = Date.now();
+      if (githubBlockedUntil > now) {
+        return {
+          ...b,
+          status: "unknown",
+          note: `GitHub-Rate-Limit erreicht, keine Anfrage bis ${clock(githubBlockedUntil)} Uhr`,
+          evidence: `gesperrt bis ${new Date(githubBlockedUntil).toISOString()}`,
+        };
+      }
+
+      const headers: Record<string, string> = {
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+      };
+      const token = process.env.GITHUB_TOKEN;
+      if (token) headers.Authorization = `Bearer ${token}`;
+
+      const res = await ctx.http.request(`https://api.github.com/users/${enc(name)}`, {
+        method: "GET",
+        read: "none",
+        headers,
+      });
+
+      if (!res.error && (res.status === 403 || res.status === 429)) {
+        const remaining = res.headers.get("x-ratelimit-remaining");
+        const retryAfter = Number(res.headers.get("retry-after"));
+        let until = 0;
+        if (remaining === "0") {
+          const reset = Number(res.headers.get("x-ratelimit-reset"));
+          const fallback = Date.now() + GITHUB_FALLBACK_BLOCK_MS;
+          // reset in der Vergangenheit (Uhrabweichung, späte Antwort) => Ausweichsperre
+          until = Number.isFinite(reset) && reset > 0 ? Math.max(reset * 1000, fallback) : fallback;
+        } else if (Number.isFinite(retryAfter) && retryAfter > 0) {
+          until = Date.now() + retryAfter * 1000;
+        }
+        if (until > 0) {
+          githubBlockedUntil = Math.max(githubBlockedUntil, until);
+          return unknownResult(
+            b,
+            res,
+            `GitHub-Rate-Limit erreicht, keine Anfrage bis ${clock(githubBlockedUntil)} Uhr`,
+          );
+        }
+      }
+
+      return byStatus(b, res, {
+        notFound: "kein Nutzer und keine Organisation; reservierte oder gesperrte Namen möglich",
+      });
+    } catch (err) {
+      return crashResult(b, err);
+    }
+  },
+};
+
+// ---------------------------------------------------------------------------
+// crates.io
+
+const crates = statusSource({
+  id: "crates",
+  label: "crates.io",
+  defaultEnabled: true,
+  description: "crates.io (Rust): existiert ein Crate mit diesem Namen?",
+  endpoint: "https://crates.io/api/v1/crates/{name}",
+  apiUrl: (n) => `https://crates.io/api/v1/crates/${enc(n)}`,
+  humanUrl: (n) => `https://crates.io/crates/${enc(n)}`,
+  validate: cratesProblem,
+  notFound: "kein Crate mit diesem Namen; crates.io behandelt - und _ gleich und sperrt manche Namen",
+});
+
+// ---------------------------------------------------------------------------
+// Homebrew (Formula UND Cask)
+
+const HOMEBREW_SEARCH = "https://formulae.brew.sh/";
+
+const homebrew: Source = {
+  id: "homebrew",
+  namespace: "packages",
+  label: "Homebrew",
+  defaultEnabled: true,
+  description: "Homebrew: gibt es eine Formula oder einen Cask mit diesem Namen?",
+  endpoint: "https://formulae.brew.sh/api/formula/{name}.json, https://formulae.brew.sh/api/cask/{name}.json",
+  async check(name, ctx) {
+    const formulaPage = `https://formulae.brew.sh/formula/${enc(name)}`;
+    const caskPage = `https://formulae.brew.sh/cask/${enc(name)}`;
+    const b = base("homebrew", "Homebrew", name, formulaPage);
+    try {
+      const problem = basicProblem(name);
+      if (problem) return invalidResult(b, problem);
+
+      const [formula, cask] = await Promise.all([
+        ctx.http.request(`https://formulae.brew.sh/api/formula/${enc(name)}.json`, { method: "GET", read: "none" }),
+        ctx.http.request(`https://formulae.brew.sh/api/cask/${enc(name)}.json`, { method: "GET", read: "none" }),
+      ]);
+      const evidence = `Formula ${evidenceOf(formula)}, Cask ${evidenceOf(cask)}`;
+      const fTaken = !formula.error && formula.status === 200;
+      const cTaken = !cask.error && cask.status === 200;
+      if (fTaken || cTaken) {
+        const what = fTaken && cTaken ? "Formula und Cask" : fTaken ? "Formula" : "Cask";
+        return { ...b, url: fTaken ? formulaPage : caskPage, status: "taken", note: `${what} vorhanden`, evidence };
+      }
+      const fGone = !formula.error && formula.status === 404;
+      const cGone = !cask.error && cask.status === 404;
+      if (fGone && cGone) {
+        return {
+          ...b,
+          // Die Formula-Seite wäre hier eine 404-Seite, daher die Startseite mit Suche
+          url: HOMEBREW_SEARCH,
+          status: "not_found",
+          note: "weder Formula noch Cask mit diesem Namen (nur Haupt-Taps; Aliase und umbenannte Formulae nicht geprüft)",
+          evidence,
+        };
+      }
+      const bad = fGone ? cask : formula;
+      return { ...unknownResult(b, bad), evidence };
+    } catch (err) {
+      return crashResult(b, err);
+    }
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Optionale Registries
+
+const nuget = statusSource({
+  id: "nuget",
+  label: "NuGet",
+  defaultEnabled: false,
+  description: "NuGet (.NET): existiert ein Paket mit dieser ID?",
+  endpoint: "https://api.nuget.org/v3-flatcontainer/{name}/index.json",
+  apiUrl: (n) => `https://api.nuget.org/v3-flatcontainer/${enc(n.toLowerCase())}/index.json`,
+  humanUrl: (n) => `https://www.nuget.org/packages/${enc(n)}`,
+  validate: nugetProblem,
+  notFound: "kein Paket mit dieser ID; reservierte Präfixe möglich",
+});
+
+const RUBYGEMS_SEARCH_MAX_BYTES = 192 * 1024;
+
+/**
+ * RubyGems: /api/v1/gems/{name}.json findet nur die exakte Schreibweise.
+ * Bei 404 folgt eine Suche, deren Treffer ohne Rücksicht auf Groß- und Kleinschreibung
+ * verglichen werden (z. B. "redcloth" => "RedCloth").
+ */
+const rubygems: Source = {
+  id: "rubygems",
+  namespace: "packages",
+  label: "RubyGems",
+  defaultEnabled: false,
+  description: "RubyGems.org: existiert ein Gem mit diesem Namen (auch in anderer Groß- und Kleinschreibung)?",
+  endpoint: "https://rubygems.org/api/v1/gems/{name}.json, https://rubygems.org/api/v1/search.json?query={name}",
+  async check(name, ctx) {
+    const b = base("rubygems", "RubyGems", name, `https://rubygems.org/gems/${enc(name)}`);
+    try {
+      const problem = rubygemsProblem(name);
+      if (problem) return invalidResult(b, problem);
+
+      const exact = await ctx.http.request(`https://rubygems.org/api/v1/gems/${enc(name)}.json`, {
+        method: "GET",
+        read: "none",
+      });
+      if (exact.error || exact.status !== 404) return byStatus(b, exact, { notFound: "" });
+
+      const search = await ctx.http.request(`https://rubygems.org/api/v1/search.json?query=${enc(name)}`, {
+        method: "GET",
+        read: "json",
+        maxBytes: RUBYGEMS_SEARCH_MAX_BYTES,
+      });
+      const evidence = `HTTP 404, Suche ${evidenceOf(search)}`;
+      if (search.error || search.status !== 200 || !Array.isArray(search.json)) {
+        return {
+          ...b,
+          status: "not_found",
+          note: "nur exakte Kleinschreibung geprüft (Suche nicht verwertbar); ein Gem in anderer Schreibweise ist möglich",
+          evidence,
+        };
+      }
+      const hit = (search.json as Array<{ name?: unknown }>)
+        .map((g) => g?.name)
+        .find((n): n is string => typeof n === "string" && n.toLowerCase() === name);
+      if (hit) {
+        return {
+          ...b,
+          url: `https://rubygems.org/gems/${enc(hit)}`,
+          status: "taken",
+          note: `als „${hit}“ vorhanden (andere Schreibweise)`,
+          evidence: `${evidence}, Treffer ${hit}`,
+        };
+      }
+      return {
+        ...b,
+        status: "not_found",
+        note: "kein Gem mit diesem Namen, auch nicht in anderer Schreibweise (erste Suchseite); RubyGems kann zu ähnliche Namen ablehnen",
+        evidence,
+      };
+    } catch (err) {
+      return crashResult(b, err);
+    }
+  },
+};
+
+const maven: Source = {
+  id: "maven",
+  namespace: "packages",
+  label: "Maven Central",
+  defaultEnabled: false,
+  description: "Maven Central: gibt es Artefakte mit dieser artifactId (nur zusammen mit groupId eindeutig)?",
+  endpoint: 'https://search.maven.org/solrsearch/select?q=a:"{name}"&rows=1&wt=json',
+  async check(name, ctx) {
+    const b = base("maven", "Maven Central", name, `https://central.sonatype.com/search?q=${enc(name)}`);
+    try {
+      const problem = basicProblem(name);
+      if (problem) return invalidResult(b, problem);
+      const q = enc(`a:"${name}"`);
+      const res = await ctx.http.request(`https://search.maven.org/solrsearch/select?q=${q}&rows=1&wt=json`, {
+        method: "GET",
+        read: "json",
+        maxBytes: 32 * 1024,
+      });
+      if (res.error || res.status !== 200) return unknownResult(b, res);
+      const response = (res.json as { response?: { numFound?: unknown; docs?: unknown } } | null)?.response;
+      const numFound = response?.numFound;
+      if (typeof numFound !== "number" || !Number.isFinite(numFound)) {
+        return unknownResult(b, res, "unerwartetes Antwortformat");
+      }
+      if (numFound === 0) {
+        return { ...b, status: "not_found", note: "keine artifactId mit diesem Namen", evidence: "HTTP 200, numFound 0" };
+      }
+      const docs = Array.isArray(response?.docs) ? (response.docs as Array<{ id?: unknown }>) : [];
+      const example = typeof docs[0]?.id === "string" ? `, z. B. ${docs[0].id}` : "";
+      return {
+        ...b,
+        status: "similar",
+        note: "artifactId vorhanden, aber nicht global eindeutig (nur groupId:artifactId)",
+        evidence: `HTTP 200, numFound ${numFound}${example}`,
+      };
+    } catch (err) {
+      return crashResult(b, err);
+    }
+  },
+};
+
+/** Kontakt als mailto-Angabe für den User-Agent, null wenn keine E-Mail-Adresse enthalten ist. */
+export function mailtoContact(contact: string): string | null {
+  const c = contact.trim();
+  if (!c) return null;
+  if (/mailto:[^\s@;)]+@[^\s@;)]+/i.test(c)) return c;
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c)) return `mailto:${c}`;
+  return null;
+}
+
+const PACKAGIST_MAX_BYTES = 256 * 1024;
+
+const packagist: Source = {
+  id: "packagist",
+  namespace: "packages",
+  label: "Packagist",
+  defaultEnabled: false,
+  description: "Packagist (PHP/Composer): hat dieser Vendor-Namespace Pakete? Nur mit Kontakt im User-Agent.",
+  endpoint: "https://packagist.org/packages/list.json?vendor={name}",
+  async check(name, ctx) {
+    const b = base("packagist", "Packagist", `${name}/*`, `https://packagist.org/packages/${enc(name)}/`);
+    try {
+      const problem = packagistProblem(name);
+      if (problem) return invalidResult(b, problem);
+      const mail = mailtoContact(ctx.contact ?? "");
+      if (!mail) {
+        return {
+          ...b,
+          status: "unknown",
+          note: ctx.contact?.trim()
+            ? "deaktiviert: Kontakt ohne E-Mail-Adresse (Packagist verlangt mailto im User-Agent)"
+            : "deaktiviert: Kontakt fehlt",
+          evidence: "keine Abfrage",
+        };
+      }
+      const res = await ctx.http.request(`https://packagist.org/packages/list.json?vendor=${enc(name)}`, {
+        method: "GET",
+        read: "json",
+        maxBytes: PACKAGIST_MAX_BYTES,
+        headers: { "User-Agent": buildUserAgent(mail) },
+      });
+      if (res.status === 200 && res.error === "too_large") {
+        return { ...b, status: "taken", note: "Vendor hat sehr viele Pakete", evidence: "HTTP 200, Liste > 256 KB" };
+      }
+      if (res.error || res.status !== 200) return unknownResult(b, res);
+      const names = (res.json as { packageNames?: unknown } | null)?.packageNames;
+      if (!Array.isArray(names)) return unknownResult(b, res, "unerwartetes Antwortformat");
+      if (names.length === 0) {
+        return {
+          ...b,
+          status: "not_found",
+          note: "keine Pakete unter diesem Vendor; der Vendor kann trotzdem belegt sein",
+          evidence: "HTTP 200, packageNames leer",
+        };
+      }
+      const example = typeof names[0] === "string" ? `, z. B. ${names[0]}` : "";
+      return {
+        ...b,
+        status: "taken",
+        note: `Vendor mit ${names.length} Paket${names.length === 1 ? "" : "en"}`,
+        evidence: `HTTP 200, ${names.length} Pakete${example}`,
+      };
+    } catch (err) {
+      return crashResult(b, err);
+    }
+  },
+};
+
+const pub = statusSource({
+  id: "pub",
+  label: "pub.dev",
+  defaultEnabled: false,
+  description: "pub.dev (Dart/Flutter): existiert ein Paket mit diesem Namen?",
+  endpoint: "https://pub.dev/api/packages/{name}/score",
+  apiUrl: (n) => `https://pub.dev/api/packages/${enc(n)}/score`,
+  humanUrl: (n) => `https://pub.dev/packages/${enc(n)}`,
+  validate: pubProblem,
+  notFound: "kein Paket mit diesem Namen",
+});
+
+const jsr = statusSource({
+  id: "jsr",
+  label: "JSR",
+  defaultEnabled: false,
+  description: "JSR (JavaScript Registry): ist der Scope @name vergeben?",
+  endpoint: "https://api.jsr.io/scopes/{name}",
+  apiUrl: (n) => `https://api.jsr.io/scopes/${enc(n)}`,
+  humanUrl: (n) => `https://jsr.io/@${enc(n)}`,
+  target: (n) => `@${n}`,
+  validate: jsrProblem,
+  notFound: "kein Scope mit diesem Namen; JSR kann Scopes reservieren",
+});
+
+const hex = statusSource({
+  id: "hex",
+  label: "Hex.pm",
+  defaultEnabled: false,
+  description: "Hex.pm (Elixir/Erlang): existiert ein Paket mit diesem Namen?",
+  endpoint: "https://hex.pm/api/packages/{name}",
+  apiUrl: (n) => `https://hex.pm/api/packages/${enc(n)}`,
+  humanUrl: (n) => `https://hex.pm/packages/${enc(n)}`,
+  validate: hexProblem,
+  notFound: "kein Paket mit diesem Namen",
+});
+
+/** Schreibweisen, die CRAN geprüft wird: klein, Anfangsbuchstabe groß, ganz groß (ohne Doppelte). */
+export function cranSpellings(name: string): string[] {
+  const capitalized = name.charAt(0).toUpperCase() + name.slice(1);
+  return [...new Set([name, capitalized, name.toUpperCase()])];
+}
+
+/**
+ * CRAN über crandb: crandb sucht mit exakter Schreibweise, der Name kommt aber kleingeschrieben an.
+ * CRAN lehnt neue Pakete ab, deren Name sich nur in Groß- und Kleinschreibung von einem
+ * bestehenden unterscheidet. Deshalb werden bei 404 weitere Schreibweisen abgefragt.
+ */
+const cran: Source = {
+  id: "cran",
+  namespace: "packages",
+  label: "CRAN",
+  defaultEnabled: false,
+  description:
+    "CRAN (R) über den crandb-Spiegel von R-hub: existiert ein Paket mit diesem Namen (klein, Groß-Anfang, ganz groß)?",
+  endpoint: "https://crandb.r-pkg.org/{name}",
+  async check(name, ctx) {
+    const pageOf = (n: string) => `https://cran.r-project.org/package=${enc(n)}`;
+    const b = base("cran", "CRAN", name, pageOf(name));
+    try {
+      const problem = cranProblem(name);
+      if (problem) return invalidResult(b, problem);
+
+      const [first, ...variants] = cranSpellings(name);
+      const ask = (n: string) => ctx.http.request(`https://crandb.r-pkg.org/${enc(n)}`, { method: "GET", read: "none" });
+
+      const res = await ask(first);
+      if (res.error || res.status !== 404) return byStatus(b, res, { notFound: "" });
+
+      const others = await Promise.all(variants.map(ask));
+      const all = [{ n: first, res }, ...variants.map((n, i) => ({ n, res: others[i] }))];
+      const evidence = all.map((x) => `${x.n} ${evidenceOf(x.res)}`).join(", ");
+
+      const hit = all.find((x) => !x.res.error && x.res.status === 200);
+      if (hit) {
+        return {
+          ...b,
+          url: pageOf(hit.n),
+          status: "taken",
+          note: `als „${hit.n}“ vorhanden; CRAN lehnt Namen ab, die sich nur in Groß- und Kleinschreibung unterscheiden`,
+          evidence,
+        };
+      }
+      const bad = all.find((x) => x.res.error || x.res.status !== 404);
+      if (bad) return { ...unknownResult(b, bad.res), evidence };
+      return {
+        ...b,
+        status: "not_found",
+        note: `nur Schreibweisen ${all.map((x) => x.n).join("/")} geprüft; CRAN lehnt Namen ab, die sich nur in Groß- und Kleinschreibung unterscheiden`,
+        evidence,
+      };
+    } catch (err) {
+      return crashResult(b, err);
+    }
+  },
+};
+
+const openvsx = statusSource({
+  id: "openvsx",
+  label: "Open VSX",
+  defaultEnabled: false,
+  description: "Open VSX (Editor-Erweiterungen): ist der Namespace vergeben?",
+  endpoint: "https://open-vsx.org/api/{name}",
+  apiUrl: (n) => `https://open-vsx.org/api/${enc(n)}`,
+  humanUrl: (n) => `https://open-vsx.org/namespace/${enc(n)}`,
+  validate: openvsxProblem,
+  notFound: "kein Namespace mit diesem Namen",
+});
+
+export const PACKAGE_SOURCES: Source[] = [
+  npm,
+  pypi,
+  github,
+  crates,
+  homebrew,
+  nuget,
+  rubygems,
+  maven,
+  packagist,
+  pub,
+  jsr,
+  hex,
+  cran,
+  openvsx,
+];
