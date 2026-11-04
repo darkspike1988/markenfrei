@@ -252,6 +252,10 @@ export function DetailPanel({
                 </div>
               </div>
             )}
+            <p className="mt-2 text-[11px] text-muted">
+              Preise: Stand 2026, fest hinterlegt und nicht live abgefragt. Aktuellen Preis
+              beim Anbieter prüfen.
+            </p>
           </Section>
 
           <Section title="Markenrecherche">
