@@ -42,7 +42,7 @@ beforeEach(() => resetGithubRateLimit());
 test("Liste enthält alle Quellen mit Beschreibung und Endpunkt", () => {
   assert.deepEqual(
     PACKAGE_SOURCES.map((s) => s.id),
-    ["npm", "pypi", "github", "crates", "homebrew", "nuget", "rubygems", "maven", "packagist", "pub", "jsr", "hex", "cran", "openvsx"],
+    ["npm", "pypi", "github", "crates", "homebrew", "nuget", "rubygems", "maven", "packagist", "pub", "jsr", "hex", "cran", "openvsx", "huggingface", "hackage", "terraform", "devto"],
   );
   assert.deepEqual(
     PACKAGE_SOURCES.filter((s) => s.defaultEnabled).map((s) => s.id),

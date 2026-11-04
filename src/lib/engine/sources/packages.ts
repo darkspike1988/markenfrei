@@ -731,6 +731,181 @@ const openvsx = statusSource({
   notFound: "kein Namespace mit diesem Namen",
 });
 
+// ---------------------------------------------------------------------------
+// Weitere Registries mit mehreren Abfragen (alle nur auf Wunsch, defaultEnabled false)
+
+/**
+ * Fragt mehrere Adressen gleichzeitig. Ein 200 reicht für "taken". "not_found" gibt es nur, wenn
+ * alle Antworten 404 sind; jede andere Mischung (Fehler, 429, 5xx) ist "unknown", nie "frei".
+ */
+async function anyTaken(
+  b: Base,
+  ctx: CheckContext,
+  probes: { url: string; headers?: Record<string, string>; what: string }[],
+  notFound: string,
+): Promise<SourceResult> {
+  const replies = await Promise.all(
+    // retry: ein kurzer 429 oder Timeout bei gleichzeitigen Abfragen wird einmal wiederholt
+    probes.map((p) => ctx.http.request(p.url, { method: "GET", read: "none", retry: true, ...(p.headers ? { headers: p.headers } : {}) })),
+  );
+  const hit = replies.findIndex((r) => !r.error && r.status === 200);
+  if (hit >= 0) {
+    return { ...b, status: "taken", note: `${probes[hit].what} vorhanden`, evidence: evidenceOf(replies[hit]) };
+  }
+  const bad = replies.find((r) => r.error || r.status !== 404);
+  if (bad) return unknownResult(b, bad);
+  return { ...b, status: "not_found", note: notFound, evidence: replies.map(evidenceOf).join(", ") };
+}
+
+/**
+ * Hugging Face: Nutzer und Organisationen teilen sich einen Namensraum (auch für Modelle und
+ * Datasets), haben aber getrennte Endpunkte. Beide prüfen, sonst wäre z. B. "google" (nur als
+ * Organisation vorhanden) fälschlich frei.
+ */
+const huggingface: Source = {
+  id: "huggingface",
+  namespace: "packages",
+  label: "Hugging Face",
+  defaultEnabled: false,
+  description: "Hugging Face Hub: gibt es eine Organisation oder einen Nutzer mit diesem Namen (Namensraum für Modelle und Datasets)?",
+  endpoint: "https://huggingface.co/api/organizations/{name}/overview und https://huggingface.co/api/users/{name}/overview",
+  async check(name, ctx) {
+    const b = base("huggingface", "Hugging Face", name, `https://huggingface.co/${enc(name)}`);
+    try {
+      return await anyTaken(
+        b,
+        ctx,
+        [
+          { url: `https://huggingface.co/api/organizations/${enc(name)}/overview`, what: "Organisation" },
+          { url: `https://huggingface.co/api/users/${enc(name)}/overview`, what: "Nutzer" },
+        ],
+        "weder Organisation noch Nutzer mit diesem Namen",
+      );
+    } catch (err) {
+      return crashResult(b, err);
+    }
+  },
+};
+
+/**
+ * DEV (dev.to): Nutzer und Organisationen haben getrennte Endpunkte, aber einen gemeinsamen
+ * Benutzernamen-Raum. Beide prüfen.
+ */
+const devto: Source = {
+  id: "devto",
+  namespace: "packages",
+  label: "DEV (dev.to)",
+  defaultEnabled: false,
+  description: "DEV Community (dev.to): gibt es einen Nutzer oder eine Organisation mit diesem Benutzernamen?",
+  endpoint: "https://dev.to/api/users/by_username?url={name} und https://dev.to/api/organizations/{name}",
+  async check(name, ctx) {
+    const b = base("devto", "DEV (dev.to)", name, `https://dev.to/${enc(name)}`);
+    try {
+      return await anyTaken(
+        b,
+        ctx,
+        [
+          { url: `https://dev.to/api/users/by_username?url=${enc(name)}`, what: "Nutzer" },
+          { url: `https://dev.to/api/organizations/${enc(name)}`, what: "Organisation" },
+        ],
+        "kein Nutzer und keine Organisation mit diesem Benutzernamen (gesperrte oder ungültige Namen möglich)",
+      );
+    } catch (err) {
+      return crashResult(b, err);
+    }
+  },
+};
+
+/**
+ * Terraform Registry: ein Namespace ist sichtbar, sobald er mindestens ein Modul oder einen
+ * Provider veröffentlicht hat. Beide Listen prüfen. Namespaces ohne Veröffentlichung sind nicht
+ * sichtbar, daher der Hinweis bei "nicht gefunden".
+ */
+const terraform: Source = {
+  id: "terraform",
+  namespace: "packages",
+  label: "Terraform Registry",
+  defaultEnabled: false,
+  description: "Terraform Registry: gibt es einen Namespace mit veröffentlichten Modulen oder Providern?",
+  endpoint: "https://registry.terraform.io/v1/modules/{name} und https://registry.terraform.io/v1/providers/{name}",
+  async check(name, ctx) {
+    const b = base("terraform", "Terraform Registry", name, `https://registry.terraform.io/namespaces/${enc(name)}`);
+    try {
+      return await anyTaken(
+        b,
+        ctx,
+        [
+          { url: `https://registry.terraform.io/v1/modules/${enc(name)}`, what: "Namespace mit Modulen" },
+          { url: `https://registry.terraform.io/v1/providers/${enc(name)}`, what: "Namespace mit Providern" },
+        ],
+        "kein Namespace mit veröffentlichten Modulen oder Providern (leere Namespaces sind nicht sichtbar)",
+      );
+    } catch (err) {
+      return crashResult(b, err);
+    }
+  },
+};
+
+/** Hackage: Treffer der Paketsuche, dessen Name sich nur in der Schreibweise unterscheidet. */
+export function hackageExactMatch(json: unknown, name: string): string | undefined {
+  if (!Array.isArray(json)) return undefined;
+  const want = name.toLowerCase();
+  for (const x of json) {
+    const n = x && typeof x === "object" ? (x as { name?: unknown }).name : undefined;
+    if (typeof n === "string" && n.toLowerCase() === want) return n;
+  }
+  return undefined;
+}
+
+/**
+ * Hackage unterscheidet in der Adresse Groß- und Kleinschreibung: /package/quickcheck ergibt 404,
+ * obwohl "QuickCheck" existiert. Deshalb bei 404 die dokumentierte Suche /packages/search
+ * (JSON) abfragen und ohne Rücksicht auf die Schreibweise vergleichen. Der exakte Treffer stand
+ * in allen Stichproben an erster Stelle.
+ */
+const hackage: Source = {
+  id: "hackage",
+  namespace: "packages",
+  label: "Hackage",
+  defaultEnabled: false,
+  description: "Hackage (Haskell): existiert ein Paket mit diesem Namen (auch bei anderer Groß-/Kleinschreibung)?",
+  endpoint: "https://hackage.haskell.org/package/{name}, bei 404 https://hackage.haskell.org/packages/search?terms={name}",
+  async check(name, ctx) {
+    const pageOf = (n: string) => `https://hackage.haskell.org/package/${enc(n)}`;
+    const b = base("hackage", "Hackage", name, pageOf(name));
+    try {
+      const direct = await ctx.http.request(pageOf(name), { method: "GET", read: "none", retry: true, headers: { Accept: "application/json" } });
+      if (direct.error || direct.status !== 404) return byStatus(b, direct, { notFound: "" });
+
+      const search = await ctx.http.request(
+        `https://hackage.haskell.org/packages/search?terms=${enc(name)}`,
+        { method: "GET", read: "json", maxBytes: 256 * 1024, retry: true, headers: { Accept: "application/json" } },
+      );
+      if (search.error || search.status !== 200 || !Array.isArray(search.json)) {
+        return unknownResult(b, search, "Schreibweisen konnten nicht geprüft werden");
+      }
+      const match = hackageExactMatch(search.json, name);
+      if (match) {
+        return {
+          ...b,
+          url: pageOf(match),
+          status: "taken",
+          note: match === name ? "Paket vorhanden" : `Paket vorhanden, Schreibweise „${match}“`,
+          evidence: `HTTP 404 für ${name}, Suche: ${match}`,
+        };
+      }
+      return {
+        ...b,
+        status: "not_found",
+        note: "kein Paket mit diesem Namen, auch nicht mit anderer Schreibweise",
+        evidence: `HTTP ${direct.status}, Suche ohne exakten Treffer`,
+      };
+    } catch (err) {
+      return crashResult(b, err);
+    }
+  },
+};
+
 export const PACKAGE_SOURCES: Source[] = [
   npm,
   pypi,
@@ -746,4 +921,8 @@ export const PACKAGE_SOURCES: Source[] = [
   hex,
   cran,
   openvsx,
+  huggingface,
+  hackage,
+  terraform,
+  devto,
 ];
