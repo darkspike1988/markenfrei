@@ -12,9 +12,15 @@ export async function POST(req: Request) {
 
   // Die Spezifikation verlangt beide Typen im Accept-Header. Wir antworten immer als
   // JSON und akzeptieren deshalb auch Clients, die nur application/json senden.
+  // Die Anfrage wird aus URL und Body neu gebaut: In Next ist req ein NextRequest, und
+  // new Request(req, ...) bricht dort mit ERR_INVALID_URL ab.
   const headers = new Headers(req.headers);
   headers.set("accept", "application/json, text/event-stream");
-  const request = new Request(req, { headers });
+  const request = new Request(req.url, {
+    method: "POST",
+    headers,
+    body: await req.text(),
+  });
 
   const server = createMarkenfreiMcpServer();
   const transport = new WebStandardStreamableHTTPServerTransport({
