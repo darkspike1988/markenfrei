@@ -17,6 +17,7 @@ import {
 } from "@/lib/engine/verdict";
 
 export type { ShortlistEntry };
+import { safeHttpUrl } from "@/lib/engine/url";
 import { normalizeName } from "@/lib/name";
 
 export const DEFAULT_NAMESPACES: readonly Namespace[] = ["domains", "packages", "stores", "known_names"];
@@ -156,7 +157,9 @@ export async function checkName(input: unknown, opts: CheckOptions = {}): Promis
         `${s.id}|${name}`,
         async () => {
           try {
-            return await s.check(name, ctx);
+            const r = await s.check(name, ctx);
+            // Link aus Fremdantworten absichern; ungültige Links fallen weg
+            return { ...r, url: safeHttpUrl(r.url) };
           } catch {
             return failed(s, name, "Interner Fehler bei der Abfrage");
           }

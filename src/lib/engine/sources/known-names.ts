@@ -274,6 +274,7 @@ const wikidata: Source = {
         read: "json",
         maxBytes: 64 * 1024,
         timeoutMs: 5000,
+        retry: true,
       });
       const fail = failure(base, res, searchUrl);
       if (fail) return fail;
@@ -373,6 +374,7 @@ const gleif: Source = {
         headers: { Accept: "application/vnd.api+json" },
         read: "json",
         maxBytes: 256 * 1024,
+        retry: true,
       });
       const fail = failure(base, res, searchUrl);
       if (fail) return fail;

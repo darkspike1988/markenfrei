@@ -180,17 +180,38 @@ lokalen Pfad. Weitere Varianten stehen in [mcp/README.md](mcp/README.md) und auf
 
 ## Umgebungsvariablen
 
-Markenfrei braucht keine API-Schlüssel. Alle Variablen sind optional, eine Vorlage steht in
+Markenfrei braucht keine API-Schlüssel. Außer den Betreiberangaben (siehe unten) sind alle Variablen optional, eine Vorlage steht in
 [`.env.example`](.env.example).
 
 | Variable | Wirkung |
 |---|---|
+| `MARKENFREI_OPERATOR_NAME`, `MARKENFREI_OPERATOR_ADDRESS`, `MARKENFREI_OPERATOR_EMAIL`, `MARKENFREI_HOSTING_PROVIDER` | **Pflicht für den Livegang.** Betreiberangaben für Impressum (§ 5 DDG) und Datenschutzerklärung. `…_ADDRESS` mehrzeilig mit `\n`. Ohne sie zeigen `/impressum` und `/datenschutz` einen sichtbaren Hinweis. Optional: `MARKENFREI_OPERATOR_PHONE`. |
 | `MARKENFREI_CONTACT` | Kontakt im User-Agent, z. B. `mailto:ops@example.org`. Der User-Agent lautet dann `Markenfrei/2.0 (+https://markenfrei.app; mailto:ops@example.org)`. Packagist wird nur mit einer E-Mail-Adresse abgefragt (mit oder ohne `mailto:`), sonst meldet die Quelle `unknown`. |
 | `MARKENFREI_ALLOWED_ORIGINS` | Kommagetrennte Liste zusätzlicher Origins (z. B. `https://example.org`), die `/api/mcp` aufrufen dürfen. Ohne `Origin`-Header ist der Aufruf immer erlaubt; mit Header sind sonst nur der eigene Host, `localhost` und `127.0.0.1` erlaubt. |
 | `GITHUB_TOKEN` | Token für die GitHub-Abfrage (Nutzer und Organisationen). Ohne Token gilt das Limit von 60 Anfragen pro Stunde und IP. Das Token braucht keine Berechtigungen. |
 | `MARKENFREI_TRUSTED_PROXIES` | Anzahl vertrauenswürdiger Proxys vor der App (Standard 1). `x-forwarded-for` wird von rechts gelesen, damit Clients ihre Adresse nicht fälschen können. `0` ignoriert den Header. |
 | `MARKENFREI_RATE_LIMIT` | Anfragen pro Minute und IP für alle öffentlichen Routen (Standard 60). Bei `/api/check` und `markenfrei_check_names` zählt jeder Name einzeln. Der Zähler gilt pro Serverprozess; bei mehreren Instanzen zusätzlich am Reverse-Proxy begrenzen. |
 | `MARKENFREI_CACHE_TTL_SEC` | Lebensdauer des Zwischenspeichers für eindeutige Quellenantworten im Arbeitsspeicher, Standard 600 Sekunden, `0` schaltet ihn aus. `unknown` wird nie zwischengespeichert, nichts wird auf die Platte geschrieben. |
+
+## Vor dem Livegang
+
+Geprüft am 4. November 2026 (Sicherheit, Fehler, Quellen). Diese Punkte muss der Betreiber erledigen,
+der Code allein reicht nicht:
+
+1. **Betreiberangaben setzen** (`MARKENFREI_OPERATOR_*`, `MARKENFREI_HOSTING_PROVIDER`). Eine öffentliche
+   deutsche Website braucht ein Impressum und eine Datenschutzerklärung. Der Text der Datenschutzerklärung
+   beschreibt, was die Anwendung tatsächlich tut (keine Cookies, kein Browser-Speicher, keine Namen in
+   Logs, Weitergabe an Drittdienste, Rate-Limit je IP). Lass ihn vor dem Livegang von einer fachkundigen
+   Person prüfen; er ersetzt keine Rechtsberatung.
+2. **HTTPS und Proxy.** `MARKENFREI_TRUSTED_PROXIES` auf die Zahl der Proxys vor der App setzen
+   (Caddy oder nginx: 1). Die Anwendung setzt Security-Header (CSP, `nosniff`, `frame-ancestors 'none'`,
+   `Referrer-Policy`, `Permissions-Policy`, HSTS). HSTS wirkt nur über HTTPS.
+3. **Kontakt und Token.** `MARKENFREI_CONTACT` setzen (Wikidata verlangt Kontakt im User-Agent, Packagist
+   auch) und möglichst `GITHUB_TOKEN`.
+4. **Mehrere Instanzen:** Rate-Limit und Cache gelten pro Prozess. Bei mehr als einer Instanz zusätzlich am
+   Proxy begrenzen.
+5. **Node 22 oder neuer** (CI testet mit 22).
+6. **Optional:** npm-Paket veröffentlichen (`cd mcp && npm publish`), damit `npx -y markenfrei-mcp` geht.
 
 ## Entwicklung
 

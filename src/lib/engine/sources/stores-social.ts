@@ -100,7 +100,7 @@ const appstore: Source = {
   check: safe({ id: "appstore", namespace: "stores", label: "App Store" }, async (name, ctx, base) => {
     const searchUrl = `https://apps.apple.com/de/iphone/search?term=${enc(name)}`;
     const api = `https://itunes.apple.com/search?term=${enc(name)}&country=de&entity=software&limit=25`;
-    const res = await ctx.http.request(api, { read: "json", maxBytes: 600_000 });
+    const res = await ctx.http.request(api, { read: "json", maxBytes: 600_000, retry: true });
     if (res.error || res.status !== 200) return unknownFrom(base, res, searchUrl);
     const results = isObject(res.json) ? res.json.results : undefined;
     if (!Array.isArray(results)) {

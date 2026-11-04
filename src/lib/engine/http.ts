@@ -255,12 +255,26 @@ export function createHttpClient(opts: {
     }
   }
 
+  const retryable = (r: HttpResponse) =>
+    r.error === "timeout" || r.error === "network" || [429, 502, 503, 504].includes(r.status);
+
+  /** Eine Wiederholung, wenn die Deadline noch Luft lässt (kurze Pause, höchstens 1 s Retry-After). */
+  async function runWithRetry(url: string, req: HttpRequest): Promise<HttpResponse> {
+    const first = await run(url, req);
+    if (!req.retry || !retryable(first) || first.error === "deadline") return first;
+    const after = Number(first.headers.get("retry-after"));
+    const pause = Number.isFinite(after) && after > 0 ? Math.min(after * 1000, 1000) : 300;
+    if (opts.deadlineAt - now() < pause + 1000) return first;
+    await new Promise((r) => setTimeout(r, pause));
+    return run(url, req);
+  }
+
   return {
     request(url, req = {}) {
       const key = `${req.method ?? "GET"} ${req.read ?? "none"} ${JSON.stringify(req.headers ?? {})} ${url}`;
       const existing = inflight.get(key);
       if (existing) return existing;
-      const p = run(url, req).finally(() => inflight.delete(key));
+      const p = runWithRetry(url, req).finally(() => inflight.delete(key));
       inflight.set(key, p);
       return p;
     },
