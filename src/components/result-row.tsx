@@ -2,7 +2,35 @@
 
 import { CaretRight } from "@phosphor-icons/react";
 import type { ClearanceReport } from "@/app/api/clearance/route";
-import { TONE_CLASS, TONE_DOT, VERDICT, buildSignals } from "@/lib/verdict";
+import {
+  CATEGORY_LABEL,
+  TONE_CLASS,
+  TONE_DOT,
+  TONE_LABEL,
+  VERDICT,
+  categoryStatus,
+  topSignals,
+  type CategoryStatus,
+} from "@/lib/verdict";
+
+/** Vier Bereiche mit je einem Ampelpunkt: Konflikt und Ort auf einen Blick. */
+export function QuickCheck({ status }: { status: CategoryStatus }) {
+  return (
+    <ul className="flex flex-wrap gap-x-2.5 gap-y-1" aria-label="Schnellcheck nach Bereichen">
+      {(Object.keys(CATEGORY_LABEL) as Array<keyof CategoryStatus>).map((key) => (
+        <li
+          key={key}
+          className="inline-flex items-center gap-1 whitespace-nowrap text-[11px] text-muted"
+          aria-label={`${CATEGORY_LABEL[key]}: ${TONE_LABEL[status[key]]}`}
+          title={`${CATEGORY_LABEL[key]}: ${TONE_LABEL[status[key]]}`}
+        >
+          <span className={`size-1.5 rounded-full ${TONE_DOT[status[key]]}`} aria-hidden />
+          {CATEGORY_LABEL[key]}
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 export function DomainChip({
   tld,
@@ -44,7 +72,8 @@ export function ResultRow({
   onOpen: () => void;
 }) {
   const verdict = VERDICT[report.matrixScore.verdict];
-  const lead = buildSignals(report)[0];
+  const reasons = topSignals(report, 3);
+  const categories = categoryStatus(report);
 
   return (
     <li className="fade-up" style={{ ["--i" as string]: index }}>
@@ -68,11 +97,22 @@ export function ResultRow({
               <DomainChip key={d.tld} tld={d.tld} status={d.status} />
             ))}
           </div>
+          <div className="mt-2 pl-[18px]">
+            <QuickCheck status={categories} />
+          </div>
         </div>
 
-        <p className="order-3 col-span-2 line-clamp-2 pl-[18px] text-sm text-muted sm:order-none sm:col-span-1 sm:pl-0">
-          {lead.text}
-        </p>
+        <ul className="order-3 col-span-2 space-y-1 pl-[18px] text-sm text-muted sm:order-none sm:col-span-1 sm:pl-0">
+          {reasons.map((s, i) => (
+            <li key={i} className="flex gap-2">
+              <span
+                className={`mt-1.5 size-1.5 shrink-0 rounded-full ${TONE_DOT[s.tone]}`}
+                aria-hidden
+              />
+              <span className="line-clamp-2">{s.text}</span>
+            </li>
+          ))}
+        </ul>
 
         <div className="flex items-center gap-3 justify-self-end">
           <span
