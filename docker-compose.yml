@@ -6,7 +6,10 @@ services:
     container_name: markenfrei-app
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      # Nur lokal erreichbar: Der Zugriff läuft über den Reverse-Proxy (TLS, x-forwarded-for).
+      # Bei "3000:3000" wäre die App direkt aus dem Internet erreichbar und das Rate-Limit über einen
+      # gefälschten x-forwarded-for umgehbar.
+      - "127.0.0.1:3000:3000"
     environment:
       - NODE_ENV=production
       - PORT=3000

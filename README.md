@@ -113,11 +113,18 @@ Oder mit Docker:
 docker compose up -d --build
 ```
 
-Der Container liest keine `.env.local`. Umgebungsvariablen (siehe unten) trägst du in
-`docker-compose.yml` unter `environment:` ein oder bindest sie dort mit `env_file:` ein.
+Der Container liest keine `.env.local`. `docker-compose.yml` übernimmt eine Datei `.env` im
+Projektordner (Vorlage: `.env.example`, siehe unten) oder die Einträge unter `environment:`.
 
-Hinter einem Reverse-Proxy (z. B. Caddy oder Nginx) betreiben und `x-forwarded-for` nur von
-diesem Proxy setzen lassen, weil das Rate-Limit die IP daraus liest.
+Der Port 3000 ist nur an `127.0.0.1` gebunden. Betreibe die App hinter einem Reverse-Proxy
+(z. B. Caddy oder Nginx) auf demselben Rechner, der TLS terminiert und `x-forwarded-for` setzt, weil das
+Rate-Limit die IP daraus liest. Eine Caddy-Konfiguration:
+
+```caddy
+markenfrei.app {
+    reverse_proxy 127.0.0.1:3000
+}
+```
 
 ### HTTP-Schnittstelle
 
