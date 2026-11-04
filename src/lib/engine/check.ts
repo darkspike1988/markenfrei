@@ -129,6 +129,14 @@ export function resolveSources(opts: Pick<CheckOptions, "namespaces" | "tlds" | 
 const resultCache = createTtlCache<SourceResult>({ ttlMs: DEFAULT_CACHE_TTL_MS, max: DEFAULT_CACHE_MAX * 4 });
 const DEFINITIVE: Status[] = ["taken", "not_found", "similar", "invalid"];
 
+/**
+ * Vorübergehende Gründe für "unknown", erkennbar am Beleg der Quelle: Abfragebudget, Zeitüberschreitung,
+ * Ablauf der Gesamtzeit oder HTTP 429. Dauerhafte Fehler (Netzwerk, 5xx, unerwartetes Format) zählen nicht.
+ */
+export function isTransient(evidence: string | undefined): boolean {
+  return !!evidence && /(^|[\s,;])(budget|timeout|deadline|HTTP 429)(\b|$)/.test(evidence);
+}
+
 function failed(source: Source, name: string, note: string): SourceResult {
   return { sourceId: source.id, namespace: source.namespace, label: source.label, target: name, status: "unknown", note };
 }
@@ -159,7 +167,8 @@ export async function checkName(input: unknown, opts: CheckOptions = {}): Promis
           try {
             const r = await s.check(name, ctx);
             // Link aus Fremdantworten absichern; ungültige Links fallen weg
-            return { ...r, url: safeHttpUrl(r.url) };
+            const retryable = r.status === "unknown" && isTransient(r.evidence);
+            return { ...r, url: safeHttpUrl(r.url), ...(retryable ? { retryable: true } : {}) };
           } catch {
             return failed(s, name, "Interner Fehler bei der Abfrage");
           }

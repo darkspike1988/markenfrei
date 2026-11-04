@@ -214,7 +214,8 @@ test("github: 403 mit x-ratelimit-remaining 0 sperrt bis reset", async () => {
   const r1 = await src("github").check("wachwerk", first.ctx);
   assert.equal(r1.status, "unknown");
   assert.match(r1.note ?? "", /Rate-Limit/);
-  assert.equal(r1.evidence, "HTTP 403");
+  assert.match(r1.evidence ?? "", /^Rate-Limit, gesperrt bis /, "kein HTTP-Statuscode im Beleg: die Sperre dauert bis zu eine Stunde, eine kurze Wiederholung bringt nichts");
+  assert.ok(!/HTTP (403|429)/.test(r1.evidence ?? ""));
 
   const second = ctxWith({});
   const r2 = await src("github").check("anderername", second.ctx);

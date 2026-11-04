@@ -46,7 +46,18 @@ function SourceRow({ r, name, hideNote }: { r: SourceResult; name: string; hideN
   );
 }
 
-export function ReportCard({ report }: { report: NameReport }) {
+export function ReportCard({
+  report,
+  waiting,
+  rechecking,
+  onRecheck,
+}: {
+  report: NameReport;
+  /** Gesetzt, solange die Oberfläche offene Quellen automatisch erneut prüft */
+  waiting?: { attempt: number; max: number };
+  rechecking?: boolean;
+  onRecheck?: () => void;
+}) {
   const groups = NAMESPACES.map((ns) => {
     const rows = report.results.filter((r) => r.namespace === ns);
     // Gleicher Hinweis in allen Zeilen (typisch bei Domains): einmal unter der Überschrift statt je Zeile
@@ -76,6 +87,22 @@ export function ReportCard({ report }: { report: NameReport }) {
           <p className="rounded-md bg-warn-bg px-3 py-2 text-warn">
             Ohne Antwort: {report.incomplete.join(", ")}. Dort heißt „nichts gefunden“ nicht „frei“.
           </p>
+        )}
+        {waiting && (
+          <p role="status" className="rounded-md border border-line px-3 py-2 text-soft">
+            Einige Quellen haben ihr Abfragelimit erreicht oder waren zu langsam. Markenfrei prüft sie automatisch
+            erneut, nur diese (Versuch {waiting.attempt} von {waiting.max}).
+          </p>
+        )}
+        {!waiting && report.incomplete.length > 0 && onRecheck && (
+          <button
+            type="button"
+            onClick={onRecheck}
+            disabled={rechecking}
+            className="inline-flex min-h-8 items-center rounded-md border border-line-strong bg-surface px-3 text-sm text-ink hover:bg-wash disabled:cursor-wait disabled:opacity-60"
+          >
+            {rechecking ? "Prüfe erneut …" : "Quellen ohne Antwort erneut prüfen"}
+          </button>
         )}
       </div>
 

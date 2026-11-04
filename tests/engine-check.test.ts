@@ -151,3 +151,43 @@ test("Shortlist: alle Namen teilen sich die Slot-Grenze je Host", async () => {
   assert.ok(reports.every((r) => r.verdict === "green"));
   assert.ok(peak <= 3, `peak ${peak}`);
 });
+
+test("unknown mit vorübergehendem Grund ist retryable, dauerhafte Fehler nicht", async () => {
+  clearResultCache();
+  const mk = (id: string, evidence: string): Source => ({
+    id, namespace: "packages", label: id, defaultEnabled: true, description: "", endpoint: "",
+    async check(name) {
+      return { sourceId: id, namespace: "packages", label: id, target: name, status: "unknown", evidence };
+    },
+  });
+  const reg = [
+    mk("budget", "budget"), mk("timeout", "timeout"), mk("deadline", "deadline"), mk("limit", "HTTP 429"),
+    mk("limit2", "HTTP 429, error"), mk("domain", "RDAP HTTP 429; DNS: NXDOMAIN"),
+    mk("net", "network"), mk("server", "HTTP 503"), mk("format", "HTTP 200, parse"), mk("leer", ""),
+  ];
+  const r = await checkName("retrytest", { registry: reg });
+  const by = Object.fromEntries(r.results.map((x) => [x.sourceId, x.retryable === true]));
+  assert.deepEqual(by, {
+    budget: true, timeout: true, deadline: true, limit: true, limit2: true, domain: true,
+    net: false, server: false, format: false, leer: false,
+  });
+});
+
+test("eindeutige Ergebnisse sind nie retryable", async () => {
+  clearResultCache();
+  const s: Source = {
+    id: "ok", namespace: "packages", label: "ok", defaultEnabled: true, description: "", endpoint: "",
+    async check(name) {
+      return { sourceId: "ok", namespace: "packages", label: "ok", target: name, status: "not_found", evidence: "budget timeout" };
+    },
+  };
+  const r = await checkName("retrytest2", { registry: [s] });
+  assert.equal(r.results[0].retryable, undefined);
+});
+
+test("das stundenlange GitHub-Rate-Limit ist nicht retryable, ein kurzes Abfragebudget schon", async () => {
+  const { isTransient } = await import("@/lib/engine/check");
+  assert.equal(isTransient("Rate-Limit, gesperrt bis 2026-11-04T14:17:00.000Z"), false);
+  assert.equal(isTransient("gesperrt bis 2026-11-04T14:17:00.000Z"), false);
+  assert.equal(isTransient("budget"), true);
+});

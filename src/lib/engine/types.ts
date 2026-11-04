@@ -39,6 +39,12 @@ export type SourceResult = {
   evidence?: string;
   /** Schwaches Signal: ein Treffer ergibt höchstens Gelb, nie Rot */
   weak?: boolean;
+  /**
+   * Nur bei "unknown": Der Grund ist vorübergehend (Abfragebudget, Zeitüberschreitung, Rate-Limit),
+   * eine erneute Prüfung in einigen Sekunden hat gute Aussichten. Eindeutige Quellen kommen dabei aus
+   * dem Zwischenspeicher, es werden nur diese offenen Quellen neu abgefragt.
+   */
+  retryable?: boolean;
 };
 
 export type HttpRequest = {

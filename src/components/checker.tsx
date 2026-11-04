@@ -23,9 +23,19 @@ import { VerdictBadge } from "@/components/status-badge";
 
 const CONCURRENCY = 3;
 
+/**
+ * Quellen mit vorübergehendem "unknown" (Abfragelimit, Zeitüberschreitung) werden automatisch erneut
+ * geprüft. Eindeutige Quellen kommen dabei aus dem Zwischenspeicher des Servers, es werden nur die
+ * offenen neu abgefragt. Abstand wächst, damit ein Dienst mit Limit Luft bekommt.
+ */
+const MAX_AUTO_RETRIES = 6;
+const retryDelayMs = (attempt: number) => 4000 + attempt * 2500 + Math.random() * 1500;
+
+type Waiting = { attempt: number; max: number };
+
 type Item =
   | { state: "loading" }
-  | { state: "done"; report: NameReport }
+  | { state: "done"; report: NameReport; waiting?: Waiting; rechecking?: boolean }
   | { state: "error"; message: string };
 
 type Run = { id: number; sel: Selection; items: Record<string, Item> };
@@ -101,6 +111,14 @@ export function Checker({
 
   const runId = useRef(0);
   const abort = useRef<AbortController | null>(null);
+  const retryAttempts = useRef(new Map<string, number>());
+  const retryTimers = useRef(new Set<ReturnType<typeof setTimeout>>());
+
+  function clearRetries() {
+    retryTimers.current.forEach(clearTimeout);
+    retryTimers.current.clear();
+    retryAttempts.current.clear();
+  }
 
   const optional = useMemo(() => config.sources.filter((s) => !s.defaultEnabled), [config.sources]);
   const optionalByNs = useMemo(() => {
@@ -123,6 +141,19 @@ export function Checker({
         item = { state: "error", message: json?.error ?? `Die Prüfung ist fehlgeschlagen (HTTP ${res.status}).` };
       } else {
         item = { state: "done", report: json.reports[0] };
+        const retryable = json.reports[0].results.some((r) => r.retryable);
+        const attempt = (retryAttempts.current.get(name) ?? 0) + 1;
+        if (retryable && attempt <= MAX_AUTO_RETRIES) {
+          retryAttempts.current.set(name, attempt);
+          item = { ...item, waiting: { attempt, max: MAX_AUTO_RETRIES } };
+          const t = setTimeout(() => {
+            retryTimers.current.delete(t);
+            if (runId.current === id && !signal.aborted) void checkOne(name, sel, signal, id);
+          }, retryDelayMs(attempt));
+          retryTimers.current.add(t);
+        } else {
+          retryAttempts.current.delete(name);
+        }
       }
     } catch {
       if (signal.aborted) return;
@@ -134,6 +165,7 @@ export function Checker({
 
   function start(sel: Selection, reveal = false) {
     abort.current?.abort();
+    clearRetries();
     const ac = new AbortController();
     abort.current = ac;
     const id = ++runId.current;
@@ -150,6 +182,19 @@ export function Checker({
       }
     };
     void Promise.all(Array.from({ length: Math.min(CONCURRENCY, queue.length) }, worker));
+  }
+
+  /** Offene Quellen eines fertigen Berichts von Hand erneut prüfen (nach den automatischen Versuchen). */
+  function recheck(name: string) {
+    if (!run || !abort.current) return;
+    const { id, sel } = run;
+    retryAttempts.current.delete(name);
+    setRun((r) => {
+      const cur = r?.items[name];
+      if (!r || r.id !== id || !cur || cur.state !== "done") return r;
+      return { ...r, items: { ...r.items, [name]: { ...cur, rechecking: true } } };
+    });
+    void checkOne(name, sel, abort.current.signal, id);
   }
 
   function retry(name: string) {
@@ -196,7 +241,13 @@ export function Checker({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => () => abort.current?.abort(), []);
+  useEffect(
+    () => () => {
+      abort.current?.abort();
+      clearRetries();
+    },
+    [],
+  );
 
   // Nach „Prüfen“ (nicht beim automatischen Start über ?q=) Fokus auf die Ergebnis-Überschrift
   // setzen und den Bereich zeigen, wenn er außerhalb des sichtbaren Ausschnitts liegt.
@@ -444,7 +495,15 @@ export function Checker({
               const it = run.items[n];
               if (!it || it.state === "loading") return <ReportSkeleton key={n} name={n} />;
               if (it.state === "error") return <ReportError key={n} name={n} message={it.message} onRetry={() => retry(n)} />;
-              return <ReportCard key={n} report={it.report} />;
+              return (
+                <ReportCard
+                  key={n}
+                  report={it.report}
+                  waiting={it.waiting}
+                  rechecking={it.rechecking}
+                  onRecheck={() => recheck(n)}
+                />
+              );
             })}
           </>
         )}

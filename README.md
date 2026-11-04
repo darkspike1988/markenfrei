@@ -225,7 +225,21 @@ der Code allein reicht nicht:
    1,7 s Wartezeit, 8 KB Antwort pro Standardprüfung (1 Name, Standardquellen). Eine Million Prüfungen
    sind demnach etwa 25 CPU-Stunden, 470 Stunden Laufzeit (Wanduhr) und 16 GB Datenverkehr. Die Obergrenze
    setzt `MARKENFREI_GLOBAL_RATE_LIMIT` (Standard 600 Namen pro Minute und Prozess).
-8. **Optional:** npm-Paket veröffentlichen (`cd mcp && npm publish`), damit `npx -y markenfrei-mcp` geht.
+8. **Kapazität.** Gemessen und simuliert (feste Antwortzeit der Dienste von 300 ms, Abfragen bei Dritten
+   gestubbt), nicht mit echtem Verkehr getestet:
+   - Der Server selbst ist nicht der Engpass: eine Prüfung braucht etwa 90 ms CPU (mit TLS) und der Prozess rund
+     120 MB bei 80 gleichzeitigen Prüfungen. Jede Instanz mit 1 vCPU und 1 GB RAM reicht, die Größe des Servers
+     verändert die Kapazität kaum.
+   - Die Grenze setzt die Zahl gleichzeitiger Abfragen je Zieldienst (4 je Host, `PER_HOST_LIMIT` in
+     `src/lib/engine/http.ts`): etwa **4 bis 5 Prüfungen pro Sekunde**. Bis etwa 20 gleichzeitige Prüfungen dauert eine
+     im Median 4,5 s, ab etwa 40 laufen sie in die Frist von 8 s und liefern Lücken.
+   - Enger sind die Grenzen der Dienste: **Apple ca. 18 neue Namen pro Minute** (Budget, siehe oben) und
+     **GitHub ohne Token 60 neue Namen pro Stunde** je Server-IP (mit Token 5.000). Wiederholte Namen kommen aus dem
+     Zwischenspeicher (10 Minuten) und zählen nicht. Setze `GITHUB_TOKEN`, sonst ist die GitHub-Zeile nach 60 neuen
+     Namen pro Stunde für alle Nutzer „unbekannt“.
+   - Mehr Instanzen auf derselben IP erhöhen diese Grenzen nicht, sie teilen sie sich und überschreiten sie
+     eher (Budgets gelten pro Prozess).
+9. **Optional:** npm-Paket veröffentlichen (`cd mcp && npm publish`), damit `npx -y markenfrei-mcp` geht.
 
 ## Entwicklung
 
