@@ -40,6 +40,8 @@ export type TrademarkAnalysis = {
     dpma: string;
     euipo: string;
     tmview: string;
+    /** TMDB: kostenlose Markensuche der IP Central GmbH, Daten von EUIPO, DPMA, IGE, WIPO, USPTO. Nur zur manuellen Recherche. */
+    tmdb: string;
     wipo: string;
     uspto: string;
     offeneRegister: string;
@@ -415,6 +417,7 @@ export function analyzeTrademarkSafety(
       dpma: `https://register.dpma.de/DPMAregister/marke/einsteiger`,
       euipo: `https://euipo.europa.eu/eSearch/#details/trademarks/${encodeURIComponent(cleanName)}`,
       tmview: `https://www.tmdn.org/tmview/#/tmview/results?page=1&pageSize=30&criteria=C&basicSearch=${encodeURIComponent(cleanName)}`,
+      tmdb: `https://tmdb.eu/de/suche/marken?q=${encodeURIComponent(cleanName)}&mode%5B%5D=fts`,
       wipo: `https://branddb.wipo.int/en/quicksearch/results?by=brandName&v=${encodeURIComponent(cleanName)}`,
       uspto: `https://tmsearch.uspto.gov/search/search-results?field=COMBINED&search_type=SEARCH_ALL&text=${encodeURIComponent(cleanName)}`,
       offeneRegister: `https://offeneregister.de/?q=${encodeURIComponent(cleanName)}`,

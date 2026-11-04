@@ -267,6 +267,7 @@ export function DetailPanel({
               <ExternalLink href={t.registryLinks.dpma}>DPMAregister</ExternalLink>
               <ExternalLink href={t.registryLinks.tmview}>TMview (EU & DE)</ExternalLink>
               <ExternalLink href={t.registryLinks.euipo}>EUIPO eSearch</ExternalLink>
+              <ExternalLink href={t.registryLinks.tmdb}>TMDB (DE & EU)</ExternalLink>
               <ExternalLink href={t.registryLinks.wipo}>WIPO Global Brand</ExternalLink>
               <ExternalLink href={t.registryLinks.uspto}>USPTO (USA)</ExternalLink>
               <ExternalLink href={t.registryLinks.unternehmensregister}>
