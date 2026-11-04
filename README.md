@@ -203,6 +203,7 @@ Markenfrei braucht keine API-Keys. Optional:
 | Variable | Wirkung |
 |---|---|
 | `GITHUB_TOKEN` | Höheres Rate-Limit für die GitHub-Abfragen. Ohne Token funktioniert die Prüfung weiterhin. |
+| `MARKENFREI_RATE_LIMIT` | Anfragen pro Minute und IP für alle öffentlichen Routen (Standard 60). Der Zähler gilt pro Serverprozess, bei mehreren Instanzen zusätzlich am Reverse-Proxy begrenzen. Die IP kommt aus `x-forwarded-for`, das nur hinter einem vertrauenswürdigen Proxy verlässlich ist. |
 | `MARKENFREI_ENABLE_LOCAL_INSPECT=1` | Erlaubt `appPath` in `/api/rea-inspect` (liest lokale `.app`-Pakete und `Info.plist`). In Produktion standardmäßig gesperrt, nur für lokalen Betrieb sinnvoll. |
 
 ---
