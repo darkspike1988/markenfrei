@@ -34,3 +34,39 @@ export function countStatuses(results: SourceResult[]): Record<Status, number> {
   for (const r of results) out[r.status]++;
   return out;
 }
+
+export type ShortlistEntry = {
+  name: string;
+  verdict: Verdict;
+  freeInAll: boolean;
+  /** Labels der Quellen mit "vergeben" oder "nicht zulässig" */
+  taken: string[];
+  /** Labels der Quellen ohne verwertbare Antwort */
+  unknown: string[];
+};
+
+const RANK: Record<Verdict, number> = { green: 0, yellow: 1, red: 2 };
+
+/**
+ * Rangliste einer Shortlist: frei zuerst, dann wenige Treffer, dann wenige Lücken.
+ * Rein (ohne Netz), damit Server und Oberfläche dieselbe Reihenfolge nutzen.
+ */
+export function rankReports(
+  reports: { name: string; verdict: Verdict; results: SourceResult[] }[],
+): ShortlistEntry[] {
+  return reports
+    .map((r) => ({
+      name: r.name,
+      verdict: r.verdict,
+      freeInAll: r.verdict === "green",
+      taken: r.results.filter((x) => (x.status === "taken" && !x.weak) || x.status === "invalid").map((x) => x.label),
+      unknown: r.results.filter((x) => x.status === "unknown").map((x) => x.label),
+    }))
+    .sort(
+      (a, b) =>
+        RANK[a.verdict] - RANK[b.verdict] ||
+        a.taken.length - b.taken.length ||
+        a.unknown.length - b.unknown.length ||
+        a.name.localeCompare(b.name),
+    );
+}

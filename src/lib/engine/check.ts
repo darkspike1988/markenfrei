@@ -7,7 +7,16 @@ import { manualSocialLinks, SOCIAL_SOURCES, STORE_SOURCES } from "@/lib/engine/s
 import { trademarkPrep, type TrademarkPrep } from "@/lib/engine/trademark-prep";
 import type { Namespace, Source, SourceResult, Status } from "@/lib/engine/types";
 import { NAMESPACES } from "@/lib/engine/types";
-import { computeVerdict, countStatuses, VERDICT_LABEL, type Verdict } from "@/lib/engine/verdict";
+import {
+  computeVerdict,
+  countStatuses,
+  rankReports,
+  VERDICT_LABEL,
+  type ShortlistEntry,
+  type Verdict,
+} from "@/lib/engine/verdict";
+
+export type { ShortlistEntry };
 import { normalizeName } from "@/lib/name";
 
 export const DEFAULT_NAMESPACES: readonly Namespace[] = ["domains", "packages", "stores", "known_names"];
@@ -167,16 +176,6 @@ export async function checkName(input: unknown, opts: CheckOptions = {}): Promis
   };
 }
 
-export type ShortlistEntry = {
-  name: string;
-  verdict: Verdict;
-  freeInAll: boolean;
-  taken: string[];
-  unknown: string[];
-};
-
-const RANK: Record<Verdict, number> = { green: 0, yellow: 1, red: 2 };
-
 /** Prüft bis zu MAX_NAMES Namen und sortiert: frei zuerst, dann wenige Treffer, dann wenige Lücken. */
 export async function checkNames(
   inputs: unknown,
@@ -186,21 +185,7 @@ export async function checkNames(
   if (inputs.length > MAX_NAMES) throw new CheckInputError(`Höchstens ${MAX_NAMES} Namen pro Anfrage.`);
   const unique = [...new Set(inputs.map((i) => String(i ?? "")))];
   const reports = await Promise.all(unique.map((i) => checkName(i, opts)));
-  const ranking = reports
-    .map((r) => ({
-      name: r.name,
-      verdict: r.verdict,
-      freeInAll: r.verdict === "green",
-      taken: r.results.filter((x) => x.status === "taken" || x.status === "invalid").map((x) => x.label),
-      unknown: r.results.filter((x) => x.status === "unknown").map((x) => x.label),
-    }))
-    .sort(
-      (a, b) =>
-        RANK[a.verdict] - RANK[b.verdict] ||
-        a.taken.length - b.taken.length ||
-        a.unknown.length - b.unknown.length ||
-        a.name.localeCompare(b.name),
-    );
+  const ranking = rankReports(reports);
   return { ranking, reports };
 }
 
