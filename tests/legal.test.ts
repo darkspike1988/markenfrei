@@ -40,3 +40,12 @@ test("Telefon ist freiwillig", () => {
   assert.equal(operatorFromEnv(full).complete, true);
   assert.equal(operatorFromEnv({ ...full, MARKENFREI_OPERATOR_PHONE: "+49 123 456" }).operator.phone, "+49 123 456");
 });
+
+test("ohne zweiten Kontaktweg gibt es eine Empfehlung, die den Livegang nicht blockiert", () => {
+  const noPhone = operatorFromEnv(full);
+  assert.equal(noPhone.complete, true);
+  assert.equal(noPhone.recommendations.length, 1);
+  assert.match(noPhone.recommendations[0], /zweiten schnellen Kontaktweg/);
+  const withPhone = operatorFromEnv({ ...full, MARKENFREI_OPERATOR_PHONE: "+49 123 456" });
+  assert.deepEqual(withPhone.recommendations, []);
+});

@@ -7,22 +7,45 @@ export async function WithOperator({ children }: { children: (c: OperatorCheck) 
   return <>{children(operatorFromEnv())}</>;
 }
 
-/** Sichtbarer Hinweis, solange Pflichtangaben fehlen. Verhindert einen stillen Livegang. */
-export function MissingOperatorNotice({ missing }: { missing: string[] }) {
-  if (missing.length === 0) return null;
+/**
+ * Sichtbare Hinweise zu den Betreiberangaben.
+ * - fehlende Pflichtangaben: Warnung, die einen stillen Livegang verhindert
+ * - Empfehlungen: Hinweis, der den Livegang nicht blockiert
+ */
+export function MissingOperatorNotice({
+  missing,
+  recommendations = [],
+}: {
+  missing: string[];
+  recommendations?: string[];
+}) {
   return (
-    <div role="alert" className="mt-6 rounded-lg border border-line bg-warn-bg px-4 py-3 text-sm text-warn">
-      <p className="font-medium">Betreiberangaben fehlen. Diese Seite darf so nicht öffentlich laufen.</p>
-      <p className="mt-1">
-        Setze in der Umgebung des Servers:{" "}
-        {missing.map((m, i) => (
-          <span key={m}>
-            <code className="font-mono">{m}</code>
-            {i < missing.length - 1 ? ", " : ""}
-          </span>
-        ))}
-        . Siehe README, Abschnitt „Vor dem Livegang“.
-      </p>
-    </div>
+    <>
+      {missing.length > 0 ? (
+        <div role="alert" className="mt-6 rounded-lg border border-line bg-warn-bg px-4 py-3 text-sm text-warn">
+          <p className="font-medium">Betreiberangaben fehlen. Diese Seite darf so nicht öffentlich laufen.</p>
+          <p className="mt-1">
+            Setze in der Umgebung des Servers:{" "}
+            {missing.map((m, i) => (
+              <span key={m}>
+                <code className="font-mono">{m}</code>
+                {i < missing.length - 1 ? ", " : ""}
+              </span>
+            ))}
+            . Siehe README, Abschnitt „Vor dem Livegang“.
+          </p>
+        </div>
+      ) : null}
+      {recommendations.length > 0 ? (
+        <div role="note" className="mt-4 rounded-lg border border-line bg-surface px-4 py-3 text-sm text-soft">
+          <p className="font-medium text-ink">Empfohlen</p>
+          <ul className="mt-1 list-disc pl-5">
+            {recommendations.map((r) => (
+              <li key={r}>{r}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </>
   );
 }

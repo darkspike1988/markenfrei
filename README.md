@@ -212,7 +212,20 @@ der Code allein reicht nicht:
 4. **Mehrere Instanzen:** Rate-Limit und Cache gelten pro Prozess. Bei mehr als einer Instanz zusätzlich am
    Proxy begrenzen.
 5. **Node 22 oder neuer** (CI testet mit 22).
-6. **Optional:** npm-Paket veröffentlichen (`cd mcp && npm publish`), damit `npx -y markenfrei-mcp` geht.
+6. **Nutzungsbedingungen der Quellen.** Die App fragt Dienste Dritter ab. Eingehalten bzw. geprüft:
+   Rate-Limits mit Abfragebudget je Dienst (Apple etwa 20 pro Minute, crates.io 1 pro Sekunde, Hex,
+   Mastodon; `HOST_BUDGETS` in `src/lib/engine/http.ts`), identifizierbarer User-Agent, Pfade nicht
+   durch `robots.txt` gesperrt. **Nicht geprüft oder offen:** Für DENIC (.de-RDAP) habe ich keine
+   veröffentlichten Bedingungen gefunden, für Google Play (Abfrage der Detailseiten per HEAD) nicht die
+   Nutzungsbedingungen gelesen. Bei SWITCH (.ch/.li) verweist die Antwort auf eine Acceptable Use Policy,
+   die nach einem früheren Prüfbericht kommerzielle Zwecke ausschließt (nicht selbst gelesen).
+   **Vor einem kostenpflichtigen Angebot** die Bedingungen jeder Quelle auf kommerzielle Nutzung prüfen.
+7. **Kosten.** Es fallen keine Gebühren pro Abfrage bei Dritten an (alle Quellen sind schlüsselfrei und
+   kostenlos). Kosten entstehen nur beim Hosting: Gemessen rund 16 Abfragen bei Dritten, 90 ms CPU,
+   1,7 s Wartezeit, 8 KB Antwort pro Standardprüfung (1 Name, Standardquellen). Eine Million Prüfungen
+   sind demnach etwa 25 CPU-Stunden, 470 Stunden Laufzeit (Wanduhr) und 16 GB Datenverkehr. Die Obergrenze
+   setzt `MARKENFREI_GLOBAL_RATE_LIMIT` (Standard 600 Namen pro Minute und Prozess).
+8. **Optional:** npm-Paket veröffentlichen (`cd mcp && npm publish`), damit `npx -y markenfrei-mcp` geht.
 
 ## Entwicklung
 

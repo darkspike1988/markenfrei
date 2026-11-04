@@ -22,9 +22,9 @@ export default function DatenschutzPage() {
       <h1 className="font-serif text-4xl leading-[1.1] tracking-[-0.02em] text-ink sm:text-5xl">Datenschutz</h1>
       <Suspense fallback={<p className="mt-6 text-soft">Lädt …</p>}>
         <WithOperator>
-          {({ operator, missing }) => (
+          {({ operator, missing, recommendations }) => (
             <>
-              <MissingOperatorNotice missing={missing} />
+              <MissingOperatorNotice missing={missing} recommendations={recommendations} />
               <div className="mt-4 max-w-2xl space-y-3 text-soft">
                 <H2 id="verantwortlich">Verantwortlich</H2>
                 <p className="whitespace-pre-line">

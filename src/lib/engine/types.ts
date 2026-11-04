@@ -64,7 +64,11 @@ export type HttpResponse = {
   json?: unknown;
   text?: string;
   /** Gesetzt, wenn keine verwertbare Antwort kam */
-  error?: "timeout" | "network" | "deadline" | "too_large" | "parse";
+  /**
+   * "budget": das Abfragebudget des Zieldienstes ist ausgeschöpft (siehe HOST_BUDGETS in http.ts).
+   * Es wurde keine Anfrage gesendet, das Ergebnis ist "unknown".
+   */
+  error?: "timeout" | "network" | "deadline" | "too_large" | "parse" | "budget";
 };
 
 export type HttpClient = {

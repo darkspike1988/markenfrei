@@ -49,7 +49,9 @@ export default function QuellenPage() {
         <p>
           Abgefragt wird nur, was du auslöst: eine Einzelabfrage pro Quelle, ohne Schlüssel, ohne Umgehung von
           Bot-Abwehr. Eindeutige Antworten hält der Server 10 Minuten im Arbeitsspeicher, damit wiederholte Prüfungen
-          die Dienste nicht erneut belasten. Die Anwendung protokolliert keine Suchanfragen und speichert sie nicht dauerhaft; Server-Logs des Hostings sind in der Datenschutzerklärung beschrieben.
+          die Dienste nicht erneut belasten. Für Dienste mit dokumentierter Grenze (Apple: etwa 20 Anfragen pro Minute,
+          crates.io: eine pro Sekunde) gilt ein Abfragebudget; ist es erschöpft, meldet die Quelle „unbekannt“ und
+          sendet nichts. Die Anwendung protokolliert keine Suchanfragen und speichert sie nicht dauerhaft; Server-Logs des Hostings sind in der Datenschutzerklärung beschrieben.
         </p>
       </div>
 
