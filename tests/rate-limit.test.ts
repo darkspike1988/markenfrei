@@ -50,3 +50,11 @@ test("Wächter antwortet mit 429, Retry-After und deutschem Text", async () => {
   const body = (await res.json()) as { error: string };
   assert.match(body.error, /Zu viele Anfragen/);
 });
+
+test("Gewichtung: eine teure Anfrage verbraucht mehrere Einheiten", () => {
+  const rl = createRateLimiter({ limit: 10, windowMs: 60_000, now: clock().now });
+  assert.equal(rl.check("a", 8).allowed, true);
+  assert.equal(rl.check("a", 3).allowed, false, "8 + 3 > 10");
+  assert.equal(rl.check("a", 2).allowed, true, "8 + 2 = 10");
+  assert.equal(rl.check("a").allowed, false);
+});

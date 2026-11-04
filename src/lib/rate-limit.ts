@@ -9,7 +9,8 @@
 
 export type RateLimitResult = { allowed: boolean; retryAfterSec: number };
 
-export type RateLimiter = { check(key: string): RateLimitResult };
+/** cost: wie viele Einheiten die Anfrage verbraucht (z. B. Anzahl geprüfter Namen) */
+export type RateLimiter = { check(key: string, cost?: number): RateLimitResult };
 
 export function createRateLimiter(opts: {
   limit: number;
@@ -20,7 +21,8 @@ export function createRateLimiter(opts: {
   const windows = new Map<string, { count: number; resetAt: number }>();
 
   return {
-    check(key: string): RateLimitResult {
+    check(key: string, cost = 1): RateLimitResult {
+      const units = Math.max(1, Math.ceil(cost));
       const t = now();
 
       // Abgelaufene Fenster gelegentlich entfernen, damit die Map nicht wächst
@@ -34,10 +36,10 @@ export function createRateLimiter(opts: {
         windows.set(key, w);
       }
 
-      if (w.count >= opts.limit) {
+      if (w.count + units > opts.limit) {
         return { allowed: false, retryAfterSec: Math.max(1, Math.ceil((w.resetAt - t) / 1000)) };
       }
-      w.count++;
+      w.count += units;
       return { allowed: true, retryAfterSec: 0 };
     },
   };
@@ -64,9 +66,9 @@ export function limitedResponse(retryAfterSec: number): Response {
 }
 
 /** Liefert eine 429-Antwort, wenn das Limit erreicht ist, sonst null. */
-export function createGuard(limiter: RateLimiter): (req: Request) => Response | null {
-  return (req) => {
-    const r = limiter.check(clientKey(req));
+export function createGuard(limiter: RateLimiter): (req: Request, cost?: number) => Response | null {
+  return (req, cost = 1) => {
+    const r = limiter.check(clientKey(req), cost);
     return r.allowed ? null : limitedResponse(r.retryAfterSec);
   };
 }
