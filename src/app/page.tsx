@@ -361,7 +361,7 @@ export default function Home() {
             type="button"
             onClick={() => setInfoOpen(true)}
             className="inline-flex cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-muted transition-colors hover:bg-wash hover:text-ink"
-            title="Infos, 25+ Open APIs & MCP-Server für KI-Agenten"
+            title="Infos, Quellen & MCP-Server für KI-Agenten"
           >
             <Database size={14} weight="bold" aria-hidden />
             <span>Infos & MCP</span>

@@ -168,6 +168,6 @@ Transparenter Preisvergleich führender Registrare ohne Lockvogel-Fallen.
 ---
 
 ### H. `open-apis.ts` · Zentrales Schnittstellen-Inventar
-Erfasst alle 25 öffentlich genutzten Open APIs mit Provider, Endpoint, Protokoll (RDAP, DoH, REST) und Dokumentationslink.
+Erfasst alle Quellen mit Provider, Endpoint, Protokoll (RDAP, DoH, REST, Deep-Link) und Dokumentationslink. Einträge mit Protokoll `Deep-Link` sind reine Verweise, alle anderen werden live abgefragt.
 
 ---
