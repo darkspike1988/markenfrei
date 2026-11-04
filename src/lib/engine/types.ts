@@ -50,6 +50,11 @@ export type HttpRequest = {
   maxBytes?: number;
   /** Timeout dieser Anfrage in ms, Standard 5000, nie länger als die Deadline */
   timeoutMs?: number;
+  /**
+   * Einmal wiederholen bei Timeout, Netzfehler oder 429/502/503/504, solange die Deadline noch
+   * mindestens eine Sekunde lässt. Nur für Abfragen ohne Nebenwirkung (alle sind GET oder HEAD).
+   */
+  retry?: boolean;
 };
 
 export type HttpResponse = {

@@ -210,3 +210,43 @@ test("Wartende geben an ihrer Deadline auf und verlassen die Schlange", async ()
   assert.equal(second.error, "deadline", "wartet nicht bis zum Slot, sondern gibt an der Deadline auf");
   assert.equal(queuedForHost("wait2.test"), 0);
 });
+
+test("retry: ein Timeout wird einmal wiederholt, ohne retry nicht", async () => {
+  let calls = 0;
+  const flaky = (async () => {
+    calls++;
+    if (calls === 1) throw Object.assign(new Error("t"), { name: "TimeoutError" });
+    return new Response(null, { status: 404 });
+  }) as unknown as typeof fetch;
+  const withRetry = createHttpClient({ deadlineAt: far(), userAgent: "t", fetchImpl: flaky });
+  const r = await withLoopAlive(() => withRetry.request("https://retry.test/a", { retry: true }));
+  assert.equal(r.status, 404);
+  assert.equal(calls, 2);
+
+  calls = 0;
+  const noRetry = createHttpClient({ deadlineAt: far(), userAgent: "t", fetchImpl: flaky });
+  const r2 = await noRetry.request("https://retry.test/b");
+  assert.equal(r2.error, "timeout");
+  assert.equal(calls, 1);
+});
+
+test("retry: 429 wird einmal wiederholt, 404 nie, und nur wenn die Deadline Luft lässt", async () => {
+  const statuses = [429, 200];
+  let calls = 0;
+  const f = (async () => new Response(null, { status: statuses[calls++] ?? 200 })) as unknown as typeof fetch;
+  const http = createHttpClient({ deadlineAt: far(), userAgent: "t", fetchImpl: f });
+  const r = await withLoopAlive(() => http.request("https://retry.test/c", { retry: true }));
+  assert.equal(r.status, 200);
+  assert.equal(calls, 2);
+
+  let n404 = 0;
+  const h = createHttpClient({ deadlineAt: far(), userAgent: "t", fetchImpl: (async () => (n404++, new Response(null, { status: 404 }))) as unknown as typeof fetch });
+  await h.request("https://retry.test/d", { retry: true });
+  assert.equal(n404, 1);
+
+  let late = 0;
+  const l = createHttpClient({ deadlineAt: Date.now() + 500, userAgent: "t", fetchImpl: (async () => (late++, new Response(null, { status: 503 }))) as unknown as typeof fetch });
+  const lr = await withLoopAlive(() => l.request("https://retry.test/e", { retry: true }));
+  assert.equal(lr.status, 503);
+  assert.equal(late, 1, "bei knapper Deadline keine Wiederholung");
+});
