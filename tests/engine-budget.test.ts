@@ -1,6 +1,6 @@
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { HOST_BUDGETS, createHttpClient, resetHostBudgets, takeBudget } from "@/lib/engine/http";
+import { HOST_BUDGETS, createHttpClient, huggingfaceBudget, resetHostBudgets, takeBudget } from "@/lib/engine/http";
 import { STORE_SOURCES } from "@/lib/engine/sources/stores-social";
 
 beforeEach(() => resetHostBudgets());
@@ -92,4 +92,31 @@ test("App Store: erschöpftes Apple-Budget ist unknown mit Hinweis, nie frei", a
   assert.equal(second.status, "unknown");
   assert.match(second.note ?? "", /Abfragelimit/);
   assert.match(second.evidence ?? "", /^budget/, "Beleg erlaubt der Engine, das Ergebnis als wiederholbar zu markieren");
+});
+
+test("Hugging Face: Budget liegt unter dem anonymen Limit (500 je 5 Minuten), mit Token unter dem Free-Limit (1.000)", () => {
+  const anon = huggingfaceBudget(undefined);
+  assert.ok(anon.max < 500 && anon.windowMs === 300_000);
+  assert.deepEqual(huggingfaceBudget("   "), anon, "leerer Token zählt als keiner");
+  const withToken = huggingfaceBudget("hf_x");
+  assert.ok(withToken.max < 1000 && withToken.max > anon.max && withToken.windowMs === 300_000);
+  assert.ok(HOST_BUDGETS["huggingface.co"].max === anon.max || HOST_BUDGETS["huggingface.co"].max === withToken.max);
+});
+
+test("GLEIF: Budget unter der genannten Grenze von 60 pro Minute", () => {
+  const g = HOST_BUDGETS["api.gleif.org"];
+  assert.ok(g.max < 60 && g.windowMs === 60_000);
+});
+
+test("GLEIF: erschöpftes Budget ist unknown mit Hinweis, nie not_found", async () => {
+  const { KNOWN_NAME_SOURCES } = await import("@/lib/engine/sources/known-names");
+  const gleif = KNOWN_NAME_SOURCES.find((s) => s.id === "gleif")!;
+  const fetchImpl = (async () => Response.json({ data: [], meta: { pagination: { total: 0 } } })) as unknown as typeof fetch;
+  const http = createHttpClient({ deadlineAt: far(), userAgent: "t", fetchImpl, hostBudgets: { "api.gleif.org": { max: 1, windowMs: 60_000 } } });
+  const ctx = { http, contact: "" };
+  assert.equal((await gleif.check("budgetfirma", ctx)).status, "not_found");
+  const second = await gleif.check("budgetfirma2", ctx);
+  assert.equal(second.status, "unknown");
+  assert.match(second.note ?? "", /Abfragelimit/);
+  assert.match(second.evidence ?? "", /^budget/);
 });

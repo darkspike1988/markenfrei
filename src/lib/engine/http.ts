@@ -28,9 +28,21 @@ const PER_HOST_LIMIT = 4;
  * - crates.io: Crawler-Richtlinie, höchstens 1 Anfrage pro Sekunde.
  * - hex.pm: 100 Anfragen pro Minute ohne Anmeldung. Wir nehmen 90.
  * - mastodon.social: 300 Anfragen je 5 Minuten und IP. Wir nehmen 250.
+ * - huggingface.co: API-Abfragen je 5 Minuten anonym 500, mit Free-Konto 1.000 (offizielle Tabelle,
+ *   Stand September 2025, ändert sich laut Seite). Wir nehmen 450 bzw. 900 (mit HF_TOKEN).
+ * - api.gleif.org: 60 Anfragen pro Minute. Diese Zahl stammt aus der Anleitung eines Drittanbieter-Pakets
+ *   und ist nicht offiziell bestätigt; wir bleiben mit 50 darunter.
  */
 export type HostBudget = { max: number; windowMs: number };
+
+/** Hugging Face: 5-Minuten-Fenster, mit Token das Limit des Free-Kontos, sonst das anonyme. */
+export function huggingfaceBudget(token: string | undefined): HostBudget {
+  return { max: token && token.trim() ? 900 : 450, windowMs: 300_000 };
+}
+
 export const HOST_BUDGETS: Record<string, HostBudget> = {
+  "huggingface.co": huggingfaceBudget(process.env.HF_TOKEN),
+  "api.gleif.org": { max: 50, windowMs: 60_000 },
   "itunes.apple.com": { max: 18, windowMs: 60_000 },
   "crates.io": { max: 1, windowMs: 1_000 },
   "hex.pm": { max: 90, windowMs: 60_000 },
