@@ -25,6 +25,83 @@ export const TONE_DOT: Record<Tone, string> = {
   bad: "bg-bad",
 };
 
+export const TONE_LABEL: Record<Tone, string> = {
+  ok: "unauffällig",
+  warn: "prüfen",
+  bad: "Konflikt",
+};
+
+export type CategoryStatus = {
+  domain: Tone;
+  trademark: Tone;
+  appStore: Tone;
+  packages: Tone;
+};
+
+export const CATEGORY_LABEL: Record<keyof CategoryStatus, string> = {
+  domain: "Domain",
+  trademark: "Marke",
+  appStore: "App Store",
+  packages: "Pakete",
+};
+
+/**
+ * Eine Ampelfarbe je Bereich für die Schnellansicht.
+ * "ok" gibt es nur, wenn der Bereich geantwortet hat und nichts auffiel.
+ */
+export function categoryStatus(r: ClearanceReport): CategoryStatus {
+  const missing = (label: string) => r.incomplete.includes(label);
+
+  // Domain: alle vergeben = Konflikt, eindeutig frei = ok, sonst prüfen
+  let domain: Tone = "warn";
+  if (r.domains.length > 0) {
+    const free = r.domains.some((d) => d.status === "available");
+    const unknown = r.domains.some((d) => d.status === "unknown");
+    if (r.domains.every((d) => d.status === "taken")) domain = "bad";
+    else if (free && !unknown) domain = "ok";
+  }
+
+  // Marke: identische oder klanggleiche Treffer sind ein Konflikt
+  let trademark: Tone = "ok";
+  const collisions = r.trademark.protectedCollisions;
+  if (collisions.some((c) => c.matchType === "identisch" || c.matchType === "klangidentisch")) {
+    trademark = "bad";
+  } else if (
+    collisions.length > 0 ||
+    r.trademark.descriptivenessRisk === "hoch" ||
+    r.wikidataHits.some((w) => w.isBrandOrSoftware) ||
+    r.wikipediaHit ||
+    missing("Wikidata")
+  ) {
+    trademark = "warn";
+  }
+
+  let appStore: Tone = "ok";
+  if (r.appStore.status === "collision") appStore = "bad";
+  else if (
+    r.appStore.status === "similar" ||
+    r.appStore.bundleIds.some((b) => b.appleStatus === "taken" || b.googlePlayStatus === "taken") ||
+    missing("App Store") ||
+    missing("Bundle-IDs")
+  ) {
+    appStore = "warn";
+  }
+
+  const d = r.devAndSocial;
+  const packages: Tone =
+    [d.githubHandle, d.npmPackage, d.pypiPackage, d.cratesIo].includes("taken") ||
+    missing("Entwickler-Namensräume")
+      ? "warn"
+      : "ok";
+
+  return { domain, trademark, appStore, packages };
+}
+
+/** Die wichtigsten Gründe für die Ampelfarbe, schwerwiegendste zuerst. */
+export function topSignals(r: ClearanceReport, n = 3): Signal[] {
+  return buildSignals(r).slice(0, n);
+}
+
 /**
  * Verdichtet die Rohdaten eines Reports zu wenigen lesbaren Aussagen.
  * Reihenfolge: schwerwiegendste zuerst.
