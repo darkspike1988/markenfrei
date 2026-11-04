@@ -4,6 +4,29 @@ import { acquireSlot, buildUserAgent, createHttpClient, queuedForHost } from "@/
 
 const far = () => Date.now() + 60_000;
 
+/**
+ * Die Timer des Clients (AbortSignal.timeout, Warteschlange) halten die Event-Loop absichtlich
+ * nicht am Leben. Im Betrieb trägt der Server die Loop; hier tut es dieser Timer, sonst beendet
+ * Node den Testprozess, bevor ein Fake-fetch abgebrochen wird ("Promise resolution is still
+ * pending but the event loop has already resolved", gesehen unter Node 22).
+ */
+async function withLoopAlive<T>(fn: () => Promise<T>, ms = 5_000): Promise<T> {
+  const keep = setTimeout(() => undefined, ms);
+  try {
+    return await fn();
+  } finally {
+    clearTimeout(keep);
+  }
+}
+
+/** Fake-fetch, der erst beim Abbruch über das Signal scheitert. */
+const abortOnlyFetch = ((_u: string, init?: RequestInit) =>
+  new Promise((_resolve, reject) => {
+    init?.signal?.addEventListener("abort", () =>
+      reject(init.signal!.reason ?? Object.assign(new Error("t"), { name: "TimeoutError" })),
+    );
+  })) as unknown as typeof fetch;
+
 test("liest JSON und setzt den User-Agent", async () => {
   let ua = "";
   const http = createHttpClient({
@@ -81,15 +104,9 @@ test("Netzfehler und Timeout werden als Fehler gemeldet, nicht geworfen", async 
   });
   assert.equal((await failing.request("https://x.test/d")).error, "network");
 
-  const slow = createHttpClient({
-    deadlineAt: far(),
-    userAgent: "t",
-    fetchImpl: ((_u: string, init?: RequestInit) =>
-      new Promise((_r, reject) => {
-        init?.signal?.addEventListener("abort", () => reject(Object.assign(new Error("t"), { name: "TimeoutError" })));
-      })) as unknown as typeof fetch,
-  });
-  assert.equal((await slow.request("https://x.test/e", { timeoutMs: 20 })).error, "timeout");
+  const slow = createHttpClient({ deadlineAt: far(), userAgent: "t", fetchImpl: abortOnlyFetch });
+  const r = await withLoopAlive(() => slow.request("https://x.test/e", { timeoutMs: 20 }));
+  assert.equal(r.error, "timeout");
 });
 
 test("zu große Antworten werden abgebrochen", async () => {
@@ -174,7 +191,7 @@ test("Wartende geben an ihrer Deadline auf und verlassen die Schlange", async ()
     hold.push(rel);
   }
   const t0 = Date.now();
-  const r = await acquireSlot("wait.test", owner, { deadlineAt: Date.now() + 40 });
+  const r = await withLoopAlive(() => acquireSlot("wait.test", owner, { deadlineAt: Date.now() + 40 }));
   assert.equal(r, null);
   assert.ok(Date.now() - t0 < 1000);
   assert.equal(queuedForHost("wait.test"), 0);
@@ -184,12 +201,11 @@ test("Wartende geben an ihrer Deadline auf und verlassen die Schlange", async ()
     deadlineAt: Date.now() + 40,
     userAgent: "t",
     perOwnerLimit: 1,
-    fetchImpl: ((_u: string, init?: RequestInit) =>
-      new Promise((_resolve, reject) => {
-        init?.signal?.addEventListener("abort", () => reject(init.signal!.reason));
-      })) as unknown as typeof fetch,
+    fetchImpl: abortOnlyFetch,
   });
-  const [first, second] = await Promise.all([http.request("https://wait2.test/1"), http.request("https://wait2.test/2")]);
+  const [first, second] = await withLoopAlive(() =>
+    Promise.all([http.request("https://wait2.test/1"), http.request("https://wait2.test/2")]),
+  );
   assert.equal(first.error, "deadline");
   assert.equal(second.error, "deadline", "wartet nicht bis zum Slot, sondern gibt an der Deadline auf");
   assert.equal(queuedForHost("wait2.test"), 0);
