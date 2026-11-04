@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { guardRequest } from "@/lib/rate-limit";
 import { performClearanceCheck } from "@/lib/clearance";
 import { compareDomainPrices } from "@/lib/domain-pricing";
 import { discoverOpenDataWords } from "@/lib/opendata";
@@ -67,6 +68,8 @@ const MCP_TOOLS = [
 ];
 
 export async function POST(req: Request) {
+  const limited = guardRequest(req);
+  if (limited) return limited;
   try {
     const body = await req.json();
     const { id, method, params } = body;
