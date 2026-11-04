@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import {
+  ClearanceInputError,
   performClearanceCheck,
   type ClearanceReport,
   type TldCheckResult,
@@ -34,6 +35,9 @@ export async function POST(req: Request) {
 
     return NextResponse.json(report);
   } catch (err) {
+    if (err instanceof ClearanceInputError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
     return NextResponse.json(
       {
         error:
