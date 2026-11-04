@@ -31,7 +31,7 @@ export function createMarkenfreiMcpServer(): McpServer {
   // Tool 1: Full clearance check
   server.tool(
     "markenfrei_clearance_check",
-    "Führt eine vollständige Vorab-Prüfung eines Namens oder einer App-Identität durch. Prüft Markenrecht (§ 8 Gattungsbegriff, § 9 Verwechslungsgefahr), phonetische Zwillinge (Kölner Phonetik & Soundex), Mobile App Stores Werktitelschutz (§ 5 Abs. 3 MarkenG auf Apple App Store & Google Play), autoritative Registries (DENIC .de, Verisign .com, Google .app), DoH Fallback, Enzyklopädien (Wikipedia REST, DuckDuckGo) und Entwickler-Namensräume (GitHub, npm, PyPI, Crates.io, Homebrew, Go Proxy).",
+    "Vorprüfung eines Namens: Domains (RDAP-Registries mit DNS-Fallback), Apple App Store und Google Play, Paketnamen (GitHub, npm, PyPI, crates.io, Homebrew, Go), bekannte Namen (Wikidata, Wikipedia, DuckDuckGo) sowie Kölner Phonetik und Freihaltebedürfnis (§ 8 MarkenG) als Heuristik. Die Markenregister (DPMA, EUIPO, WIPO, USPTO) werden NICHT abgefragt, der Bericht verlinkt sie für die manuelle Recherche. Eine grüne Ampel heißt nicht, dass der Name als Marke frei ist. Das Ergebnis ist deterministisch bei gleichen Antworten der Quellen und liegt als structuredContent im Schema PublicReport vor.",
     {
       name: z
         .string()
@@ -141,7 +141,7 @@ export function createMarkenfreiMcpServer(): McpServer {
   // Tool 2: Domain price comparison
   server.tool(
     "markenfrei_domain_pricing",
-    "Vergleicht echte Registrar-Dauerpreise für eine Domain oder TLD (.de, .com, .app, .ai, .io, .dev). Zeigt die günstigsten Anbieter (Netcup, Hetzner, Cloudflare At-Cost Wholesale, Porkbun) und warnt vor 1 € Lockvogel-Fallen.",
+    "Vergleicht hinterlegte Registrar-Dauerpreise für eine Domain oder Endung (Stand 2026, fest eingetragen, nicht live abgefragt). Zeigt die günstigsten Anbieter und warnt vor Lockangeboten.",
     {
       domainOrTld: z
         .string()

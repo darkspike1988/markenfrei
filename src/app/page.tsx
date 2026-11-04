@@ -25,9 +25,10 @@ import { ResultRow, ResultSkeleton } from "@/components/result-row";
 import { DetailPanel } from "@/components/detail-panel";
 import { InfoModal } from "@/components/info-modal";
 import { normalizeName } from "@/lib/name";
+import { MAX_TLDS_PER_REQUEST, SUPPORTED_TLDS } from "@/lib/tlds";
 import { toPublicReport } from "@/lib/public-report";
 
-const TLDS = ["de", "com", "app", "ai", "io", "dev"];
+const TLDS = SUPPORTED_TLDS;
 
 // Gleiche Regeln wie auf dem Server (Umlaute ausschreiben, keine Sonderzeichen).
 // Bei ungültiger Eingabe leer, die Fehlermeldung kommt dann vom Server.
@@ -107,7 +108,9 @@ export default function Home() {
         ? cur.length > 1
           ? cur.filter((t) => t !== tld)
           : cur
-        : [...cur, tld],
+        : cur.length < MAX_TLDS_PER_REQUEST
+          ? [...cur, tld]
+          : cur,
     );
 
   // Clearance Check für einen einzelnen Namen
@@ -400,11 +403,12 @@ export default function Home() {
       <main className="mx-auto w-full max-w-3xl flex-1 px-5 pb-24">
         <section className="pt-10 sm:pt-16">
           <h1 className="max-w-xl text-3xl font-medium leading-[1.15] tracking-tight sm:text-5xl">
-            Ein Name, der dir niemand streitig macht.
+            Ist dein Name noch frei?
           </h1>
           <p className="mt-3.5 max-w-lg text-sm text-muted">
-            Tippe einen Wunschnamen oder eine Projektidee ein. Direkte Vorprüfung auf
-            Marken, Domains, App Store und Paket-Namensräume.
+            Tippe einen Wunschnamen oder eine Projektidee ein. Geprüft werden Domains,
+            App Stores, Paket-Namensräume und bekannte Marken. Die Markenregister
+            (DPMA, EUIPO) recherchierst du danach selbst, wir verlinken sie.
           </p>
 
           {/* OMNIBAR FORM */}

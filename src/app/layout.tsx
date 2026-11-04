@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Markenfrei · Namen für Apps und Webseiten prüfen",
   description:
-    "Namensideen generieren und direkt auf Marken-, Domain-, App-Store- und Paketkonflikte prüfen. Open Source.",
+    "Namensideen erzeugen und auf Domain-, App-Store-, Paket- und Markenkonflikte vorprüfen. Ohne KI, Open Source. Die Markenregister werden nicht abgefragt, sondern verlinkt.",
 };
 
 export default function RootLayout({

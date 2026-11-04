@@ -21,7 +21,15 @@ export type RegistrarPrice = {
   registerUrl: string;
 };
 
+/**
+ * Stand der hinterlegten Preise. Die Preise sind fest eingetragen und werden nicht live
+ * abgefragt. Beim Aktualisieren der Tabelle diesen Wert anpassen.
+ */
+export const PRICING_AS_OF = "2026";
+
 export type TldPriceComparison = {
+  /** Stand der Preise (siehe PRICING_AS_OF) */
+  asOf: string;
   tld: string;
   domain: string;
   cheapestRenewal: RegistrarPrice;
@@ -600,6 +608,7 @@ export function compareDomainPrices(domain: string): TldPriceComparison | null {
   const atCost = registrars.find((r) => r.isAtCost);
 
   return {
+    asOf: PRICING_AS_OF,
     tld,
     domain,
     cheapestRenewal: sortedByRenewal[0],
