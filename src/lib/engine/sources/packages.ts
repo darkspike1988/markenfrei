@@ -774,12 +774,16 @@ const huggingface: Source = {
   async check(name, ctx) {
     const b = base("huggingface", "Hugging Face", name, `https://huggingface.co/${enc(name)}`);
     try {
+      // Optionales Lese-Token (HF_TOKEN): Hugging Face hebt das Limit für angemeldete Konten an
+      // (anonym 500, Free-Konto 1.000 API-Abfragen je 5 Minuten). Es geht nur an huggingface.co.
+      const token = (process.env.HF_TOKEN ?? "").trim();
+      const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
       return await anyTaken(
         b,
         ctx,
         [
-          { url: `https://huggingface.co/api/organizations/${enc(name)}/overview`, what: "Organisation" },
-          { url: `https://huggingface.co/api/users/${enc(name)}/overview`, what: "Nutzer" },
+          { url: `https://huggingface.co/api/organizations/${enc(name)}/overview`, what: "Organisation", headers },
+          { url: `https://huggingface.co/api/users/${enc(name)}/overview`, what: "Nutzer", headers },
         ],
         "weder Organisation noch Nutzer mit diesem Namen",
       );

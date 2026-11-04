@@ -131,3 +131,44 @@ test("hackageExactMatch vergleicht ohne Rücksicht auf die Schreibweise und übe
   assert.equal(hackageExactMatch([{ name: "text-x" }], "text"), undefined);
   for (const bad of [null, undefined, {}, "x", [1, null, {}, { name: 5 }]]) assert.equal(hackageExactMatch(bad, "x"), undefined);
 });
+
+test("Hugging Face: HF_TOKEN geht nur als Authorization-Header an huggingface.co, ohne Token kein Header", async () => {
+  const seen: { url: string; headers?: Record<string, string> }[] = [];
+  const http: HttpClient = {
+    async request(url, req) {
+      seen.push({ url, headers: req?.headers });
+      return { status: 404, headers: new Headers() };
+    },
+  };
+  const ctx: CheckContext = { http, contact: "" };
+  const old = process.env.HF_TOKEN;
+  try {
+    process.env.HF_TOKEN = "  hf_testtoken  ";
+    await src("huggingface").check("zzqxkvjwabc", ctx);
+    assert.equal(seen.length, 2);
+    for (const c of seen) {
+      assert.match(c.url, /^https:\/\/huggingface\.co\//);
+      assert.equal(c.headers?.Authorization, "Bearer hf_testtoken", "Leerraum wird entfernt");
+    }
+    seen.length = 0;
+    delete process.env.HF_TOKEN;
+    await src("huggingface").check("zzqxkvjwabc", ctx);
+    assert.ok(seen.every((c) => c.headers === undefined || !("Authorization" in c.headers)));
+  } finally {
+    if (old === undefined) delete process.env.HF_TOKEN;
+    else process.env.HF_TOKEN = old;
+  }
+});
+
+test("Hugging Face: der Token landet nie im Ergebnis", async () => {
+  const old = process.env.HF_TOKEN;
+  process.env.HF_TOKEN = "hf_geheim123";
+  try {
+    const http: HttpClient = { async request() { return { status: 200, headers: new Headers() }; } };
+    const r = await src("huggingface").check("google", { http, contact: "" });
+    assert.ok(!JSON.stringify(r).includes("hf_geheim123"));
+  } finally {
+    if (old === undefined) delete process.env.HF_TOKEN;
+    else process.env.HF_TOKEN = old;
+  }
+});
