@@ -42,7 +42,7 @@ flowchart LR
 | Datei | Quellen |
 |---|---|
 | `domains.ts` | `domainSources(tlds)`: eine Quelle je Endung (`rdap:<tld>`). RDAP-Server aus dem IANA-Bootstrap oder festen Einträgen (`de`, `io`, `ch`, `li`); `at` und `eu` nur über DNS. DoH bestätigt nur „vergeben“. `DOMAIN_TLDS` (21 Endungen), `DEFAULT_DOMAIN_TLDS`, `DOH_ONLY_TLDS`. |
-| `packages.ts` | npm, PyPI, GitHub, crates.io, Homebrew (Standard); NuGet, RubyGems, Maven Central, Packagist, pub.dev, JSR, Hex.pm, CRAN, Open VSX (auf Wunsch). Je Register eine Syntaxprüfung (`invalid`). GitHub sperrt sich nach einem Rate-Limit bis zum Reset selbst. |
+| `packages.ts` | npm, PyPI, GitHub, crates.io, Homebrew (Standard); NuGet, RubyGems, Maven Central, Packagist, pub.dev, JSR, Hex.pm, CRAN, Open VSX, Hugging Face, Hackage, Terraform Registry, DEV (auf Wunsch). Je Register eine Syntaxprüfung (`invalid`). GitHub sperrt sich nach einem Rate-Limit bis zum Reset selbst. |
 | `stores-social.ts` | App Store, Google Play (Standard); F-Droid, Firefox Add-ons, Bluesky, Mastodon, Hacker News (auf Wunsch). `manualSocialLinks` liefert Links für Instagram, TikTok, X, YouTube und den Chrome Web Store. |
 | `known-names.ts` | Marken-Heuristik `known_brands` (ohne Netz, Liste aus `phonetics.ts`), Wikidata (SPARQL), GLEIF (Standard); Wikipedia und Show HN als schwache Signale (auf Wunsch). |
 

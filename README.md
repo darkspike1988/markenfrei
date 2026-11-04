@@ -35,8 +35,9 @@ Standardmäßig aktiv (Web und MCP gleich):
 | Bekannte Namen | Liste bekannter Tech-Marken (Heuristik ohne Netz: identisch, klanggleich nach Kölner Phonetik, enthalten), Wikidata (exaktes Label mit Typ Unternehmen, Marke, Software, Website, App oder Produkt), GLEIF (aktive Rechtsträger mit LEI, Namensstamm ohne Rechtsform) |
 
 Auf Wunsch („Weitere Quellen“ in der Oberfläche, `sources` in API und MCP): NuGet,
-RubyGems, Maven Central, Packagist, pub.dev, JSR, Hex.pm, CRAN, Open VSX, F-Droid,
-Firefox Add-ons, Bluesky, Mastodon (mastodon.social), Hacker News sowie Wikipedia und
+RubyGems, Maven Central, Packagist, pub.dev, JSR, Hex.pm, CRAN, Open VSX, Hugging Face
+(Organisationen und Nutzer), Hackage (auch bei anderer Schreibweise), Terraform Registry
+(Namespaces), DEV (dev.to, Nutzer und Organisationen), F-Droid, Firefox Add-ons, Bluesky, Mastodon (mastodon.social), Hacker News sowie Wikipedia und
 Show HN als schwache Signale. Für Instagram, TikTok, X, YouTube und den Chrome Web Store
 gibt es nur Links zur Prüfung von Hand.
 

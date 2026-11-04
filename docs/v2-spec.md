@@ -60,7 +60,9 @@ Standard aktiv (Web und MCP gleich):
 | known_names | bekannte Marken (Heuristik), Wikidata (SPARQL, exaktes Label mit Typ Unternehmen/Marke/Software), GLEIF (aktive Rechtsträger, exakter Name) |
 
 Optional (auf Auswahl): NuGet, RubyGems, Maven Central (`similar` statt `taken`),
-Packagist (nur mit Kontakt im User-Agent), pub.dev, JSR, Hex.pm, CRAN (crandb), Open VSX
+Packagist (nur mit Kontakt im User-Agent), pub.dev, JSR, Hex.pm, CRAN (crandb), Open VSX,
+Hugging Face (Organisation und Nutzer), Hackage (Suche für andere Schreibweisen), Terraform
+Registry (Modul- und Provider-Namespaces), DEV (Nutzer und Organisation)
 (Namespace), Firefox Add-ons (exakter Name), F-Droid (exakter Name), Bluesky,
 Mastodon (mastodon.social WebFinger), Hacker News (Nutzer, Show-HN-Suche als schwaches
 Signal), Wikipedia (schwaches Signal).
