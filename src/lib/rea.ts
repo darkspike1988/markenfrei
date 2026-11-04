@@ -10,6 +10,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { DEFAULT_CACHE_MAX, DEFAULT_CACHE_TTL_MS, cachedLookup, createTtlCache } from "@/lib/cache";
 
 const execFileAsync = promisify(execFile);
 const UA = "MarkenFrei/1.0 (+https://github.com/darkspike1988/markenfrei; App-Store-Checker)";
@@ -41,7 +42,7 @@ export type AppIdentity = {
 /**
  * Checks if a specific Bundle Identifier (e.g. "de.firma.app") is taken on Apple App Store
  */
-export async function checkAppleBundleId(bundleId: string): Promise<{
+async function fetchAppleBundleId(bundleId: string): Promise<{
   status: "available" | "taken" | "unknown";
   app?: {
     trackName: string;
@@ -83,7 +84,7 @@ export async function checkAppleBundleId(bundleId: string): Promise<{
 /**
  * Checks if a package name exists on Google Play Store
  */
-export async function checkGooglePlayPackage(packageId: string): Promise<{
+async function fetchGooglePlayPackage(packageId: string): Promise<{
   status: "available" | "taken" | "unknown";
   playUrl?: string;
 }> {
@@ -116,6 +117,19 @@ export async function checkGooglePlayPackage(packageId: string): Promise<{
     await new Promise((r) => setTimeout(r, 300));
   }
   return { status: "unknown" };
+}
+
+const cacheOpts = { ttlMs: DEFAULT_CACHE_TTL_MS, max: DEFAULT_CACHE_MAX };
+const appleCache = createTtlCache<Awaited<ReturnType<typeof fetchAppleBundleId>>>(cacheOpts);
+const playCache = createTtlCache<Awaited<ReturnType<typeof fetchGooglePlayPackage>>>(cacheOpts);
+
+/** Eindeutige Antworten werden zehn Minuten gemerkt, "unknown" nie. */
+export function checkAppleBundleId(bundleId: string) {
+  return cachedLookup(appleCache, bundleId, () => fetchAppleBundleId(bundleId), (r) => r.status !== "unknown");
+}
+
+export function checkGooglePlayPackage(packageId: string) {
+  return cachedLookup(playCache, packageId, () => fetchGooglePlayPackage(packageId), (r) => r.status !== "unknown");
 }
 
 /**

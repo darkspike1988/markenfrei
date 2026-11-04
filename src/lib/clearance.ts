@@ -11,6 +11,7 @@ import {
   type DodoDomainScore,
 } from "@/lib/scoring";
 import { dohLookup } from "@/lib/doh";
+import { DEFAULT_CACHE_MAX, DEFAULT_CACHE_TTL_MS, cachedLookup, createTtlCache } from "@/lib/cache";
 import { normalizeName } from "@/lib/name";
 import { parseTlds } from "@/lib/tlds";
 import {
@@ -125,7 +126,7 @@ export const RDAP_BASE: Record<string, string> = {
   kr: "https://rdap.nic.or.kr/domain/",
 };
 
-export async function rdapLookup(
+async function fetchRdap(
   url: string,
 ): Promise<"available" | "taken" | "unknown"> {
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -174,7 +175,7 @@ export async function checkSingleDomain(name: string, tld: string): Promise<TldC
 /**
  * Queries Wikidata Open Data API for existing companies, brands, software, or trademarks
  */
-export async function checkWikidata(
+async function fetchWikidata(
   name: string,
 ): Promise<{ hits: WikidataHit[]; ok: boolean }> {
   try {
@@ -278,7 +279,7 @@ export async function checkDuckDuckGo(name: string): Promise<DuckDuckGoHit | nul
 /**
  * Queries Apple iTunes Search API (DE App Store) for Werktitelschutz (§ 5 Abs. 3 MarkenG)
  */
-export async function checkAppleAppStore(name: string): Promise<{
+async function fetchAppleAppStore(name: string): Promise<{
   ok: boolean;
   status: "clear" | "similar" | "collision";
   hits: AppStoreHit[];
@@ -338,7 +339,7 @@ export async function checkAppleAppStore(name: string): Promise<{
 /**
  * Checks GitHub user/org handle, top GitHub repos, npm registry, and PyPI registry
  */
-export async function checkDevAndSocial(name: string): Promise<ClearanceReport["devAndSocial"]> {
+async function fetchDevAndSocial(name: string): Promise<ClearanceReport["devAndSocial"]> {
   const ghHeaders: Record<string, string> = {
     "User-Agent": MARKENFREI_UA,
     Accept: "application/vnd.github+json",
@@ -418,6 +419,37 @@ export async function checkDevAndSocial(name: string): Promise<ClearanceReport["
     golangModule: mapStatus(goRes),
     topRepos,
   };
+}
+
+// --- Cache für eindeutige Antworten (siehe lib/cache.ts) ---
+const cacheOpts = { ttlMs: DEFAULT_CACHE_TTL_MS, max: DEFAULT_CACHE_MAX };
+const rdapCache = createTtlCache<Awaited<ReturnType<typeof fetchRdap>>>(cacheOpts);
+const wikidataCache = createTtlCache<Awaited<ReturnType<typeof fetchWikidata>>>(cacheOpts);
+const appStoreCache = createTtlCache<Awaited<ReturnType<typeof fetchAppleAppStore>>>(cacheOpts);
+const devCache = createTtlCache<Awaited<ReturnType<typeof fetchDevAndSocial>>>(cacheOpts);
+
+export function rdapLookup(url: string) {
+  return cachedLookup(rdapCache, url, () => fetchRdap(url), (r) => r !== "unknown");
+}
+
+export function checkWikidata(name: string) {
+  return cachedLookup(wikidataCache, name, () => fetchWikidata(name), (r) => r.ok);
+}
+
+export function checkAppleAppStore(name: string) {
+  return cachedLookup(appStoreCache, name, () => fetchAppleAppStore(name), (r) => r.ok);
+}
+
+export function checkDevAndSocial(name: string) {
+  return cachedLookup(
+    devCache,
+    name,
+    () => fetchDevAndSocial(name),
+    (r) =>
+      [r.githubHandle, r.npmPackage, r.pypiPackage, r.cratesIo, r.homebrew, r.golangModule].every(
+        (v) => v !== "unknown",
+      ),
+  );
 }
 
 /** Fehler in der Eingabe (Name oder Endungen). Die API antwortet darauf mit 400. */
