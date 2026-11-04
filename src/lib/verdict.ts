@@ -68,13 +68,6 @@ export function buildSignals(r: ClearanceReport): Signal[] {
     });
   }
 
-  if (r.aiGroundedTm && r.aiGroundedTm.riskScore <= 6) {
-    out.push({
-      tone: r.aiGroundedTm.riskScore <= 3 ? "bad" : "warn",
-      text: r.aiGroundedTm.notes || "Websuche meldet mögliche Marken-Treffer.",
-    });
-  }
-
   const free = r.domains.filter((d) => d.status === "available");
   if (free.length === 0 && r.domains.every((d) => d.status === "taken")) {
     out.push({ tone: "warn", text: "Keine der gewählten Domains ist frei." });

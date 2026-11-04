@@ -7,6 +7,13 @@ import {
 } from "@/lib/rea";
 import { analyzeTrademarkSafety } from "@/lib/phonetics";
 
+function localInspectEnabled(): boolean {
+  return (
+    process.env.NODE_ENV !== "production" ||
+    process.env.MARKENFREI_ENABLE_LOCAL_INSPECT === "1"
+  );
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -16,6 +23,17 @@ export async function POST(req: Request) {
     let identity: AppIdentity | null = null;
 
     if (appPath) {
+      // Lesen lokaler Dateien ist nur für lokale Entwicklung gedacht. Auf einem
+      // öffentlichen Server wäre das eine Dateisystem-Sonde für jeden Aufrufer.
+      if (!localInspectEnabled()) {
+        return NextResponse.json(
+          {
+            error:
+              "Die Prüfung lokaler App-Pakete ist auf diesem Server deaktiviert. Nutze 'bundleId'.",
+          },
+          { status: 403 },
+        );
+      }
       try {
         identity = await inspectLocalAppBundle(appPath);
       } catch (err) {

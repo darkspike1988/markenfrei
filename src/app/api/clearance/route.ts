@@ -30,8 +30,6 @@ export async function POST(req: Request) {
       description: body.description,
       keywords: body.keywords,
       tlds: body.tlds,
-      provider: body.provider,
-      apiKey: body.apiKey,
     });
 
     return NextResponse.json(report);

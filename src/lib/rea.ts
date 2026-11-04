@@ -154,25 +154,38 @@ export async function auditCandidateBundleIds(
 /**
  * Inspects a local Info.plist or .app bundle using macOS plutil or XML parsing
  */
-export async function inspectLocalAppBundle(targetPath: string): Promise<AppIdentity> {
+export async function inspectLocalAppBundle(rawPath: string): Promise<AppIdentity> {
+  // Nur absolute Pfade zu .app-Paketen oder zu einer Datei namens Info.plist.
+  // Beliebige Dateien werden nicht gelesen, und Fehlertexte nennen den Pfad nicht.
+  if (!path.isAbsolute(rawPath)) {
+    throw new Error("Der Pfad muss absolut sein.");
+  }
+  const targetPath = path.normalize(rawPath).replace(/\/+$/, "");
+  const isAppBundle = targetPath.endsWith(".app");
+  const isInfoPlist = path.basename(targetPath) === "Info.plist";
+  if (!isAppBundle && !isInfoPlist) {
+    throw new Error("Nur .app-Pakete oder Info.plist-Dateien werden unterstützt.");
+  }
+
   let plistPath = targetPath;
 
   try {
     const stat = await fs.stat(/*turbopackIgnore: true*/ targetPath);
     if (stat.isDirectory()) {
-      if (targetPath.endsWith(".app")) {
-        const macosPlist = path.join(targetPath, "Contents", "Info.plist");
-        const iosPlist = path.join(targetPath, "Info.plist");
-        try {
-          await fs.access(/*turbopackIgnore: true*/ macosPlist);
-          plistPath = macosPlist;
-        } catch {
-          plistPath = iosPlist;
-        }
+      if (!isAppBundle) {
+        throw new Error("kein Paket");
+      }
+      const macosPlist = path.join(targetPath, "Contents", "Info.plist");
+      const iosPlist = path.join(targetPath, "Info.plist");
+      try {
+        await fs.access(/*turbopackIgnore: true*/ macosPlist);
+        plistPath = macosPlist;
+      } catch {
+        plistPath = iosPlist;
       }
     }
   } catch {
-    throw new Error(`Pfad nicht erreichbar: ${targetPath}`);
+    throw new Error("Pfad nicht erreichbar.");
   }
 
   // Attempt plutil -convert json on macOS
@@ -198,7 +211,12 @@ export async function inspectLocalAppBundle(targetPath: string): Promise<AppIden
     };
   } catch {
     // Fallback: Read text and extract with regex
-    const content = await fs.readFile(/*turbopackIgnore: true*/ plistPath, "utf-8");
+    let content: string;
+    try {
+      content = await fs.readFile(/*turbopackIgnore: true*/ plistPath, "utf-8");
+    } catch {
+      throw new Error("Info.plist konnte nicht gelesen werden.");
+    }
     const getTag = (key: string) => {
       const regex = new RegExp(`<key>${key}</key>\\s*<string>([^<]+)</string>`, "i");
       const match = content.match(regex);
