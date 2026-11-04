@@ -37,6 +37,10 @@ export const SourceResultSchema = z.object({
   note: z.string().optional().describe("Kurzer Hinweis"),
   evidence: z.string().optional().describe("Technischer Beleg, z. B. HTTP 404"),
   weak: z.boolean().optional().describe("Schwaches Signal: ein Treffer ergibt höchstens Gelb"),
+  retryable: z
+    .boolean()
+    .optional()
+    .describe("Nur bei unknown: vorübergehender Grund (Abfragelimit, Zeitüberschreitung). Nach einigen Sekunden erneut prüfen lohnt sich"),
 });
 
 export const TrademarkLinkSchema = z.object({

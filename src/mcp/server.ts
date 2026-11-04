@@ -160,6 +160,11 @@ export function formatReport(report: NameReport | ShortlistReport): string {
   }
   if (report.incomplete.length > 0) {
     lines.push(`Lücken: ${report.incomplete.join(", ")} (keine verwertbare Antwort, nicht als frei werten)`);
+    if (report.results.some((r) => r.retryable)) {
+      lines.push(
+        "Ein Teil der Lücken ist vorübergehend (Abfragelimit oder Zeitüberschreitung): in etwa 10 Sekunden denselben Aufruf wiederholen, es werden nur die offenen Quellen neu abgefragt.",
+      );
+    }
   }
   const links = linkLines(report.results, (r) => isHit(r) || r.status === "unknown", "- ");
   if (links.length > 0) lines.push("Nachprüfen:", ...links);

@@ -353,11 +353,12 @@ const github: Source = {
         }
         if (until > 0) {
           githubBlockedUntil = Math.max(githubBlockedUntil, until);
-          return unknownResult(
-            b,
-            res,
-            `GitHub-Rate-Limit erreicht, keine Anfrage bis ${clock(githubBlockedUntil)} Uhr`,
-          );
+          // Beleg ohne "HTTP 429/403": GitHub sperrt bis zu eine Stunde, eine kurze Wiederholung (retryable)
+          // würde nichts bringen
+          return {
+            ...unknownResult(b, res, `GitHub-Rate-Limit erreicht, keine Anfrage bis ${clock(githubBlockedUntil)} Uhr`),
+            evidence: `Rate-Limit, gesperrt bis ${new Date(githubBlockedUntil).toISOString()}`,
+          };
         }
       }
 

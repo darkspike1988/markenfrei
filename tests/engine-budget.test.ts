@@ -91,4 +91,5 @@ test("App Store: erschöpftes Apple-Budget ist unknown mit Hinweis, nie frei", a
   const second = await appstore.check("budgetname2", ctx);
   assert.equal(second.status, "unknown");
   assert.match(second.note ?? "", /Abfragelimit/);
+  assert.match(second.evidence ?? "", /^budget/, "Beleg erlaubt der Engine, das Ergebnis als wiederholbar zu markieren");
 });
