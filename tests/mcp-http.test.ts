@@ -1,6 +1,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { clearAllCaches } from "@/lib/cache";
+import { NextRequest } from "next/server";
 import { GET, POST } from "@/app/api/mcp/route";
 
 const realFetch = globalThis.fetch;
@@ -108,4 +109,21 @@ test("ungültige Eingabe im Werkzeug ist ein Werkzeugfehler mit Klartext", async
 
 test("GET wird abgelehnt (zustandsloser Server)", () => {
   assert.equal(GET().status, 405);
+});
+
+test("auch mit NextRequest (wie im echten Server) und nur Accept: application/json", async () => {
+  const res = await POST(
+    new NextRequest("http://localhost/api/mcp", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        "x-forwarded-for": "203.0.113.77",
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 9, method: "tools/list" }),
+    }),
+  );
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { result: { tools: unknown[] } };
+  assert.equal(body.result.tools.length, 5);
 });
