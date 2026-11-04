@@ -15,3 +15,10 @@ test("Fantasiewort ohne Treffer hat keine Kollision", () => {
   const a = analyzeTrademarkSafety("zzqxkvjw");
   assert.equal(a.protectedCollisions.length, 0);
 });
+
+test("Register-Links enthalten den bereinigten Namen, auch bei Umlauten", () => {
+  const links = analyzeTrademarkSafety("Müller").registryLinks;
+  assert.match(links.tmdb, /tmdb\.eu\/de\/suche\/marken\?q=mueller/);
+  assert.match(links.tmview, /basicSearch=mueller/);
+  assert.match(links.dpma, /register\.dpma\.de/);
+});
