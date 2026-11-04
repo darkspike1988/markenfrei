@@ -8,7 +8,6 @@ import {
   Check,
   Database,
   Download,
-  GearSix,
   Lightning,
   Link,
   Plus,
@@ -22,41 +21,21 @@ import {
   generateRandomOpenDataExamples,
   type OpenDataWordField,
 } from "@/lib/opendata";
-import {
-  LLM_STORAGE_KEY,
-  getDefaultConfig,
-  getProvider,
-  type LlmConfig,
-} from "@/lib/providers";
 import { ResultRow, ResultSkeleton } from "@/components/result-row";
 import { DetailPanel } from "@/components/detail-panel";
-import { SettingsDialog } from "@/components/settings-dialog";
 import { InfoModal } from "@/components/info-modal";
 
 const TLDS = ["de", "com", "app", "ai", "io", "dev"];
-
-const STYLES = [
-  { id: "brandable", label: "Kunstwort" },
-  { id: "portmanteau", label: "Wortkreuzung" },
-  { id: "compound", label: "Zwei Wörter" },
-  { id: "short", label: "Sehr kurz" },
-];
 
 const clean = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 
 type Phase = "idle" | "generating" | "checking" | "done";
 
 export default function Home() {
-  const [config, setConfig] = useState<LlmConfig>(getDefaultConfig());
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
   const [examples, setExamples] = useState<Array<{ label: string; q: string }>>(
     DEFAULT_OPEN_DATA_EXAMPLES,
   );
-  const [ollama, setOllama] = useState<{ running: boolean; models: string[] }>({
-    running: false,
-    models: [],
-  });
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -70,7 +49,6 @@ export default function Home() {
 
   // Omnibar-Eingabe (kann ein einzelner Name oder eine Projektbeschreibung sein)
   const [query, setQuery] = useState("");
-  const [style, setStyle] = useState("brandable");
   const [tlds, setTlds] = useState<string[]>(["de", "com", "app"]);
   const [maxLen, setMaxLen] = useState(10);
   const [optionsOpen, setOptionsOpen] = useState(false);
@@ -80,7 +58,6 @@ export default function Home() {
   const [total, setTotal] = useState(0);
   const [reports, setReports] = useState<ClearanceReport[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const [onlyFree, setOnlyFree] = useState(false);
   const [selected, setSelected] = useState<ClearanceReport | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
@@ -100,53 +77,6 @@ export default function Home() {
     trimmed.length >= 2 &&
     !trimmed.includes(" ") &&
     !trimmed.includes("\n");
-
-  // Gespeicherte Konfiguration aus localStorage lesen
-  useEffect(() => {
-    queueMicrotask(() => {
-      try {
-        const stored = localStorage.getItem(LLM_STORAGE_KEY);
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (parsed?.provider && getProvider(parsed.provider)) {
-            setConfig(parsed);
-          }
-        }
-      } catch {
-        /* ignore */
-      }
-    });
-  }, []);
-
-  const updateConfig = (next: LlmConfig) => {
-    setConfig(next);
-    try {
-      localStorage.setItem(LLM_STORAGE_KEY, JSON.stringify(next));
-    } catch {
-      /* private mode */
-    }
-  };
-
-  // Keyboard Shortcuts: ⌘K für Settings, Esc zum Schließen
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-        e.preventDefault();
-        setSettingsOpen((o) => !o);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
-  // Ollama Status prüfen
-  useEffect(() => {
-    if (!settingsOpen || config.provider !== "ollama") return;
-    fetch("/api/ollama-models")
-      .then((r) => r.json())
-      .then(setOllama)
-      .catch(() => setOllama({ running: false, models: [] }));
-  }, [settingsOpen, config.provider]);
 
   // Open-Data Wortideen laden, wenn Optionen geöffnet sind
   useEffect(() => {
@@ -185,8 +115,6 @@ export default function Home() {
             description: isSingleWord ? "" : trimmed,
             keywords: isSingleWord ? [] : trimmed.split(/[\s,]+/).slice(0, 5),
             tlds,
-            provider: config.provider,
-            apiKey: config.apiKey,
           }),
         });
         return res.ok ? await res.json() : null;
@@ -194,42 +122,29 @@ export default function Home() {
         return null;
       }
     },
-    [isSingleWord, trimmed, tlds, config],
+    [isSingleWord, trimmed, tlds],
   );
 
-  // Namensideen per LLM oder Open-Data generieren
+  // Namensideen deterministisch aus Open-Data-Wortfeldern und Morphem-Regeln erzeugen
   const generateIdeas = useCallback(
     async (desc: string): Promise<string[]> => {
-      const call = (provider: string) =>
-        fetch("/api/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            provider,
-            model: config.model,
-            apiKey: config.apiKey,
-            baseUrl: config.baseUrl,
-            description: desc,
-            keywords: desc.split(/[\s,]+/).slice(0, 5),
-            styles: [style],
-            maxLen,
-            count: 10,
-          }),
-        }).then(async (r) => ({ ok: r.ok, data: await r.json() }));
-
-      let res = await call(config.provider);
-      if ((!res.ok || res.data.error) && config.provider !== "opendata") {
-        setNotice(
-          `${getProvider(config.provider)?.label ?? "Das gewählte Modell"} war nicht erreichbar. Die Vorschläge stammen aus der Open-Data-Engine.`,
-        );
-        res = await call("opendata");
+      const res = await fetch("/api/opendata-words", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          keywords: desc.split(/[\s,]+/).slice(0, 5),
+          description: desc,
+          maxLen,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data || data.error) {
+        throw new Error(data?.error ?? "Generierung fehlgeschlagen");
       }
-      if (!res.ok || res.data.error) {
-        throw new Error(res.data.error ?? "Generierung fehlgeschlagen");
-      }
-      return (res.data.candidates || []).map((c: { name: string }) => clean(c.name));
+      const field = data as OpenDataWordField;
+      return field.synthesizedCandidates.slice(0, 10).map((c) => clean(c.name));
     },
-    [config, style, maxLen],
+    [maxLen],
   );
 
   // Hauptausführung (Single-Name ODER Batch-Generierung)
@@ -240,7 +155,6 @@ export default function Home() {
 
       const id = ++runId.current;
       setError(null);
-      setNotice(null);
       setReports([]);
       setSelected(null);
 
@@ -355,7 +269,6 @@ export default function Home() {
     setReports([]);
     setSelected(null);
     setError(null);
-    setNotice(null);
     setPhase("idle");
     setTotal(0);
     if (typeof window !== "undefined") {
@@ -421,10 +334,6 @@ export default function Home() {
   };
 
   const busy = phase === "generating" || phase === "checking";
-  const providerLabel =
-    config.provider === "opendata"
-      ? "Kostenlos (Open-Data)"
-      : (getProvider(config.provider)?.label.split(" (")[0] ?? "Modell");
   const pending = phase === "checking" ? Math.max(total - reports.length, 0) : 0;
 
   return (
@@ -456,22 +365,6 @@ export default function Home() {
           >
             <Database size={14} weight="bold" aria-hidden />
             <span>Infos & MCP</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setSettingsOpen(true)}
-            className="inline-flex cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-muted transition-colors hover:bg-wash hover:text-ink"
-            title="Modell konfigurieren (⌘K)"
-          >
-            {config.provider === "opendata" ? (
-              <span className="size-1.5 rounded-full bg-ok" aria-hidden />
-            ) : (
-              <GearSix size={14} weight="bold" aria-hidden />
-            )}
-            <span>{providerLabel}</span>
-            <kbd className="hidden sm:inline rounded bg-wash px-1 py-0.5 font-mono text-[10px] text-muted border border-line">
-              ⌘K
-            </kbd>
           </button>
         </div>
       </header>
@@ -626,7 +519,7 @@ export default function Home() {
             {/* Collapsible Fine-Tuning */}
             {optionsOpen && (
               <div className="fade-up mt-4 rounded-xl border border-line bg-surface/50 p-4 grid gap-4 sm:grid-cols-2 text-xs">
-                <div>
+                <div className="sm:col-span-2">
                   <span className="mb-1.5 block font-medium text-soft">
                     Domain-Endungen
                   </span>
@@ -644,30 +537,6 @@ export default function Home() {
                         }`}
                       >
                         .{t}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <span className="mb-1.5 block font-medium text-soft">
-                    Namensstil (für Ideen)
-                  </span>
-                  <div className="flex flex-wrap gap-1.5" role="radiogroup">
-                    {STYLES.map((s) => (
-                      <button
-                        key={s.id}
-                        type="button"
-                        role="radio"
-                        aria-checked={style === s.id}
-                        onClick={() => setStyle(s.id)}
-                        className={`cursor-pointer rounded px-2 py-1 transition-colors ${
-                          style === s.id
-                            ? "bg-ink text-white"
-                            : "bg-wash text-soft hover:bg-line"
-                        }`}
-                      >
-                        {s.label}
                       </button>
                     ))}
                   </div>
@@ -742,7 +611,6 @@ export default function Home() {
                           ? `Clearance-Ergebnis für „${visible[0].name}“`
                           : `${visible.length} geprüfte Vorschläge`}
                   </h2>
-                  {notice && <p className="mt-1 text-xs text-warn">{notice}</p>}
                 </div>
 
                 {reports.length > 0 && (
@@ -842,14 +710,6 @@ export default function Home() {
 
       {selected && (
         <DetailPanel report={selected} onClose={() => setSelected(null)} />
-      )}
-      {settingsOpen && (
-        <SettingsDialog
-          config={config}
-          onChange={updateConfig}
-          onClose={() => setSettingsOpen(false)}
-          ollama={ollama}
-        />
       )}
       {infoOpen && <InfoModal onClose={() => setInfoOpen(false)} />}
     </div>

@@ -1,6 +1,6 @@
 # `src/lib/` · Domain-, Linguistik- & Markenrechts-Engine
 
-Dieses Verzeichnis bildet das algorithmische Herzstück von MarkenFrei. Es implementiert zustandslose linguistische Wortfeld-Analysen, phonetische Sound-Alike-Algorithmen nach deutschem Markenrecht (§ 8 und § 9 MarkenG), deterministisches Brandability-Scoring sowie die Multi-Provider-LLM-Registrierung.
+Dieses Verzeichnis bildet das algorithmische Herzstück von MarkenFrei. Es implementiert zustandslose linguistische Wortfeld-Analysen, phonetische Sound-Alike-Algorithmen nach deutschem Markenrecht (§ 8 und § 9 MarkenG), sowie deterministisches Brandability-Scoring. Es gibt keine LLM-Anbindung.
 
 ---
 
@@ -171,17 +171,3 @@ Transparenter Preisvergleich führender Registrare ohne Lockvogel-Fallen.
 Erfasst alle 25 öffentlich genutzten Open APIs mit Provider, Endpoint, Protokoll (RDAP, DoH, REST) und Dokumentationslink.
 
 ---
-
-### I. `providers.ts` · Multi-Provider Registry
-Definiert 11 unterstützte Provider-Profile:
-1. `opendata`: Zero-Key, 100% lokal & kostenlos.
-2. `google`: Gemini 2.5 Flash / Flash Lite / Pro mit Web-Search Grounding.
-3. `deepseek`: DeepSeek Chat V3 & R1 Reasoner.
-4. `groq`: Llama 3.3 70B Versatile, Llama 3.1 8B Instant.
-5. `openrouter`: Router für Multi-Provider-Zugriff.
-6. `openai`: GPT-4o, GPT-4o Mini, GPT-4.1 Mini.
-7. `anthropic`: Claude 3.5 Haiku, Claude 3.7 Sonnet.
-8. `mistral`: Mistral Small / Large (EU-Hosting).
-9. `xai`: Grok 2.
-10. `ollama`: Lokaler HTTP-Endpunkt (`localhost:11434/v1`) für Llama 3.2, Qwen 2.5, DeepSeek-R1.
-11. `custom`: Eigener OpenAI-kompatibler Server (LM Studio, vLLM).

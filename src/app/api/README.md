@@ -1,6 +1,6 @@
 # `src/app/api/` · Backend Route Handlers & Gateway-Schicht
 
-Dieses Verzeichnis stellt die serverseitigen HTTP-Endpunkte (Next.js App Router Route Handlers) bereit. Es orchestriert parallele Hintergrund-Recherchen über autoritative RDAP-Registries, Apple iTunes, Wikidata, GitHub, Paketmanager sowie LLM-APIs.
+Dieses Verzeichnis stellt die serverseitigen HTTP-Endpunkte (Next.js App Router Route Handlers) bereit. Es orchestriert parallele Hintergrund-Recherchen über autoritative RDAP-Registries, Apple iTunes, Wikidata, GitHub, Paketmanager. Es gibt keine LLM-Aufrufe.
 
 ---
 
@@ -15,7 +15,6 @@ sequenceDiagram
     participant AppStore as Apple iTunes API
     participant Wiki as Wikidata API
     participant Dev as GitHub/npm/PyPI APIs
-    participant Gemini as Gemini Search Grounding
 
     Client->>API: POST /api/clearance { name, tlds, description, ... }
     par Parallele Verifikationen via Promise.all
@@ -26,10 +25,6 @@ sequenceDiagram
         API->>Wiki: wikidata.org/w/api.php (Bekannte Marken & Entitäten)
     and
         API->>Dev: Handle & Repo Checks (GitHub, npm, PyPI)
-    and
-        opt Gemini Key vorhanden
-            API->>Gemini: Web-Search Grounding Abfrage
-        end
     end
     API->>API: Phonetische Analyse & Matrix-Scoring berechnen
     API-->>Client: ClearanceReport JSON (Status, Domains, MarkenG, Ampel)
@@ -51,8 +46,6 @@ Führt eine vollständige Multi-Vektor-Prüfung für einen konkreten Namen durch
     description?: string;     // Projektbeschreibung für Nizza-Klassen
     keywords?: string[];      // Kernbegriffe
     tlds?: string[];          // Default: ["de", "com", "app", "ai", "io"]
-    provider?: string;
-    apiKey?: string;
   }
   ```
 
@@ -81,8 +74,6 @@ Führt eine vollständige Multi-Vektor-Prüfung für einen konkreten Namen durch
      - Prüft kanonische Identifiers (`de.{name}.app`, `com.{name}.app`, `io.{name}.app`) live gegen Apple App Store und Google Play Store.
   6. **Domain-Preisvergleich (`compareDomainPrices`):**
      - Liefert für jede TLD den günstigsten Dauerpreis (Netcup, Hetzner, Cloudflare, Porkbun) und warnt vor Lockangeboten.
-  7. **KI-Marken-Grounding (`checkGeminiGroundedTrademark`):**
-     - Optional bei Google Gemini: Nutzt `google_search` Tool-Grounding zur Erkennung real existierender, noch nicht im DPMA eingetragener Brands.
 
 - **Response:** `ClearanceReport`
 
@@ -94,7 +85,9 @@ Inspiziert Shipped-Binaries, lokale macOS/iOS `.app`-Bundles, `Info.plist`-Datei
 - **Request Body:**
   ```typescript
   {
-    appPath?: string;     // z. B. "/Applications/MyApp.app" oder Pfad zur Info.plist
+    appPath?: string;     // z. B. "/Applications/MyApp.app" oder Pfad zur Info.plist.
+                          // Nur absolute Pfade zu .app oder Info.plist. In Produktion
+                          // gesperrt (403), außer MARKENFREI_ENABLE_LOCAL_INSPECT=1.
     bundleId?: string;    // z. B. "de.firma.wachwerk" oder "com.example.app"
   }
   ```
@@ -114,30 +107,6 @@ Inspiziert Shipped-Binaries, lokale macOS/iOS `.app`-Bundles, `Info.plist`-Datei
 
 ---
 
-### C. `POST /api/generate` (`generate/route.ts`)
-Generiert markenrechtlich starke Namenskandidaten über Open-Data oder Bring-Your-Own-Key LLMs.
-
-- **Request Body:**
-  ```typescript
-  {
-    provider?: "opendata" | "google" | "anthropic" | "openai" | ...;
-    model?: string;
-    apiKey?: string;
-    baseUrl?: string;
-    brandSeed?: string;
-    description?: string;
-    keywords?: string | string[];
-    tone?: string;
-    styles?: string[];        // "brandable", "portmanteau", "neolatin", "compound", "short"
-    avoid?: string;           // Zu vermeidende Begriffe
-    maxLen?: number;          // Default: 11
-    count?: number;           // Default: 12
-    exclude?: string[];       // Bereits vorhandene Namen ausschließen
-  }
-  ```
-
----
-
 ### C. `POST /api/opendata-words` (`opendata-words/route.ts`)
 Leichtgewichtiger Endpoint für das interaktive Open-Data Wortlabor in der Benutzeroberfläche.
 - Nimmt `keywords`, `description`, `brandSeed`, `maxLen` und `avoid` entgegen.
@@ -145,13 +114,7 @@ Leichtgewichtiger Endpoint für das interaktive Open-Data Wortlabor in der Benut
 
 ---
 
-### D. `GET /api/ollama-models` (`ollama-models/route.ts`)
-Prüft die Verfügbarkeit eines lokalen Ollama-Servers auf dem Rechner des Nutzers (`http://localhost:11434/api/tags`, 1500ms Timeout).
-- Rückgabe: `{ running: boolean, models: string[] }`.
-
----
-
-### E. `POST /api/mcp` (`mcp/route.ts`)
+### D. `POST /api/mcp` (`mcp/route.ts`)
 Nativer Model Context Protocol (MCP) JSON-RPC 2.0 Endpunkt über HTTP für Remote-KI-Agenten.
 - Unterstützt Methoden: `initialize`, `tools/list`, `tools/call`.
 - Exponiert alle MarkenFrei Tools (`markenfrei_clearance_check`, `markenfrei_domain_pricing`, `markenfrei_generate_ideas`, `markenfrei_inspect_bundle`, `markenfrei_list_open_apis`).

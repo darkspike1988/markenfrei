@@ -574,7 +574,8 @@ const PRICING_DB: Record<string, DbEntry[]> = {
 export function compareDomainPrices(domain: string): TldPriceComparison | null {
   const parts = domain.toLowerCase().split(".");
   const tld = parts.length > 1 ? parts[parts.length - 1] : "de";
-  const list = PRICING_DB[tld];
+  // hasOwn: Endungen wie "constructor" oder "__proto__" dürfen keine Object-Eigenschaften treffen
+  const list = Object.hasOwn(PRICING_DB, tld) ? PRICING_DB[tld] : undefined;
 
   if (!list || list.length === 0) return null;
 

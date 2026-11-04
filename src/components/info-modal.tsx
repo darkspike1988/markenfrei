@@ -351,18 +351,18 @@ export function InfoModal({ onClose }: { onClose: () => void }) {
             <div className="rounded-xl border border-ok/20 bg-ok-bg/30 p-4 space-y-2">
               <div className="flex items-center gap-2">
                 <ShieldCheck size={18} weight="bold" className="text-ok" />
-                <h3 className="font-medium text-ink text-sm">100% Kostenlos · Ohne LLM nutzbar</h3>
+                <h3 className="font-medium text-ink text-sm">Kostenlos · Ohne KI · Regelbasiert</h3>
               </div>
               <p className="text-soft leading-relaxed">
-                Markenfrei ist für jeden kostenlos und sofort nutzbar. Die Kernprüfung erfolgt rein algorithmisch über freie Open-Data Protokolle (RDAP, DNS-over-HTTPS, offizielle Register und Store APIs). Niemand benötigt ein Abonnement, ein Benutzerkonto oder API-Keys.
+                Markenfrei ist für jeden kostenlos und sofort nutzbar. Die Kernprüfung erfolgt rein algorithmisch über freie Open-Data Protokolle (RDAP, DNS-over-HTTPS, offizielle Register und Store APIs). Es kommt kein Sprachmodell zum Einsatz: Namensideen und Urteil entstehen aus festen Regeln (Kölner Phonetik, Morphem-Bausteine, Scoring). Bei gleichen Antworten der Quellen ergibt sich dasselbe Ergebnis. Niemand benötigt ein Abonnement, ein Benutzerkonto oder API-Keys.
               </p>
             </div>
 
             <div className="rounded-xl border border-line bg-surface p-4 space-y-3">
               <h4 className="font-medium text-ink text-sm">Privatsphäre & Zero-Tracking</h4>
               <ul className="space-y-2 text-soft list-disc pl-4 leading-relaxed">
-                <li><strong>Keine Suchabfragen gespeichert:</strong> Eingegebene Namensideen werden weder in einer Datenbank gespeichert noch weiterverkauft (kein Domain-Frontrunning).</li>
-                <li><strong>Lokale Speicherung (BYOK):</strong> Falls du optionale LLM-Modelle (Gemini, Claude, Ollama) nutzen möchtest, verbleiben deine API-Keys ausschließlich verschlüsselt im Browser (`localStorage`).</li>
+                <li><strong>Keine Suchabfragen gespeichert:</strong> Markenfrei speichert eingegebene Namen nicht in einer Datenbank und verkauft sie nicht weiter.</li>
+                <li><strong>Weitergabe an Dritte:</strong> Für die Prüfung wird der Name an die jeweiligen Dienste gesendet, darunter DENIC und andere Registries, Google und Cloudflare DNS, Wikipedia, Wikidata, DuckDuckGo, Apple, Google Play, GitHub, npm und PyPI. Diese Dienste sehen deine Anfrage nach ihren eigenen Regeln.</li>
                 <li><strong>Open Source (MIT):</strong> Der gesamte Quellcode ist öffentlich auf GitHub einsehbar und auditierbar.</li>
               </ul>
             </div>

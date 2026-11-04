@@ -95,13 +95,6 @@ export type ClearanceReport = {
     golangModule: "available" | "taken" | "unknown";
     topRepos: GitHubRepoHit[];
   };
-  aiGroundedTm?: {
-    riskScore: number;
-    status: string;
-    notes: string;
-    sources: string[];
-    verifiedByWebSearch: boolean;
-  } | null;
   dodoBrandability: DodoDomainScore;
   matrixScore: {
     criteria: AgentCriteriaScores;
@@ -112,7 +105,10 @@ export type ClearanceReport = {
 };
 
 /**
- * Autoritative RDAP-Server je Endung. Verifiziert: 200 = registriert, 404 = frei.
+ * Autoritative RDAP-Server je Endung (Quelle: IANA-Bootstrap https://data.iana.org/rdap/dns.json).
+ * Gegen bekannte und frei erfundene Domains geprüft: 200 = registriert, 404 = frei.
+ * Neue Endungen nur eintragen, wenn sie im IANA-Bootstrap stehen und beide Antworten
+ * geprüft wurden. Für .jp gibt es dort keinen Eintrag, daher fehlt es hier absichtlich.
  */
 export const RDAP_BASE: Record<string, string> = {
   de: "https://rdap.denic.de/domain/",
@@ -122,10 +118,9 @@ export const RDAP_BASE: Record<string, string> = {
   dev: "https://pubapi.registry.google/rdap/domain/",
   io: "https://rdap.identitydigital.services/rdap/domain/",
   ai: "https://rdap.identitydigital.services/rdap/domain/",
-  fr: "https://rdap.afnic.fr/rdap/domain/",
-  uk: "https://rdap.nominet.uk/rdap/domain/",
-  jp: "https://rdap.jprs.jp/rdap/domain/",
-  kr: "https://rdap.krnic.or.kr/rdap/domain/",
+  fr: "https://rdap.nic.fr/domain/",
+  uk: "https://rdap.nominet.uk/uk/domain/",
+  kr: "https://rdap.nic.or.kr/domain/",
 };
 
 export async function rdapLookup(
@@ -156,7 +151,8 @@ export async function rdapLookup(
 export async function checkSingleDomain(name: string, tld: string): Promise<TldCheckResult> {
   const domain = `${name}.${tld}`;
   const registrarLinks = getRegistrarLinks(domain);
-  const base = RDAP_BASE[tld];
+  // hasOwn: verhindert Treffer auf Object-Eigenschaften wie "constructor"
+  const base = Object.hasOwn(RDAP_BASE, tld) ? RDAP_BASE[tld] : undefined;
 
   let status = base
     ? await rdapLookup(`${base}${encodeURIComponent(domain)}`)
@@ -422,51 +418,6 @@ export async function checkDevAndSocial(name: string): Promise<ClearanceReport["
   };
 }
 
-export async function checkGeminiGroundedTrademark(
-  word: string,
-  apiKey: string,
-): Promise<ClearanceReport["aiGroundedTm"]> {
-  if (!apiKey) return null;
-  const prompt = `Recherchiere im Web nach bestehenden Marken, Unternehmen oder Apps mit dem Namen "${word}" (oder klanggleichen Varianten im deutschen/EU/US Raum). Bewerte das Markenrechts- und Verwechslungsrisiko für eine neue App oder Webseite.
-Antworte NUR als kompaktes JSON-Objekt:
-{"riskScore": <Zahl 1-10, wobei 10 = sehr sicher/keine bekannten Konflikte, 1 = starker Konflikt>, "status": "clear" | "possible-conflict" | "high-risk", "notes": "<1 kurzer deutscher Satz>", "sources": ["<Gefundene Firma/Marke>", ...]}`;
-
-  try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(
-      apiKey,
-    )}`;
-    const r = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        tools: [{ google_search: {} }],
-      }),
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!r.ok) return null;
-    const j = await r.json();
-    const parts = j?.candidates?.[0]?.content?.parts || [];
-    const text = parts
-      .map((p: { text?: string }) => p.text || "")
-      .join("")
-      .replace(/```(?:json)?/gi, "")
-      .trim();
-    const match = text.match(/\{[\s\S]*\}/);
-    if (!match) return null;
-    const parsed = JSON.parse(match[0]);
-    return {
-      riskScore: Math.max(1, Math.min(10, Number(parsed.riskScore) || 7)),
-      status: String(parsed.status || "unknown"),
-      notes: String(parsed.notes || ""),
-      sources: Array.isArray(parsed.sources) ? parsed.sources.slice(0, 4) : [],
-      verifiedByWebSearch: Boolean(j?.candidates?.[0]?.groundingMetadata),
-    };
-  } catch {
-    return null;
-  }
-}
-
 export type PerformClearanceOptions = {
   name: string;
   tagline?: string;
@@ -474,8 +425,6 @@ export type PerformClearanceOptions = {
   description?: string;
   keywords?: string[];
   tlds?: string[];
-  provider?: string;
-  apiKey?: string;
 };
 
 /**
@@ -501,10 +450,6 @@ export async function performClearanceCheck(
 
   const description = String(options.description || "");
   const keywords = Array.isArray(options.keywords) ? options.keywords : [];
-  const geminiApiKey =
-    options.provider === "google" && options.apiKey
-      ? String(options.apiKey)
-      : process.env.GEMINI_API_KEY || "";
 
   // Run all live checks in parallel!
   const [
@@ -515,7 +460,6 @@ export async function performClearanceCheck(
     appStoreRaw,
     candidateBundleIds,
     devAndSocial,
-    aiGroundedTm,
   ] = await Promise.all([
     Promise.all(tlds.map((tld) => checkSingleDomain(clean, tld))),
     checkWikidata(clean),
@@ -524,7 +468,6 @@ export async function performClearanceCheck(
     checkAppleAppStore(clean),
     auditCandidateBundleIds(clean),
     checkDevAndSocial(clean),
-    geminiApiKey ? checkGeminiGroundedTrademark(clean, geminiApiKey) : Promise.resolve(null),
   ]);
 
   const wikidataHits = wikidata.hits;
@@ -579,10 +522,6 @@ export async function performClearanceCheck(
 
     if (wikipediaHit) tmRiskScore = Math.max(1, tmRiskScore - 2);
     if (duckDuckGoHit) tmRiskScore = Math.max(1, tmRiskScore - 1);
-  }
-
-  if (aiGroundedTm && typeof aiGroundedTm.riskScore === "number") {
-    tmRiskScore = Math.round((tmRiskScore + aiGroundedTm.riskScore) / 2);
   }
 
   // Compute App Store Werktitelschutz score (1..10)
@@ -656,7 +595,6 @@ export async function performClearanceCheck(
     incomplete,
     appStore,
     devAndSocial,
-    aiGroundedTm,
     dodoBrandability,
     matrixScore,
   };

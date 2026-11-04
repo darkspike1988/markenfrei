@@ -14,15 +14,12 @@ flowchart TD
         Theme["globals.css (Tailwind v4 Theme)"]
         ResultRow["components/result-row.tsx"]
         DetailPanel["components/detail-panel.tsx"]
-        SettingsDialog["components/settings-dialog.tsx"]
     end
 
     subgraph API ["Gateway & Route Handler (src/app/api)"]
         ClearanceRoute["api/clearance/route.ts"]
         ReaRoute["api/rea-inspect/route.ts (REA Bridge)"]
-        GenerateRoute["api/generate/route.ts"]
         OpenDataRoute["api/opendata-words/route.ts"]
-        OllamaRoute["api/ollama-models/route.ts"]
     end
 
     subgraph LIB ["Domain & Algorithmen (src/lib)"]
@@ -31,7 +28,6 @@ flowchart TD
         ScoringLib["scoring.ts (Brandability & Matrix)"]
         ReaLib["rea.ts (Bundle-IDs & Plist Inspector)"]
         DohLib["doh.ts (DNS-over-HTTPS Fallback)"]
-        ProvidersLib["providers.ts (Multi-Provider Registry)"]
         VerdictLib["verdict.ts (Signal- & Ampel-Logik)"]
     end
 
@@ -43,14 +39,11 @@ flowchart TD
         AppStore["Apple iTunes & Google Play Store"]
         Wikidata["Wikidata Entity Search API"]
         GitHub_npm["GitHub, npm, PyPI, Crates.io, Homebrew"]
-        LLM_APIs["Google Gemini / Anthropic / OpenAI / Ollama"]
     end
 
     Page -->|POST /api/clearance| ClearanceRoute
     Page -->|POST /api/rea-inspect| ReaRoute
-    Page -->|POST /api/generate| GenerateRoute
     Page -->|POST /api/opendata-words| OpenDataRoute
-    Page -->|GET /api/ollama-models| OllamaRoute
 
     ClearanceRoute --> PhoneticsLib
     ClearanceRoute --> ScoringLib
@@ -66,10 +59,6 @@ flowchart TD
     ReaRoute --> PhoneticsLib
     ReaRoute --> AppStore
 
-    GenerateRoute --> OpenDataLib
-    GenerateRoute --> ProvidersLib
-    GenerateRoute --> LLM_APIs
-
     OpenDataRoute --> OpenDataLib
     OpenDataLib --> OpenThesaurus
     OpenDataLib --> Datamuse
@@ -82,8 +71,8 @@ flowchart TD
 | Pfad | Typ | Verantwortung |
 |---|---|---|
 | [`app/`](file:///Users/michaelkatschko/Projects/MarkenFrei/src/app) | UI & Routing | Next.js App Router Root mit Layouts, Pages, Modals und Tailwind-Design-Tokens. |
-| [`app/api/`](file:///Users/michaelkatschko/Projects/MarkenFrei/src/app/api) | API-Gateway | Server-Side Route Handlers für parallele Multi-Source-Prüfungen und LLM-Aufrufe. |
-| [`components/`](file:///Users/michaelkatschko/Projects/MarkenFrei/src/components) | UI-Komponenten | Reduzierte Komponenten: `ResultRow`, `DetailPanel`, `SettingsDialog`. |
+| [`app/api/`](file:///Users/michaelkatschko/Projects/MarkenFrei/src/app/api) | API-Gateway | Server-Side Route Handlers für parallele Multi-Source-Prüfungen und regelbasierte Namensgenerierung. |
+| [`components/`](file:///Users/michaelkatschko/Projects/MarkenFrei/src/components) | UI-Komponenten | Reduzierte Komponenten: `ResultRow`, `DetailPanel`, `InfoModal`. |
 | [`lib/`](file:///Users/michaelkatschko/Projects/MarkenFrei/src/lib) | Domain Core | Zustandslose Algorithmen: Kölner Phonetik, Nizza-Klassen, Open-Data-Morpheme, Scoring, Verdicts. |
 
 ---
@@ -93,7 +82,7 @@ flowchart TD
 Die Schichten kommunizieren über streng typisierte TypeScript-Verträge:
 
 - **Path Alias:** `@/*` ist in `tsconfig.json` als `./src/*` gemappt.
-- **Zustandsspeicherung:** Lokale Persistenz von Provider-Konfigurationen und API-Schlüsseln erfolgt im Browser via `localStorage` unter dem Schlüssel `markenfrei.llm.v1`.
+- **Zustandsspeicherung:** Der Server speichert nichts. Der Browser hält keinen Zustand außer der URL (`?q=`) für teilbare Ergebnisse.
 - **Farb- & Token-System (`app/globals.css`):**
   - `--color-canvas: #fbfbfa` / `--color-surface: #ffffff`
   - `--color-ink: #111111` / `--color-muted: #787774`
