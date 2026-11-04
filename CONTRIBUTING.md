@@ -30,6 +30,10 @@ Wir legen Wert auf einen respektvollen, konstruktiven und inklusiven Umgang.
 
 * `src/lib/opendata.ts`: Schnittstellen zu OpenThesaurus.de, Datamuse API und Morphem-Synthesizer.
 * `src/lib/phonetics.ts`: Kölner Phonetik, Soundex, phonetische Zwillinge, § 8 MarkenG Freihaltebedürfnis & Nizza-Klassen Mapping.
+* `tests/`: Offline-Tests mit `node:test` (`npm test`). Netzwerk wird gestubbt, die Uhr injiziert.
+* `src/lib/name.ts`, `src/lib/tlds.ts`: Namensnormalisierung (Umlaute) und unterstützte Endungen.
+* `src/lib/rate-limit.ts`, `src/lib/cache.ts`: Limit pro IP und Cache für eindeutige Quellenantworten.
+* `src/lib/public-report.ts`: stabiles Berichtsschema für JSON-Export und MCP.
 * `src/lib/scoring.ts`: Kombinierter 0–100 Clearance-Score & dodomains Brandability Breakdown.
 * `src/app/api/clearance/route.ts`: Parallele Clearance-Pipeline (RDAP, DNS, App Store, Wikidata, npm, PyPI).
 * `src/app/api/opendata-words/route.ts`: Regelbasierte Namensgenerierung aus Open-Data-Wortfeldern (ohne LLM).

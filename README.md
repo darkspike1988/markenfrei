@@ -8,6 +8,8 @@
 
 Das Tool prüft Namen und App-Identitäten in Echtzeit gegen **Marken-Kollisionen, phonetische Zwillinge (§ 9 MarkenG), deutsches Freihaltebedürfnis (§ 8 MarkenG), Apple & Google Play Werktitelschutz (§ 5 Abs. 3 MarkenG), autoritative Registries (Europa, Amerika, Asien), DoH, Enzyklopädien (Wikipedia & DuckDuckGo), globale Entwickler-Namensräume (GitHub, npm, PyPI, Crates.io, Homebrew, Go Proxy) und liefert einen transparenten Preisvergleich für europäische und amerikanische Hoster ohne Lockvogel-Fallen**.
 
+> **Grenzen:** Markenfrei prüft Domains, App Stores, Paketnamen und bekannte Namen und nutzt für Marken eine Heuristik mit bekannten Marken. **Die Markenregister (DPMA, EUIPO, WIPO, USPTO) werden nicht abgefragt**, der Bericht verlinkt sie. Eine grüne Ampel heißt nicht, dass ein Name als Marke frei ist. Warum keine Registerabfrage möglich ist, steht in [docs/trademark-registers.md](docs/trademark-registers.md).
+
 **Was geplant ist, was schon geprüft wird und wo die Grenzen liegen:** siehe [ROADMAP.md](ROADMAP.md).
 
 Inspiriert von wegweisenden GitHub-Projekten wie `facundoolano/app-store-scraper`, `DunlapCoddingPC/pyUSPTO`, `r13i/dodomains`, `faizul666/domain-search-agent` und REA (Reverse Engineering Anything).
@@ -137,13 +139,19 @@ Oder lokal aus dem Repository:
 ```
 
 #### Bereitgestellte MCP-Tools:
-1. `markenfrei_clearance_check`: Vollständige Prüfung auf Markenrecht (§ 8, § 9), Phonetik, App Stores (§ 5 Abs. 3 MarkenG), Domains (.de, .com, .app) und GitHub/npm.
+1. `markenfrei_clearance_check`: Vorprüfung auf Domains, App Stores (§ 5 Abs. 3 MarkenG), Paketnamen und bekannte Namen, dazu Phonetik und Freihaltebedürfnis (§ 8 MarkenG) als Heuristik. Die Markenregister werden nicht abgefragt.
 2. `markenfrei_domain_pricing`: Vergleicht Netcup, Hetzner, Cloudflare Wholesale & warnt vor 1-€-Lockvogelangeboten.
 3. `markenfrei_generate_ideas`: Generiert Kunstwörter & Portmanteaus aus Open-Data Wortfeldern (OpenThesaurus & Datamuse).
 4. `markenfrei_inspect_bundle`: Prüft Reverse-DNS App-Bundle-IDs (`de.app.name`) auf iOS App Store & Android Play Store.
 5. `markenfrei_list_open_apis`: Liefert das Inventar aller Quellen mit Angabe, ob sie abgefragt oder nur verlinkt werden.
 
-Zusätzlich steht ein nativer HTTP JSON-RPC Endpunkt unter `POST /api/mcp` zur Verfügung.
+Remote steht derselbe Server unter `POST /api/mcp` bereit (MCP Streamable HTTP, zustandslos, Antworten als JSON). Beispiel für Claude Code:
+
+```bash
+claude mcp add --transport http markenfrei https://markenfrei.app/api/mcp
+```
+
+`markenfrei_clearance_check` liefert zusätzlich `structuredContent` im stabilen Schema `PublicReport` (siehe `src/lib/public-report.ts`), das auch der JSON-Export der Oberfläche nutzt.
 
 ---
 
@@ -198,11 +206,12 @@ docker compose up -d --build
 
 #### Sicherheitsrelevante Umgebungsvariablen
 
-Markenfrei braucht keine API-Keys. Optional:
+Markenfrei braucht keine API-Keys. Alle Variablen sind optional, eine Vorlage steht in [`.env.example`](.env.example):
 
 | Variable | Wirkung |
 |---|---|
-| `GITHUB_TOKEN` | Höheres Rate-Limit für die GitHub-Abfragen. Ohne Token funktioniert die Prüfung weiterhin. |
+| `GITHUB_TOKEN` | Höheres Rate-Limit für die GitHub-Abfragen (ohne Token 60 pro Stunde, 10 Suchen pro Minute je IP). Ohne Token funktioniert die Prüfung weiterhin. |
+| `MARKENFREI_CACHE_TTL_SEC` | Lebensdauer des Caches für eindeutige Quellenantworten in Sekunden (Standard 600, `0` schaltet ihn aus). |
 | `MARKENFREI_RATE_LIMIT` | Anfragen pro Minute und IP für alle öffentlichen Routen (Standard 60). Der Zähler gilt pro Serverprozess, bei mehreren Instanzen zusätzlich am Reverse-Proxy begrenzen. Die IP kommt aus `x-forwarded-for`, das nur hinter einem vertrauenswürdigen Proxy verlässlich ist. |
 | `MARKENFREI_ENABLE_LOCAL_INSPECT=1` | Erlaubt `appPath` in `/api/rea-inspect` (liest lokale `.app`-Pakete und `Info.plist`). In Produktion standardmäßig gesperrt, nur für lokalen Betrieb sinnvoll. |
 
