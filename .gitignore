@@ -20,6 +20,10 @@
 # production
 /build
 
+# MCP-Paket (npm run build:mcp, npm pack)
+/mcp/dist/
+*.tgz
+
 # misc
 .DS_Store
 *.pem

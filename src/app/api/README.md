@@ -1,120 +1,92 @@
-# `src/app/api/` · Backend Route Handlers & Gateway-Schicht
+# `src/app/api/`: HTTP-Routen
 
-Dieses Verzeichnis stellt die serverseitigen HTTP-Endpunkte (Next.js App Router Route Handlers) bereit. Es orchestriert parallele Hintergrund-Recherchen über autoritative RDAP-Registries, Apple iTunes, Wikidata, GitHub, Paketmanager. Es gibt keine LLM-Aufrufe.
+Drei Route Handler, alle nur `POST`. Keine LLM-Aufrufe, keine Speicherung von Anfragen.
+Jede Route geht durch `guardRequest` aus `src/lib/rate-limit.ts` (Standard 60 Einheiten pro
+Minute und IP). Bei Überschreitung kommt `429` mit `Retry-After`.
 
----
-
-## 1. Endpunkt-Übersicht
+| Route | Zweck | Kosten fürs Rate-Limit |
+|---|---|---|
+| `POST /api/check` | Prüfung eines Namens oder einer Shortlist für die Oberfläche | Anzahl der Namen |
+| `POST /api/mcp` | MCP über Streamable HTTP, derselbe Server wie bei stdio | Anzahl der Namen bei `markenfrei_check_names`, sonst 1 |
+| `POST /api/opendata-words` | Wortfeld und regelbasierte Vorschläge für „Keine Idee?“ | 1 |
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Client as MarkenFrei Dashboard
-    participant API as /api/clearance
-    participant RDAP as Autoritative RDAP-Server
-    participant AppStore as Apple iTunes API
-    participant Wiki as Wikidata API
-    participant Dev as GitHub/npm/PyPI APIs
+    actor Client as Oberfläche oder Agent
+    participant Route as /api/check bzw. /api/mcp
+    participant Engine as src/lib/engine (checkNames)
+    participant Quellen as Offene Schnittstellen
 
-    Client->>API: POST /api/clearance { name, tlds, description, ... }
-    par Parallele Verifikationen via Promise.all
-        API->>RDAP: Registry Lookup (.de, .com, .app, .io, .ai)
-    and
-        API->>AppStore: itunes.apple.com/search (Werktitel § 5 MarkenG)
-    and
-        API->>Wiki: wikidata.org/w/api.php (Bekannte Marken & Entitäten)
-    and
-        API->>Dev: Handle & Repo Checks (GitHub, npm, PyPI)
+    Client->>Route: POST (JSON)
+    Route->>Route: Größe, Schema, Rate-Limit prüfen
+    Route->>Engine: checkNames(names, { tlds, namespaces, sources })
+    par je Quelle, höchstens 8 s
+        Engine->>Quellen: RDAP, Register, Stores, Wikidata, GLEIF ...
     end
-    API->>API: Phonetische Analyse & Matrix-Scoring berechnen
-    API-->>Client: ClearanceReport JSON (Status, Domains, MarkenG, Ampel)
+    Engine-->>Route: { ranking, reports }
+    Route-->>Client: JSON (Cache-Control: no-store bei /api/check)
 ```
 
 ---
 
-## 2. Endpunkt-Spezifikationen
+## `POST /api/check` (`check/route.ts`)
 
-### A. `POST /api/clearance` (`clearance/route.ts`)
-Führt eine vollständige Multi-Vektor-Prüfung für einen konkreten Namen durch.
+Eingabe (mit zod geprüft):
 
-- **Request Body:**
-  ```typescript
-  {
-    name: string;             // z. B. "wachwerk"
-    tagline?: string;
-    category?: string;
-    description?: string;     // Projektbeschreibung für Nizza-Klassen
-    keywords?: string[];      // Kernbegriffe
-    tlds?: string[];          // Default: ["de", "com", "app", "ai", "io"]
-  }
-  ```
+```json
+{
+  "names": ["wachwerk", "fokusnova"],
+  "tlds": ["de", "com"],
+  "namespaces": ["domains", "packages"],
+  "sources": ["npm", "nuget"]
+}
+```
 
-- **Parallele Prüf-Module:**
-  1. **Domain-Verfügbarkeit (`checkSingleDomain`):**
-     - Fragt autoritative RDAP-Server ab:
-       - `.de`: `https://rdap.denic.de/domain/{domain}`
-       - `.com` / `.net`: `https://rdap.verisign.com/com/v1/domain/{domain}`
-       - `.app` / `.dev`: `https://pubapi.registry.google/rdap/domain/{domain}`
-       - `.io` / `.ai`: `https://rdap.identitydigital.services/rdap/domain/{domain}`
-     - Status: `200..299` = `taken`, `404` = `available`, sonst `unknown` (mit Retry bei Rate-Limits).
-     - Erzeugt Direktlinks zu INWX, IONOS, Namecheap und Porkbun.
-  2. **Apple App Store Werktitelschutz (`checkAppleAppStore`):**
-     - Fragt die deutsche iTunes-Schnittstelle ab (`https://itunes.apple.com/search?term={name}&country=de&entity=software&limit=5`).
-     - Extrahiert den App-Haupttitel vor Doppelpunkt oder Bindestrich.
-     - Vergleicht exakt und über Kölner Phonetik.
-     - Status: `"clear"` | `"similar"` | `"collision"` (§ 5 Abs. 3 MarkenG).
-  3. **Wissensdatenbanken & Enzyklopädie:**
-     - **Wikidata API:** Fragt `https://www.wikidata.org/w/api.php` nach bekannten Marken und Unternehmen ab.
-     - **Wikipedia REST API:** Fragt `https://de.wikipedia.org/api/rest_v1/page/summary/{name}` nach bestehenden Artikeln ab.
-     - **DuckDuckGo Instant Answer:** Prüft `https://api.duckduckgo.com/?q={name}&format=json` auf Zero-Click-Entitäten.
-  4. **Entwickler- & Paket-Namensräume (`checkDevAndSocial`):**
-     - Prüft `api.github.com/users/{name}` und sucht Repositories mit hoher Star-Anzahl.
-     - Prüft `registry.npmjs.org/{name}`, `pypi.org/pypi/{name}/json`, `crates.io/api/v1/crates/{name}`, `formulae.brew.sh/api/formula/{name}.json` und `proxy.golang.org/{name}/@v/list`.
-  5. **Mobile App Bundle-IDs & Werktitelschutz (`auditCandidateBundleIds`):**
-     - Prüft kanonische Identifiers (`de.{name}.app`, `com.{name}.app`, `io.{name}.app`) live gegen Apple App Store und Google Play Store.
-  6. **Domain-Preisvergleich (`compareDomainPrices`):**
-     - Liefert für jede TLD den günstigsten Dauerpreis (Netcup, Hetzner, Cloudflare, Porkbun) und warnt vor Lockangeboten.
+- `names`: 1 bis 10 Texte, Pflicht.
+- `tlds`, `namespaces`, `sources`: optional. Ohne Angabe gelten die Standardwerte der Engine
+  (Endungen `de`, `com`, `dev`, `app`, `io`; Namensräume `domains`, `packages`, `stores`,
+  `known_names`).
+- `sources` ersetzt die Standardauswahl außerhalb von Domains. Wer Zusatzquellen will, schickt
+  die gewünschten Standardquellen mit (so macht es die Oberfläche).
 
-- **Response:** `ClearanceReport`
+Ausgabe: `{ "ranking": ShortlistEntry[], "reports": NameReport[] }` aus `checkNames`.
+`NameReport` hat `schemaVersion: 2`, `verdict`, `results` (ein `SourceResult` je Quelle),
+`incomplete`, `trademark` und `manualLinks`. Die Antwort trägt `Cache-Control: no-store`.
+
+Fehler, jeweils `{ "error": "<deutsche Meldung>" }`:
+
+| Status | Fall |
+|---|---|
+| 400 | kaputtes JSON, falsche Typen, keine oder mehr als 10 Namen, unbekannte Endung, Quelle oder Namensraum, ungültiger Name |
+| 413 | Body größer als 16 KB (auch ohne `Content-Length`, der Body wird beim Lesen gezählt) |
+| 429 | Rate-Limit erreicht |
+| 500 | unerwarteter Fehler, allgemeine Meldung |
 
 ---
 
-### B. `POST /api/rea-inspect` (`rea-inspect/route.ts`)
-Inspiziert Shipped-Binaries, lokale macOS/iOS `.app`-Bundles, `Info.plist`-Dateien oder mobile Bundle-IDs unter Einbindung der REA-Architektur.
+## `POST /api/mcp` (`mcp/route.ts`)
 
-- **Request Body:**
-  ```typescript
-  {
-    appPath?: string;     // z. B. "/Applications/MyApp.app" oder Pfad zur Info.plist.
-                          // Nur absolute Pfade zu .app oder Info.plist. In Produktion
-                          // gesperrt (403), außer MARKENFREI_ENABLE_LOCAL_INSPECT=1.
-    bundleId?: string;    // z. B. "de.firma.wachwerk" oder "com.example.app"
-  }
-  ```
-- **Funktionsweise:**
-  1. Extrahiert App-Identität (`bundleId`, `displayName`, `version`, `minOsVersion`) über natives `/usr/bin/plutil` oder XML-Parsing.
-  2. Prüft die extrahierte Bundle-ID parallel auf Apple App Store und Google Play Store.
-  3. Führt sofort eine markenrechtliche Schutzfähigkeits- und Kollisionsprüfung für den App-Titel durch (§ 5 & § 9 MarkenG).
-- **Response:**
-  ```json
-  {
-    "identity": { "bundleId": "...", "displayName": "...", "sourceType": "local-plist" },
-    "stores": { "appleAppStore": { "status": "..." }, "googlePlay": { "status": "..." } },
-    "trademark": { "cleanName": "...", "niceClasses": [...], "officialFees": {...} },
-    "verdict": "frei" | "kollision" | "markenkonflikt"
-  }
-  ```
+Zustandsloser MCP-Endpunkt (`WebStandardStreamableHTTPServerTransport`, Antworten als JSON).
+Der Server kommt aus `src/mcp/server.ts`, damit stdio und HTTP dieselben vier Tools haben.
+
+Prüfungen in dieser Reihenfolge:
+
+1. **Origin:** fehlt der Header, ist der Aufruf erlaubt. Sonst nur der eigene Host (`Host`,
+   `x-forwarded-host`), `localhost`, `127.0.0.1` und die Einträge aus
+   `MARKENFREI_ALLOWED_ORIGINS`. Andernfalls `403` mit JSON-RPC-Fehler `-32000`.
+2. **Größe:** Body höchstens 64 KB, sonst `413` mit `-32600`.
+3. **Rate-Limit:** Kosten wie in der Tabelle oben.
+4. **Batch:** ein JSON-Array wird mit `400` und `-32600` abgelehnt.
+5. Kaputtes JSON beantwortet der Transport mit `-32700`.
+
+`GET` liefert `405`.
 
 ---
 
-### C. `POST /api/opendata-words` (`opendata-words/route.ts`)
-Leichtgewichtiger Endpoint für das interaktive Open-Data Wortlabor in der Benutzeroberfläche.
-- Nimmt `keywords`, `description`, `brandSeed`, `maxLen` und `avoid` entgegen.
-- Gibt das strukturierte `OpenDataWordField` mit Live-Synonymen und Kunstwörtern zurück.
+## `POST /api/opendata-words` (`opendata-words/route.ts`)
 
----
-
-### D. `POST /api/mcp` (`mcp/route.ts`)
-Nativer Model Context Protocol (MCP) JSON-RPC 2.0 Endpunkt über HTTP für Remote-KI-Agenten.
-- Unterstützt Methoden: `initialize`, `tools/list`, `tools/call`.
-- Exponiert alle MarkenFrei Tools (`markenfrei_clearance_check`, `markenfrei_domain_pricing`, `markenfrei_generate_ideas`, `markenfrei_inspect_bundle`, `markenfrei_list_open_apis`).
+Eingabe: `{ "keywords": ["schicht", "plan"] }` (Liste oder kommagetrennter Text), optional
+`description`, `brandSeed`, `maxLen` (Standard 11) und `avoid`. Ausgabe ist das
+`OpenDataWordField` aus `src/lib/opendata.ts`, darin `synthesizedCandidates`. Die Vorschläge
+sind regelbasiert und ungeprüft; die Oberfläche prüft sie erst auf Klick über `/api/check`.

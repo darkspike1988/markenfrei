@@ -1,0 +1,36 @@
+{
+  "name": "markenfrei-mcp",
+  "version": "0.2.0",
+  "description": "MCP-Server für Namensprüfung: Domains, Paketregister, App Stores und bekannte Namen deterministisch in offenen Quellen prüfen, Markenrecherche vorbereiten. Kein LLM, keine Konten, keine Speicherung der Anfragen.",
+  "mcpName": "app.markenfrei/mcp",
+  "type": "module",
+  "bin": {
+    "markenfrei-mcp": "dist/markenfrei-mcp.mjs"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "namensprüfung",
+    "domain",
+    "marke",
+    "trademark",
+    "naming"
+  ],
+  "license": "MIT",
+  "homepage": "https://markenfrei.app",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/darkspike1988/markenfrei.git",
+    "directory": "mcp"
+  },
+  "bugs": {
+    "url": "https://github.com/darkspike1988/markenfrei/issues"
+  }
+}

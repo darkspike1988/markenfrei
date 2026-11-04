@@ -1,173 +1,70 @@
-# `src/lib/` · Domain-, Linguistik- & Markenrechts-Engine
+# `src/lib/`: Engine und Hilfsmodule
 
-Dieses Verzeichnis bildet das algorithmische Herzstück von MarkenFrei. Es implementiert zustandslose linguistische Wortfeld-Analysen, phonetische Sound-Alike-Algorithmen nach deutschem Markenrecht (§ 8 und § 9 MarkenG), sowie deterministisches Brandability-Scoring. Es gibt keine LLM-Anbindung.
+Hier liegt die Prüflogik von Markenfrei. Oberfläche, `/api/check` und der MCP-Server rufen
+dieselben Funktionen auf; es gibt keine zweite Implementierung. Kein LLM, keine
+Speicherung von Anfragen außer dem kurzen Cache im Arbeitsspeicher.
+
+Verbindlich ist [docs/v2-spec.md](../../docs/v2-spec.md).
 
 ---
 
-## 1. Modul-Übersicht & Datenfluss
+## Datenfluss einer Prüfung
 
 ```mermaid
 flowchart LR
-    subgraph Inputs ["Eingaben"]
-        Keywords["Keywords & Beschreibung"]
-        Name["Kandidaten-Name"]
-    end
-
-    subgraph OpenData ["opendata.ts"]
-        OT["fetchOpenThesaurus()"]
-        DM["fetchDatamuse()"]
-        Synth["Morphem- & Portmanteau-Synthese"]
-    end
-
-    subgraph Phonetics ["phonetics.ts"]
-        KP["koelnerPhonetik()"]
-        SDX["soundex()"]
-        LEV["levenshtein()"]
-        Twins["generatePhoneticTwins()"]
-        TMSafety["analyzeTrademarkSafety()"]
-        Nice["Nizza-Klassen & DPMA-Query"]
-    end
-
-    subgraph Scoring ["scoring.ts"]
-        Dodo["scoreDodoBrandability()"]
-        Matrix["computeWeightedClearanceScore()"]
-    end
-
-    subgraph Verdict ["verdict.ts"]
-        Signals["buildSignals()"]
-    end
-
-    Keywords --> OT & DM
-    OT & DM --> Synth
-    Name --> KP & SDX & LEV & Twins
-    KP & SDX & LEV & Twins --> TMSafety
-    TMSafety --> Nice
-    Name --> Dodo
-    TMSafety & Dodo --> Matrix
-    Matrix & TMSafety --> Signals
+    Input["Name (Rohtext)"] --> Norm["name.ts: normalizeName"]
+    Norm --> Resolve["check.ts: resolveSources"]
+    Resolve --> Sources["sources/*: eine Quelle je Ziel"]
+    Sources -->|ctx.http| Http["http.ts: Semaphor, Bündelung, Timeout, Deadline"]
+    Http --> Ext["Offene Schnittstellen (RDAP, Register, Stores, Wikidata, GLEIF ...)"]
+    Sources --> Cache["cache.ts: nur eindeutige Ergebnisse"]
+    Sources --> Verdict["verdict.ts: computeVerdict"]
+    Norm --> TM["trademark-prep.ts: ohne Netz"]
+    Verdict --> Report["NameReport (schemaVersion 2)"]
+    TM --> Report
 ```
 
 ---
 
-## 2. Modul-Spezifikationen & Schnittstellen
+## `engine/`
 
-### A. `opendata.ts` · Lexikalische Open-Data-Engine
-Ermöglicht Namensgenerierung und semantische Assoziationen **ohne API-Key** durch Abfrage öffentlich zugänglicher Sprachkorpora.
+| Datei | Inhalt |
+|---|---|
+| `check.ts` | `checkName(input, opts)` und `checkNames(inputs, opts)` liefern `NameReport` bzw. `{ ranking, reports }`. `resolveSources` bestimmt die Quellen aus `namespaces`, `tlds` und `sources`. Grenzwerte: `MAX_NAMES` (10), `MAX_TLDS` (8), Deadline 8 s. Ungültige Eingaben werfen `CheckInputError` mit deutscher Meldung. `STATIC_SOURCES` listet alle Quellen außer Domains. |
+| `types.ts` | Vertrag: `Status` (`taken`, `not_found`, `similar`, `invalid`, `unknown`), `Namespace`, `Source`, `SourceResult` (mit `weak` für schwache Signale), `HttpClient`. |
+| `verdict.ts` | `computeVerdict`: Rot bei `taken` (nicht schwach) oder `invalid`, Grün nur wenn alle Quellen `not_found` melden, sonst Gelb. `rankReports` sortiert eine Shortlist. `VERDICT_LABEL`, `STATUS_LABEL`. |
+| `http.ts` | `createHttpClient`: höchstens 4 gleichzeitige Anfragen pro Host, gleiche gleichzeitige Anfragen werden gebündelt, 5 s pro Anfrage, gemeinsame Deadline, Antwortkörper höchstens `maxBytes` (Standard 512 KB). `buildUserAgent` erzeugt `Markenfrei/2.0 (+https://markenfrei.app; <Kontakt>)`. |
+| `trademark-prep.ts` | `trademarkPrep(name, opts)`: Registerlinks (Prüfdatum in `TRADEMARK_LINKS_CHECKED`), DPMA-Expertensuchstring, Schreibvarianten, Klassenvorschlag, Checkliste. Kein Netz. Die Belege zu jedem Link stehen im Kopfkommentar. |
+| `report-schema.ts` | zod-Schemas für `NameReport`, `SourceResult`, `TrademarkPrep` und `ShortlistEntry`, genutzt als MCP-`outputSchema`. Ein Typabgleich beim Übersetzen hält sie mit den Engine-Typen gleich. |
 
-- **`discoverOpenDataWords(params): Promise<OpenDataWordField>`**
-  - **OpenThesaurus.de API:** Fragt synset-basierte Synonyme und Assoziationen über `https://www.openthesaurus.de/synonyme/search?q={term}&format=application/json&similar=true` ab (`timeout: 3500ms`).
-  - **Datamuse / WordNet API:** Ruft semantisch verwandte Begriffe (`ml={query}`) und phonetisch/assoziative Trigger (`rel_trg={trigger}`) ab (`timeout: 3500ms`).
-  - **Morphem- & Portmanteau-Synthesizer:**
-    - Extrahiert 3–5-stellige Konsonant-Stämme aus den Ergebnissen.
-    - Kombiniert Stämme mit 16 geschützten Brand-Suffixen (`-ora`, `-vio`, `-vela`, `-nova`, `-luma`, `-kura`, `-takt`, `-flux`, etc.).
-    - Erzeugt Portmanteau-Kreuzungen mit Vokal-Brücken ("o").
-    - Verknüpft Neo-Latein-Präfixe (`velo-`, `krono-`, `lumi-`, `prismo-`, etc.).
-    - Filtert unartikulierte Konsonantenketten (`/[^aeiouy]{4,}/`) und Namen außerhalb von 4 bis `maxLen` Zeichen.
+### `engine/sources/`
 
----
+| Datei | Quellen |
+|---|---|
+| `domains.ts` | `domainSources(tlds)`: eine Quelle je Endung (`rdap:<tld>`). RDAP-Server aus dem IANA-Bootstrap oder festen Einträgen (`de`, `io`, `ch`, `li`); `at` und `eu` nur über DNS. DoH bestätigt nur „vergeben“. `DOMAIN_TLDS` (21 Endungen), `DEFAULT_DOMAIN_TLDS`, `DOH_ONLY_TLDS`. |
+| `packages.ts` | npm, PyPI, GitHub, crates.io, Homebrew (Standard); NuGet, RubyGems, Maven Central, Packagist, pub.dev, JSR, Hex.pm, CRAN, Open VSX (auf Wunsch). Je Register eine Syntaxprüfung (`invalid`). GitHub sperrt sich nach einem Rate-Limit bis zum Reset selbst. |
+| `stores-social.ts` | App Store, Google Play (Standard); F-Droid, Firefox Add-ons, Bluesky, Mastodon, Hacker News (auf Wunsch). `manualSocialLinks` liefert Links für Instagram, TikTok, X, YouTube und den Chrome Web Store. |
+| `known-names.ts` | Marken-Heuristik `known_brands` (ohne Netz, Liste aus `phonetics.ts`), Wikidata (SPARQL), GLEIF (Standard); Wikipedia und Show HN als schwache Signale (auf Wunsch). |
 
-### B. `phonetics.ts` · Markenrecht & Phonetik
-Implementiert die juristische Vorprüfung nach deutschem Markenrecht (§ 8, § 9 MarkenG).
-
-- **`koelnerPhonetik(input: string): string`:**
-  - Offizieller Algorithmus nach Hans Joachim Postel (1969).
-  - Wandelt deutsche Umlaute und Sonderzeichen um (`ä->a`, `ö->o`, `ü->u`, `ß->ss`, `ph->f`).
-  - Bildet Buchstaben auf Ziffern 0–8 basierend auf Kontext ab (z. B. Initiales `c` vor `a,h,k,l,o,q,r,u,x` = 4, sonst 8; `d,t` vor `c,s,z` = 8, sonst 2; `x` = 48 oder 8).
-  - Fasst benachbarte Duplikate zusammen und entfernt interne Nullen (`0`).
-- **`soundex(input: string): string`:**
-  - Internationaler 4-Zeichen Sound-Code für englischsprachigen Klangvergleich.
-- **`levenshtein(a: string, b: string): number`:**
-  - Exakte Matrix-Distanz zur Identifizierung von Tippfehler-Verwechslungen.
-- **`generatePhoneticTwins(word: string): string[]`:**
-  - Generiert systematische Schreibvarianten, nach denen Markenprüfer suchen: `k <-> c`, `v <-> f`, `ph -> f`, `z <-> s`, `ai <-> ei`, `y <-> i`, `x <-> ks`, `qu -> kw`.
-- **`analyzeTrademarkSafety(rawName, description, keywords): TrademarkAnalysis`:**
-  - **Kollisionswächter:** Prüft gegen `PROTECTED_TECH_BRANDS` (80+ Tech-/SaaS-Marken wie Apple, Google, Klarna, Linear, Stripe, Notion). Erkennt exakte Treffer, Substrings, identische Kölner-Phonetik-Codes und `Levenshtein <= 1`.
-  - **§ 8 Abs. 2 MarkenG (Freihaltebedürfnis / Unterscheidungskraft):** Gleicht mit 38 Gattungswurzeln ab (`app`, `tool`, `planer`, `rechner`, `direct`, etc.). Klassifiziert in:
-    - `Fantasiename (Stark)`: Hohe originäre Kennzeichnungskraft.
-    - `Kompositum / Anlehnung (Mittel)`: Sprechender Begriff mit kennzeichnendem Teil.
-    - `Beschreibend (Schwach - § 8 MarkenG Risiko)`: Zurückweisungsrisiko beim DPMA.
-  - **Nizza-Klassen (Nice Classification):**
-    - Pflichtklassen: **Klasse 9** (Software & Apps) und **Klasse 42** (SaaS & Cloud-Plattformen).
-    - Kontextbezogen: **Klasse 35** (E-Commerce/Business), **Klasse 38** (Messaging/Chat), **Klasse 41** (Bildung/Media), **Klasse 44** (Gesundheit/Medizin).
-  - **DPMA-Expertensuchstring:** Generiert fertige Syntax, z. B.:
-    `("wachwerk*" OR "vachverk*") AND (IC=09 OR IC=42)`
-  - **Register-Links:** Tiefenverlinkung für DPMAregister, EUIPO TMview, WIPO Brand DB, USPTO und OffeneRegister.de.
+Jede Quelle liefert genau ein `SourceResult`. Was nicht eindeutig beantwortet ist, wird
+`unknown`, nie `not_found`.
 
 ---
 
-### C. `scoring.ts` · Brandability & Clearance Matrix
-Kombiniert deterministische Namens-Heuristiken mit juristischen Risiko-Scores.
+## Hilfsmodule
 
-- **`scoreDodoBrandability(domain: string): DodoDomainScore`:**
-  - 6-Faktor-Zerlegung (max. 100 Punkte):
-    - **Länge (max 25):** 4–10 Zeichen (25), <4 Zeichen (22), 11–12 Zeichen (20), 13–15 Zeichen (14), >15 Zeichen (8).
-    - **Aussprache (max 25):** Abzüge für fehlende Vokale (-15), 4+ Konsonanten (-10), 3 Konsonanten (-4).
-    - **Bindestriche (max 15):** 0 Bindestriche (15), 1 Bindestrich (4), >1 (0).
-    - **Ziffern (max 15):** Keine Ziffern (15), mit Ziffern (6).
-    - **TLD-Tier (max 15):** Tier 1 (.de, .com = 15), Tier 2 (.app, .ai, .io, .dev = 13), sonstige (8).
-    - **Typo-Risiko (max 5):** Abzug bei Homoglyphen (`rn`, `vv`, `cl` -> -2) und 3 gleichen Zeichen (-2).
-- **`computeWeightedClearanceScore(params): MatrixResult`:**
-  - 10 gewichtete Kriterien (Gesamtgewicht 90):
-    - `tm` (Gewicht 12): Markenrechts-Kollisionsfreiheit (§ 8 & § 9 MarkenG).
-    - `domain` (Gewicht 10): RDAP/DNS Verfügbarkeitsquote.
-    - `brandable` (Gewicht 10): Ästhetischer Markencharakter & Silbenfluss.
-    - `appStore` (Gewicht 9): Apple App Store Werktitelschutz (§ 5 Abs. 3 MarkenG).
-    - `short` (Gewicht 9): Längen-Optimum (4–8 Zeichen).
-    - `spell` (Gewicht 9): Schreibbarkeit ohne Fehlerfallen.
-    - `social` (Gewicht 8): Verfügbarkeit auf GitHub, npm, PyPI.
-    - `future` (Gewicht 8): Zukunftssicherheit & Skalierbarkeit.
-    - `pron` (Gewicht 8): Aussprachefluss.
-    - `pro` (Gewicht 7): Professionelle Gesamtwirkung.
-  - **Harte juristische Deckelung:** Bei schwerwiegender Markenkollision (`tm <= 3`) wird der Gesamtscore automatisch auf maximal **42** limitiert.
-  - **Ampelurteil:**
-    - 🟢 **Grün:** Score >= 80, `tm >= 7` und `appStore >= 6`.
-    - 🔴 **Rot:** Score < 58 oder `tm <= 4` oder `appStore <= 3`.
-    - 🟡 **Gelb:** Prüfenswert (manuelle Begutachtung empfohlen).
+| Datei | Inhalt |
+|---|---|
+| `name.ts` | `normalizeName`: Kleinbuchstaben, Umlaute ausgeschrieben (`Müller` → `mueller`), eine bekannte Endung aus `DOMAIN_TLDS` wird abgetrennt, sonst klare Fehlermeldung. `foldToAscii` für Vergleiche. |
+| `phonetics.ts` | Kölner Phonetik, Soundex, Levenshtein, `generatePhoneticTwins` (Schreibvarianten), `PROTECTED_TECH_BRANDS` und `analyzeTrademarkSafety`. Die Engine nutzt daraus die Marken-Heuristik, die Varianten und die Klassenregeln. |
+| `cache.ts` | `createTtlCache` und `cachedLookup`: Cache im Arbeitsspeicher, nur für eindeutige Ergebnisse. Standard 10 Minuten, `MARKENFREI_CACHE_TTL_SEC` ändert das, `0` schaltet ihn aus. `clearAllCaches` für Tests. |
+| `rate-limit.ts` | `guardRequest(req, cost)`: festes Zeitfenster pro IP (aus `x-forwarded-for`), Standard 60 Einheiten pro Minute (`MARKENFREI_RATE_LIMIT`). Gilt pro Serverprozess. |
+| `opendata.ts` | `discoverOpenDataWords`: Wortfeld aus OpenThesaurus und Datamuse (je 3,5 s Timeout) und regelbasierte Kandidaten aus festen Wortbausteinen. Für „Keine Idee?“ und `markenfrei_suggest_names`. Die Kandidaten sind ungeprüft. |
 
 ---
 
-### D. `verdict.ts` · Verdichtung & Ampelsignale
-Wandelt die Rohdaten der Prüf-Pipeline in verständliche, hierarchisch sortierte Handlungshinweise für den Anwender um.
+## Tests
 
----
-
-### E. `doh.ts` · DNS-over-HTTPS Dual-Layer Fallback
-Dient als zuverlässige Gegenprüfung und Ausfallabsicherung für RDAP.
-- **`dohLookup(domain: string): Promise<DohLookupResult>`**
-  - Fragt Google DoH (`https://dns.google/resolve?name={domain}&type=NS`) und Cloudflare DoH (`https://cloudflare-dns.com/dns-query`) ab.
-  - Erkennt `Status === 0` mit aktiven Nameserver-Einträgen (`status: "taken"`).
-  - Erkennt `Status === 3` (`NXDOMAIN`, `status: "likely-available"`).
-  - Verhindert, dass RDAP-Rate-Limits (HTTP 429) zu falschen Annahmen führen.
-
----
-
-### F. `rea.ts` · Reverse Engineering & App Ecosystem Bridge
-Brücke zu Mobile App Stores und Shipped Binary Identifiers (§ 5 Abs. 3 MarkenG).
-- **`checkAppleBundleId(bundleId)`**: Live-Abfrage des Apple iTunes Lookup API für iOS/macOS Bundle Identifiers (`country=de`).
-- **`checkGooglePlayPackage(packageId)`**: Live-Abfrage des Google Play Store Package Namensraums (`status 200 = taken`, `404 = available`).
-- **`auditCandidateBundleIds(cleanName)`**: Generiert und prüft kanonische Identifiers (`de.{name}.app`, `com.{name}.app`, `io.{name}.app`) parallel auf beiden Stores.
-- **`inspectLocalAppBundle(targetPath)`**: Liest macOS/iOS `.app` Bundles und `Info.plist` Dateien via nativem macOS `/usr/bin/plutil` oder XML-Fallback aus und extrahiert `CFBundleIdentifier`, `CFBundleDisplayName`, `version` und Mindest-OS.
-
----
-
-### G. `clearance.ts` · Zentrale Clearance-Engine
-Zentrales Ausführungsmodul für simultane Multi-Vektor-Recherchen.
-- **`performClearanceCheck(options)`**: Führt parallele Abfragen gegen autoritative RDAP-Server, DoH, Apple App Store, Google Play, Enzyklopädien (Wikipedia REST, DuckDuckGo), Wikidata und Entwickler-Namensräume (GitHub, npm, PyPI, Crates, Brew, Go) aus.
-- Wird sowohl von der REST-API (`/api/clearance`) als auch vom **MCP-Server** (`src/mcp/`) und HTTP-MCP-Endpoint (`/api/mcp`) gemeinsam genutzt.
-
----
-
-### H. `domain-pricing.ts` · Registrar-Preisvergleich & Hosting
-Transparenter Preisvergleich führender Registrare ohne Lockvogel-Fallen.
-- **`compareDomainPrices(domain: string): TldPriceComparison | null`**
-  - Ermittelt für `.de`, `.com`, `.app`, `.ai`, `.io`, `.dev` die Preise bei Netcup, Hetzner, Cloudflare, Porkbun, INWX, IONOS und Namecheap.
-  - Sortiert nach tatsächlichem **Verlängerungspreis (Renewal)**, damit Gründer nicht in 1-Euro-Lockangebote tappen.
-  - Hebt **At-Cost Großhandelspreise** (z. B. Cloudflare Registrar mit 0 $ Markup) und **Lockvogel-Fallen** (Warnbadge) hervor.
-  - Generiert vorbereitete Direktlinks mit vorausgefülltem Domainnamen.
-
----
-
-### H. `open-apis.ts` · Zentrales Schnittstellen-Inventar
-Erfasst alle Quellen mit Provider, Endpoint, Protokoll (RDAP, DoH, REST, Deep-Link) und Dokumentationslink. Einträge mit Protokoll `Deep-Link` sind reine Verweise, alle anderen werden live abgefragt.
-
----
+Die Tests liegen in `tests/` (`npm test`), meist eine Testdatei je Modul, z. B.
+`sources-packages.test.ts` oder `trademark-prep.test.ts`. Quellen werden mit einem
+gestubbten `HttpClient` bzw. `fetch` geprüft, ohne Netz. `opendata.ts` hat noch keine Tests.

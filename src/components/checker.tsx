@@ -1,0 +1,470 @@
+"use client";
+
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import type { NameReport } from "@/lib/engine/check";
+import type { Namespace } from "@/lib/engine/types";
+import { NAMESPACE_LABEL } from "@/lib/engine/types";
+import { rankReports } from "@/lib/engine/verdict";
+import {
+  buildQuery,
+  buildRequestBody,
+  hasAnySource,
+  parseSelection,
+  splitNames,
+  type CheckerConfig,
+  type Selection,
+} from "@/components/checker-config";
+import { CopyButton } from "@/components/copy-button";
+import { IdeaFinder } from "@/components/idea-finder";
+import { ReportCard, ReportError, ReportSkeleton } from "@/components/report-card";
+import { ShortlistRanking } from "@/components/shortlist-ranking";
+import { VerdictBadge } from "@/components/status-badge";
+
+const CONCURRENCY = 3;
+
+type Item =
+  | { state: "loading" }
+  | { state: "done"; report: NameReport }
+  | { state: "error"; message: string };
+
+type Run = { id: number; sel: Selection; items: Record<string, Item> };
+
+/** Liest den Zustand aus dem Link. Muss in einer Suspense-Grenze stehen. */
+export function CheckerFromUrl({ config }: { config: CheckerConfig }) {
+  const params = useSearchParams();
+  const initial = parseSelection(new URLSearchParams(params.toString()), config);
+  return <Checker config={config} initial={initial} />;
+}
+
+/** Platzhalter bis zur Hydrierung: gleiche Oberfläche, Absenden noch gesperrt. */
+export function CheckerFallback({ config }: { config: CheckerConfig }) {
+  return <Checker config={config} initial={parseSelection(new URLSearchParams(), config)} inert />;
+}
+
+function Chip({
+  pressed,
+  onClick,
+  disabled,
+  children,
+  mono,
+}: {
+  pressed: boolean;
+  onClick: () => void;
+  disabled?: boolean;
+  children: React.ReactNode;
+  mono?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={pressed}
+      onClick={onClick}
+      disabled={disabled}
+      className={`inline-flex min-h-8 items-center rounded-md border px-2.5 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
+        mono ? "font-mono" : ""
+      } ${
+        pressed
+          ? "border-button bg-button text-button-ink hover:bg-button-hover"
+          : "border-line-strong bg-surface text-soft hover:border-muted hover:text-ink"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+export function Checker({
+  config,
+  initial,
+  inert = false,
+}: {
+  config: CheckerConfig;
+  initial: Selection;
+  inert?: boolean;
+}) {
+  const fieldId = useId();
+  const hintId = useId();
+  const errorId = useId();
+  const fieldRef = useRef<HTMLTextAreaElement>(null);
+  const resultsRef = useRef<HTMLDivElement>(null);
+
+  const [text, setText] = useState(() => initial.names.join(", "));
+  const [namespaces, setNamespaces] = useState<Namespace[]>(initial.namespaces);
+  const [tlds, setTlds] = useState<string[]>(initial.tlds);
+  const [extra, setExtra] = useState<string[]>(initial.extra);
+  const [formError, setFormError] = useState("");
+  const [run, setRun] = useState<Run | null>(null);
+
+  const runId = useRef(0);
+  const abort = useRef<AbortController | null>(null);
+
+  const optional = useMemo(() => config.sources.filter((s) => !s.defaultEnabled), [config.sources]);
+  const optionalByNs = useMemo(() => {
+    const m = new Map<Namespace, typeof optional>();
+    for (const s of optional) m.set(s.namespace, [...(m.get(s.namespace) ?? []), s]);
+    return [...m.entries()];
+  }, [optional]);
+
+  async function checkOne(name: string, sel: Selection, signal: AbortSignal, id: number) {
+    let item: Item;
+    try {
+      const res = await fetch("/api/check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildRequestBody(name, sel, config)),
+        signal,
+      });
+      const json = (await res.json().catch(() => null)) as { error?: string; reports?: NameReport[] } | null;
+      if (!res.ok || !json?.reports?.[0]) {
+        item = { state: "error", message: json?.error ?? `Die Prüfung ist fehlgeschlagen (HTTP ${res.status}).` };
+      } else {
+        item = { state: "done", report: json.reports[0] };
+      }
+    } catch {
+      if (signal.aborted) return;
+      item = { state: "error", message: "Keine Verbindung zum Server. Bitte erneut versuchen." };
+    }
+    if (runId.current !== id) return;
+    setRun((r) => (r && r.id === id ? { ...r, items: { ...r.items, [name]: item } } : r));
+  }
+
+  function start(sel: Selection) {
+    abort.current?.abort();
+    const ac = new AbortController();
+    abort.current = ac;
+    const id = ++runId.current;
+    setRun({ id, sel, items: Object.fromEntries(sel.names.map((n) => [n, { state: "loading" } as Item])) });
+
+    const qs = buildQuery(sel, config);
+    window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
+
+    const queue = [...sel.names];
+    const worker = async () => {
+      for (let n = queue.shift(); n !== undefined; n = queue.shift()) {
+        await checkOne(n, sel, ac.signal, id);
+      }
+    };
+    void Promise.all(Array.from({ length: Math.min(CONCURRENCY, queue.length) }, worker));
+  }
+
+  function retry(name: string) {
+    if (!run || !abort.current) return;
+    const { id, sel } = run;
+    setRun((r) => (r && r.id === id ? { ...r, items: { ...r.items, [name]: { state: "loading" } } } : r));
+    void checkOne(name, sel, abort.current.signal, id);
+  }
+
+  function submitNames(names: string[]) {
+    if (names.length === 0) {
+      setFormError("Bitte mindestens einen Namen eingeben.");
+      fieldRef.current?.focus();
+      return;
+    }
+    if (names.length > config.maxNames) {
+      setFormError(`Höchstens ${config.maxNames} Namen auf einmal, eingegeben sind ${names.length}.`);
+      fieldRef.current?.focus();
+      return;
+    }
+    const sel: Selection = { names, namespaces, tlds, extra };
+    if (!hasAnySource(sel)) {
+      setFormError("Bitte mindestens einen Namensraum oder eine weitere Quelle wählen.");
+      return;
+    }
+    setFormError("");
+    start(sel);
+  }
+
+  function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (inert) return;
+    submitNames(splitNames(text));
+  }
+
+  // Link mit ?q=… prüft beim Öffnen sofort (nur einmal).
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    if (inert || autoStarted.current) return;
+    autoStarted.current = true;
+    if (initial.names.length && initial.names.length <= config.maxNames && hasAnySource(initial)) {
+      queueMicrotask(() => start(initial));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => () => abort.current?.abort(), []);
+
+  function toggleNs(ns: Namespace) {
+    setNamespaces((cur) => (cur.includes(ns) ? cur.filter((x) => x !== ns) : [...cur, ns]));
+  }
+  function toggleTld(t: string) {
+    setTlds((cur) =>
+      cur.includes(t) ? cur.filter((x) => x !== t) : cur.length >= config.maxTlds ? cur : [...cur, t],
+    );
+  }
+  function toggleExtra(id: string) {
+    setExtra((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
+  }
+
+  function applyIdeas(names: string[]) {
+    const list = names.slice(0, config.maxNames);
+    setText(list.join(", "));
+    submitNames(list);
+    requestAnimationFrame(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }
+
+  function exportJson() {
+    if (!run) return;
+    const reports = run.sel.names
+      .map((n) => run.items[n])
+      .filter((i): i is Extract<Item, { state: "done" }> => i?.state === "done")
+      .map((i) => i.report);
+    const data = {
+      tool: "Markenfrei",
+      note: "Vorprüfung, keine Rechtsberatung. Marke nicht geprüft.",
+      exportedAt: new Date().toISOString(),
+      query: { names: run.sel.names, namespaces: run.sel.namespaces, tlds: run.sel.tlds, sources: run.sel.extra },
+      ranking: rankReports(reports),
+      reports,
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `markenfrei-${reports.length === 1 ? reports[0].name : "shortlist"}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  // Abgeleitete Ergebnisdaten
+  const names = run?.sel.names ?? [];
+  const done: NameReport[] = [];
+  const seen = new Set<string>();
+  for (const n of names) {
+    const it = run?.items[n];
+    if (it?.state === "done" && !seen.has(it.report.name)) {
+      seen.add(it.report.name);
+      done.push(it.report);
+    }
+  }
+  const pending = names.filter((n) => run?.items[n]?.state === "loading");
+  const failed = names.filter((n) => run?.items[n]?.state === "error");
+  const ranking = rankReports(done);
+  const finished = run !== null && pending.length === 0;
+  const domainsOn = namespaces.includes("domains");
+
+  return (
+    <div className="space-y-10">
+      <form onSubmit={onSubmit} noValidate aria-label="Namen prüfen" className="space-y-5">
+        <div>
+          <label htmlFor={fieldId} className="mb-2 block text-sm font-medium text-ink">
+            Name oder Shortlist
+          </label>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
+            <textarea
+              id={fieldId}
+              ref={fieldRef}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  e.currentTarget.form?.requestSubmit();
+                }
+              }}
+              rows={1}
+              spellCheck={false}
+              autoCapitalize="none"
+              autoComplete="off"
+              placeholder="z. B. wachwerk oder wachwerk, schichtflux, planzeit"
+              aria-describedby={`${hintId}${formError ? ` ${errorId}` : ""}`}
+              aria-invalid={formError ? true : undefined}
+              className="auto-grow w-full flex-1 resize-none rounded-lg border border-line-strong bg-surface px-3.5 py-3 font-mono text-base text-ink placeholder:font-sans placeholder:text-muted hover:border-muted"
+            />
+            <button
+              type="submit"
+              disabled={inert}
+              className="inline-flex min-h-12 shrink-0 items-center justify-center rounded-lg bg-button px-6 font-medium text-button-ink transition-colors hover:bg-button-hover active:scale-[0.98] disabled:opacity-60"
+            >
+              Prüfen
+            </button>
+          </div>
+          <p id={hintId} className="mt-2 text-sm text-muted">
+            Bis zu {config.maxNames} Namen, getrennt durch Komma oder neue Zeile. Enter prüft,{" "}
+            <kbd className="rounded border border-line bg-wash px-1 font-mono text-xs">Umschalt</kbd> +{" "}
+            <kbd className="rounded border border-line bg-wash px-1 font-mono text-xs">Enter</kbd> beginnt eine neue
+            Zeile.
+          </p>
+          {formError && (
+            <p id={errorId} role="alert" className="mt-2 text-sm font-medium text-bad">
+              {formError}
+            </p>
+          )}
+        </div>
+
+        <div className="space-y-4 rounded-xl border border-line bg-surface px-4 py-4 sm:px-5">
+          <fieldset>
+            <legend className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">Namensräume</legend>
+            <div className="flex flex-wrap gap-1.5">
+              {config.namespaces.map((n) => (
+                <Chip key={n.id} pressed={namespaces.includes(n.id)} onClick={() => toggleNs(n.id)}>
+                  {n.label}
+                </Chip>
+              ))}
+            </div>
+          </fieldset>
+
+          <fieldset disabled={!domainsOn} className="disabled:opacity-60">
+            <legend className="mb-2 flex w-full flex-wrap items-baseline justify-between gap-x-3 text-xs font-medium uppercase tracking-wide text-muted">
+              <span>Endungen</span>
+              <span className="font-normal normal-case tracking-normal">
+                {domainsOn ? `${tlds.length} von höchstens ${config.maxTlds}` : "Domains abgewählt"}
+              </span>
+            </legend>
+            <div className="flex flex-wrap gap-1.5">
+              {tlds.map((t) => (
+                <Chip key={t} pressed onClick={() => toggleTld(t)} mono>
+                  .{t}
+                  <span className="sr-only"> (abwählen)</span>
+                </Chip>
+              ))}
+            </div>
+            <details className="mt-2">
+              <summary className="inline-flex min-h-8 items-center gap-1.5 text-sm text-soft hover:text-ink">
+                <span aria-hidden className="toggle-sign" />
+                Alle {config.tlds.length} Endungen
+              </summary>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {config.tlds.map((t) => (
+                  <Chip
+                    key={t}
+                    mono
+                    pressed={tlds.includes(t)}
+                    disabled={!tlds.includes(t) && tlds.length >= config.maxTlds}
+                    onClick={() => toggleTld(t)}
+                  >
+                    .{t}
+                  </Chip>
+                ))}
+              </div>
+            </details>
+          </fieldset>
+
+          <details className="border-t border-line pt-3">
+            <summary className="inline-flex min-h-8 items-center gap-1.5 text-sm text-soft hover:text-ink">
+              <span aria-hidden className="toggle-sign" />
+              Weitere Quellen
+              {extra.length > 0 && <span className="text-muted">({extra.length} gewählt)</span>}
+            </summary>
+            <div className="mt-3 space-y-4">
+              {optionalByNs.map(([ns, list]) => (
+                <fieldset key={ns}>
+                  <legend className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted">
+                    {NAMESPACE_LABEL[ns]}
+                  </legend>
+                  <ul className="grid gap-x-4 sm:grid-cols-2">
+                    {list.map((s) => (
+                      <li key={s.id}>
+                        <label className="flex min-h-8 cursor-pointer items-start gap-2.5 py-1">
+                          <input
+                            type="checkbox"
+                            checked={extra.includes(s.id)}
+                            onChange={() => toggleExtra(s.id)}
+                            className="mt-1 size-4 shrink-0 accent-[var(--ink)]"
+                          />
+                          <span className="text-sm leading-snug">
+                            <span className="text-ink">{s.label}</span>
+                            <span className="block text-[13px] text-muted">{s.description}</span>
+                          </span>
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
+                </fieldset>
+              ))}
+            </div>
+          </details>
+        </div>
+      </form>
+
+      <div ref={resultsRef} className="scroll-mt-6 space-y-4">
+        <p className="sr-only" aria-live="polite">
+          {run
+            ? finished
+              ? `${done.length} von ${names.length} Namen geprüft.`
+              : `Prüfe ${names.length === 1 ? "einen Namen" : `${names.length} Namen`} …`
+            : ""}
+        </p>
+
+        {!run && <Legend />}
+
+        {run && (
+          <>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="font-serif text-2xl tracking-tight text-ink">
+                {names.length === 1 ? "Ergebnis" : "Ergebnisse"}
+              </h2>
+              {done.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  <CopyButton text={() => window.location.href} label="Link kopieren" />
+                  <button
+                    type="button"
+                    onClick={exportJson}
+                    className="inline-flex min-h-8 items-center rounded-md border border-line-strong bg-surface px-3 text-sm text-ink hover:bg-wash active:scale-[0.98]"
+                  >
+                    JSON exportieren
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {names.length > 1 && <ShortlistRanking ranking={ranking} pending={pending} failed={failed} />}
+
+            {names.map((n) => {
+              const it = run.items[n];
+              if (!it || it.state === "loading") return <ReportSkeleton key={n} name={n} />;
+              if (it.state === "error") return <ReportError key={n} name={n} message={it.message} onRetry={() => retry(n)} />;
+              return <ReportCard key={n} report={it.report} />;
+            })}
+          </>
+        )}
+      </div>
+
+      <IdeaFinder max={config.maxNames} onUse={applyIdeas} />
+    </div>
+  );
+}
+
+function Legend() {
+  return (
+    <section aria-labelledby="legende" className="rounded-xl border border-line px-4 py-4 sm:px-5">
+      <h2 id="legende" className="mb-3 text-xs font-medium uppercase tracking-wide text-muted">
+        So ist die Ampel zu lesen
+      </h2>
+      <dl className="space-y-2.5 text-sm">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-3">
+          <dt className="sm:w-56 sm:shrink-0">
+            <VerdictBadge verdict="green" size="sm" />
+          </dt>
+          <dd className="text-soft">Alle gewählten Quellen haben geantwortet und kennen den Namen nicht.</dd>
+        </div>
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-3">
+          <dt className="sm:w-56 sm:shrink-0">
+            <VerdictBadge verdict="yellow" size="sm" />
+          </dt>
+          <dd className="text-soft">Ähnliche oder schwache Treffer, oder eine Quelle hat nicht geantwortet.</dd>
+        </div>
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-3">
+          <dt className="sm:w-56 sm:shrink-0">
+            <VerdictBadge verdict="red" size="sm" />
+          </dt>
+          <dd className="text-soft">Mindestens eine Quelle meldet den Namen als vergeben oder nicht zulässig.</dd>
+        </div>
+      </dl>
+      <p className="mt-4 border-t border-line pt-3 text-sm text-muted">
+        „Nicht gefunden“ heißt nicht „registrierbar“. Marken werden nicht abgefragt; zu jedem Namen gibt es eine
+        vorbereitete Markenrecherche.
+      </p>
+    </section>
+  );
+}

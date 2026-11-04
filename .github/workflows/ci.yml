@@ -30,5 +30,11 @@ jobs:
       - name: Run tests
         run: npm test
 
+      - name: Build MCP package
+        run: npm run build:mcp
+
+      - name: Test MCP package (npm pack, start from unpacked tarball)
+        run: npm run test:mcp-package
+
       - name: Build Next.js
         run: npm run build

@@ -1,240 +1,202 @@
-# Markenfrei 🛡️✨
+# Markenfrei
 
 [![CI](https://github.com/darkspike1988/markenfrei/actions/workflows/ci.yml/badge.svg)](https://github.com/darkspike1988/markenfrei/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Live](https://img.shields.io/badge/Live-markenfrei.app-black?logo=safari&logoColor=white)](https://markenfrei.app)
 
-**Markenfrei** ([markenfrei.app](https://markenfrei.app)) ist ein minimalistisches, hochperformantes Open-Source Clearinghouse zur Vorab-Prüfung und Generierung unbedenklicher Namen für **Apps, Websites, SaaS-Tools und Bibliotheken**.
+**Kann ich diesen Namen überall nutzen, und wo muss ich für Marken selbst nachsehen?**
 
-Das Tool prüft Namen und App-Identitäten in Echtzeit gegen **Marken-Kollisionen, phonetische Zwillinge (§ 9 MarkenG), deutsches Freihaltebedürfnis (§ 8 MarkenG), Apple & Google Play Werktitelschutz (§ 5 Abs. 3 MarkenG), autoritative Registries (Europa, Amerika, Asien), DoH, Enzyklopädien (Wikipedia & DuckDuckGo), globale Entwickler-Namensräume (GitHub, npm, PyPI, Crates.io, Homebrew, Go Proxy) und liefert einen transparenten Preisvergleich für europäische und amerikanische Hoster ohne Lockvogel-Fallen**.
+Markenfrei ([markenfrei.app](https://markenfrei.app)) prüft einen Namen oder eine Shortlist,
+kurz bevor du dich festlegst: vor `npm init`, dem App-Store-Eintrag, dem Domain-Kauf oder dem
+Repo. Gedacht für Entwickler, Indie-Gründer und kleine Teams im DACH-Raum.
 
-> **Grenzen:** Markenfrei prüft Domains, App Stores, Paketnamen und bekannte Namen und nutzt für Marken eine Heuristik mit bekannten Marken. **Die Markenregister (DPMA, EUIPO, WIPO, USPTO) werden nicht abgefragt**, der Bericht verlinkt sie. Eine grüne Ampel heißt nicht, dass ein Name als Marke frei ist. Warum keine Registerabfrage möglich ist, steht in [docs/trademark-registers.md](docs/trademark-registers.md).
+Du bekommst je Name:
 
-**Was geplant ist, was schon geprüft wird und wo die Grenzen liegen:** siehe [ROADMAP.md](ROADMAP.md).
+- eine Zeile pro Quelle mit Status als Text und Farbe und einem Link zum Nachprüfen,
+- eine Ampel, die nur aus diesen Status entsteht (kein Score, keine Geschmackskriterien),
+- eine Vorbereitung für die Markenrecherche: Registerlinks, DPMA-Expertensuchstring,
+  Schreibvarianten, Klassenvorschlag und Checkliste.
 
-Inspiriert von wegweisenden GitHub-Projekten wie `facundoolano/app-store-scraper`, `DunlapCoddingPC/pyUSPTO`, `r13i/dodomains`, `faizul666/domain-search-agent` und REA (Reverse Engineering Anything).
+Coding-Agenten nutzen dieselbe Prüfung über den [MCP-Server](#mcp-server-für-agenten).
 
----
+Grundsätze: kein LLM im Produkt, keine Konten, kein Tracking, keine Speicherung von
+Suchanfragen, nur offene Quellen ohne Schlüssel, nur Einzelabfragen, die ein Nutzer auslöst.
 
-## ⚡ Kernfunktionen
+## Was geprüft wird
 
-### 1. Minimalistischer Omnibar & Smart Intent Detection
-* **Ein einziges Eingabefeld (Linear/Raycast Ästhetik):**
-  * **Einzelname:** Gibt man ein einzelnes Wort ein (z. B. `Wachwerk`), startet die Sofort-Einzelprüfung in unter 500 ms.
-  * **Projektidee:** Gibt man eine Beschreibung ein (z. B. `Wachbuch und Schichtplaner für Rettungsdienst`), generiert Markenfrei passende Kunstwörter, Portmanteaus und prüft sie im Batch.
-  * **Zufalls-Beispiele:** Generiert dynamisch 5 zufällige Kunstnamen aus dem Open-Data-Morphem-Pool (inkl. 1-Klick-Shuffle).
-  * **App Bundle-ID & Paket-Inspektor:** Gibt man eine Bundle-ID ein (z. B. `de.wachwerk.app`), wird die Identität auf Apple App Store und Google Play abgeglichen.
-* **Shareable URL-State:**
-  * Jede Recherche wird live synchronisiert (`?q=...`) und kann per 1-Klick-Share-Link geteilt oder als Markdown-Bericht exportiert werden.
+Standardmäßig aktiv (Web und MCP gleich):
 
----
+| Namensraum | Quellen |
+|---|---|
+| Domains | RDAP für die gewählten Endungen (Standard `.de`, `.com`, `.dev`, `.app`, `.io`, höchstens 8 je Prüfung). Der RDAP-Server kommt aus dem IANA-Bootstrap, für `.de`, `.io`, `.ch` und `.li` aus festen Einträgen. `.at` und `.eu` laufen nur über DNS und können deshalb nie „nicht gefunden“ ergeben. DNS über HTTPS bestätigt nur „vergeben“. |
+| Pakete | npm, PyPI, GitHub (Nutzer oder Organisation), crates.io, Homebrew (Formula und Cask) |
+| App Stores | Apple App Store Deutschland (Suche, vergeben nur bei exakt gleichem Haupttitel), Google Play (nur die Bundle-IDs `com.<name>.app` und `de.<name>.app`) |
+| Bekannte Namen | Liste bekannter Tech-Marken (Heuristik ohne Netz: identisch, klanggleich nach Kölner Phonetik, enthalten), Wikidata (exaktes Label mit Typ Unternehmen, Marke, Software, Website, App oder Produkt), GLEIF (aktive Rechtsträger mit LEI, Namensstamm ohne Rechtsform) |
 
-### 2. Rechtliche Marken- & Werktitel-Vorprüfung (§ 5, § 8 & § 9 MarkenG)
-* **Kölner Phonetik & Soundex:**
-  * Berechnet den offiziellen deutschen Klangcode nach Hans Joachim Postel.
-  * Erkennt phonetische Verwechslungsgefahr (z. B. *Klarna* vs. *Clarna*).
-  * Generiert **phonetische Zwillinge** (c/k, v/f, z/s, ai/ei) zur automatischen Gegenprüfung.
-* **Prüfung auf Freihaltebedürfnis (§ 8 MarkenG):**
-  * Erkennt rein beschreibende Gattungsbegriffe (*Planer, Tracker, Tool, App*) und stuft Fantasienamen vs. beschreibende Begriffe ein.
-* **Mobile App Stores & Werktitelschutz (§ 5 Abs. 3 MarkenG):**
-  * Prüft live über die **Apple iTunes Search API** nach gleichnamigen Apps im deutschen Store.
-  * Prüft **Google Play Store** auf Paket-Kollisionen.
-  * Generiert und verifiziert kanonische Reverse-DNS-Bundle-IDs (`de.<name>.app`, `com.<name>.app`, `io.<name>.app`).
-* **REA (Reverse Engineering Anything) Shipped-Artifact Bridge (`/api/rea-inspect`):**
-  * Kann lokale macOS/iOS `.app`-Bundles, `Info.plist`-Dateien oder Android-Paketnamen analysieren und `CFBundleIdentifier`, `CFBundleDisplayName`, `version` und Mindest-OS extrahieren.
-* **Nizza-Klassen & Amtsgebühren-Kalkulator:**
-  * Empfiehlt automatisch Nizza-Klassen mit offiziellem Wortlaut (Klasse 9 für Software/Apps, Klasse 42 für SaaS, Klasse 35 für Business/Marktplätze, Klasse 44 für Gesundheit).
-  * Zeigt offizielle Amtsgebühren:
-    * **DPMA (DE):** 290 € (elektronisch, bis zu 3 Klassen inklusive)
-    * **EUIPO (EU):** 850 € (1. Klasse) + 50 € (2. Klasse) + 150 € (ab 3. Klasse) – EU-weiter Schutz
-    * **USPTO (US):** 250 $ - 350 $ pro Klasse (TEAS)
-* **Amtliche Register-Deep-Links:**
-  * Fertiger **DPMAregister-Expertensuchstring** per 1-Klick kopierbar.
-  * Direkte Suchlinks zu **DPMAregister**, **TMview (EU & DE)**, **EUIPO eSearch**, **WIPO Global Brand DB**, **USPTO TSDR**, **Handelsregister / Unternehmensregister** und **OffeneRegister.de**.
+Auf Wunsch („Weitere Quellen“ in der Oberfläche, `sources` in API und MCP): NuGet,
+RubyGems, Maven Central, Packagist, pub.dev, JSR, Hex.pm, CRAN, Open VSX, F-Droid,
+Firefox Add-ons, Bluesky, Mastodon (mastodon.social), Hacker News sowie Wikipedia und
+Show HN als schwache Signale. Für Instagram, TikTok, X, YouTube und den Chrome Web Store
+gibt es nur Links zur Prüfung von Hand.
 
----
+Alle 21 Endungen und alle Quellen mit Endpunkt stehen auf der Seite `/quellen`.
 
-### 3. Domain-Preisvergleich & Hosting (Günstigste Registrare)
-* **Transparenter Dauerpreis-Vergleich:**
-  * Vergleicht für jede geprüfte TLD (`.de`, `.com`, `.app`, `.ai`, `.io`, `.dev`) die tatsächlichen Kosten der führenden Anbieter (Netcup, Hetzner, Cloudflare, Porkbun, INWX, IONOS, Namecheap).
-* **Entlarvt Lockvogel-Fallen:**
-  * Warnt transparent vor 1-Euro-Angeboten, die sich ab dem zweiten Jahr verfünfzehnfachen (z. B. IONOS 1 € -> 15 € oder 22 €).
-* **At-Cost Großhandels-Empfehlung:**
-  * Hebt Großhandelspreise ohne Aufschlag hervor (z. B. Cloudflare Registrar mit 0 $ Markup für `.com` und `.app`).
-* **Beste Konditionen nach TLD:**
-  * `.de`: **Netcup** (0,42 €/Monat = 5,04 €/Jahr) & **Hetzner** (5,95 €/Jahr)
-  * `.com`: **Porkbun** (9,55 €/Jahr) & **Cloudflare** (9,60 €/Jahr At-Cost)
-  * `.app`: **Porkbun** (12,80 €/Jahr) & **Cloudflare** (12,90 €/Jahr At-Cost)
-  * `.io` / `.ai`: **Porkbun** (32,10 € für .io, 63,50 € für .ai)
-* **Direktlinks:** 1-Klick-Links direkt zum jeweiligen Registrar mit vorausgefülltem Domainnamen.
+### Status und Ampel
 
----
+| Status | Bedeutung |
+|---|---|
+| `taken` | vergeben bzw. vorhanden |
+| `not_found` | die Quelle kennt den Namen nicht; das heißt nicht „registrierbar“ |
+| `similar` | kein exakter, aber ein ähnlicher oder nicht eindeutiger Treffer |
+| `invalid` | der Name ist dort syntaktisch nicht zulässig |
+| `unknown` | keine verwertbare Antwort (Timeout, Rate-Limit, Fehler); nie als frei gewertet |
 
-### 4. Wissensdatenbanken & Enzyklopädie-Prüfung
-* **Wikipedia Page Summary REST API:**
-  * Prüft live über `de.wikipedia.org/api/rest_v1/page/summary/`, ob ein gleichnamiger enzyklopädischer Artikel existiert, und zeigt Kurzbeschreibung und Direktlink.
-* **DuckDuckGo Instant Answer API:**
-  * Prüft die freie Zero-Click-Schnittstelle von DuckDuckGo auf bekannte Entitäten, Infoboxen und Markenbeschreibungen.
-* **Wikidata Entity Search API:**
-  * Durchsucht strukturierte Wikidata-Objekte nach Firmen, Software, Brands und Services.
+- **Rot** („Vergeben“), sobald eine Quelle `taken` oder `invalid` meldet. Treffer bei
+  schwachen Signalen ergeben höchstens Gelb.
+- **Grün** („Keine Treffer“) nur, wenn alle angefragten Quellen `not_found` melden.
+- **Gelb** („Treffer oder Lücken prüfen“) in allen anderen Fällen.
 
----
+Bei einer Shortlist (bis 10 Namen) gibt es zusätzlich eine Rangliste: zuerst Grün, dann
+Gelb, dann Rot, innerhalb davon nach Zahl der Treffer und dann der Lücken.
 
-### 5. Autoritative Registries & Fail-Safe Invariant
-* **Autoritative RDAP-Endpunkte (kein rdap.org-Proxy):**
-  * `.de`: Direkt über `https://rdap.denic.de/domain/`
-  * `.com` / `.net`: Direkt über Verisign `https://rdap.verisign.com/`
-  * `.app` / `.dev`: Direkt über Google Registry `https://pubapi.registry.google/`
-  * `.io` / `.ai`: Direkt über Identity Digital `https://rdap.identitydigital.services/`
-* **Dual-Layer DNS-over-HTTPS (DoH) Fallback:**
-  * Falls ein RDAP-Server 429 oder einen Timeout meldet, verifiziert Markenfrei die Existenz von NS- und SOA-Einträgen über Google & Cloudflare DoH.
-* **Fail-Safe Invariante:**
-  * War eine Quelle nicht erreichbar, wird sie als `unknown` und nie als `available` gewertet. Ein grünes Signal gibt es nur bei vollständiger Prüfung.
+## Grenzen
 
----
+- **Keine Markenprüfung.** Markenregister (DPMA, EUIPO, WIPO, USPTO) werden nicht abgefragt.
+  Die Marke steht immer auf „nicht geprüft“; Markenfrei verlinkt die Register und bereitet
+  die Suche vor. Warum keine Registerabfrage möglich ist, steht in
+  [docs/trademark-registers.md](docs/trademark-registers.md).
+- **Grün heißt nur „nichts gefunden“** in den gewählten Quellen, nicht „als Marke frei“ und
+  nicht „registrierbar“.
+- **Zeitgrenze.** Eine Prüfung dauert höchstens etwa 8 Sekunden (5 Sekunden je Anfrage).
+  Langsame Quellen erscheinen als `unknown` unter „Ohne Antwort“.
+- **Fremde Dienste sehen den Namen.** Die Anfragen gehen vom Server (oder bei stdio-MCP von
+  deinem Rechner) direkt an die Quellen.
+- **GitHub ohne Token** erlaubt 60 Anfragen pro Stunde und IP; danach meldet die Quelle
+  `unknown`, bis das Limit zurückgesetzt ist.
+- **„Keine Idee?“** erzeugt Vorschläge regelbasiert aus OpenThesaurus, Datamuse und festen
+  Wortbausteinen. Die Vorschläge sind ungeprüft, bis du sie prüfst.
+- **Keine Rechtsberatung.** Vor Anmeldung oder Nutzung eines Namens gehört eine fachkundige
+  Markenrecherche dazu.
 
-### 6. Entwickler-Ökosysteme & Paketmanager
-* **GitHub:** Nutzer-/Org-Handle Verfügbarkeit + Suche nach bekannten Repositories mit Stars.
-* **npm:** JavaScript/TypeScript Paket-Namensraum (`registry.npmjs.org`).
-* **PyPI:** Python Package Index (`pypi.org`).
-* **Crates.io:** Rust Cargo Paket-Namensraum (`crates.io/api/v1/crates/`).
-* **Homebrew:** macOS/Linux Formula Namensraum (`formulae.brew.sh`).
-* **Go Proxy:** Globaler Go Modul-Namensraum (`proxy.golang.org`).
+## Start
 
----
-
-### 7. Verwendete Open APIs & Quellen-Transparenz (Europa, Amerika, Asien)
-Über den Button **„Infos & MCP“** im Header zeigt Markenfrei alle verwendeten weltweiten Schnittstellen übersichtlich an:
-* **Live abgefragt:** RDAP-Registries (DENIC, NIC.fr, Nominet, Verisign, Google Registry, Identity Digital, KRNIC), DNS-over-HTTPS (Google, Cloudflare), Apple iTunes, Google Play, Wikidata, Wikipedia, DuckDuckGo, GitHub, npm, PyPI, crates.io, Homebrew, Go-Proxy, OpenThesaurus und Datamuse.
-* **Nur Verweise, keine Abfrage:** DPMAregister, TMview, EUIPO eSearch, OffeneRegister, USPTO und WIPO Global Brand Database. Das Tool prüft also keine Markenregister, sondern verlinkt sie für die manuelle Recherche.
-* Endpoint-URL, Region, Protokoll (RDAP, DoH, REST, Deep-Link) und Dokumentationslinks.
-
----
-
-### 8. 🤖 Model Context Protocol (MCP) Server für KI-Agenten
-Markenfrei liefert einen voll ausgestatteten **MCP-Server**, mit dem autonome KI-Agenten (Claude Desktop, Claude Code, Cursor, Codex, Gemini CLI / Antigravity, Windsurf) direkt Markennamen prüfen, Domains vergleichen und Namensideen generieren können:
-
-#### Integration in Claude Desktop (`claude_desktop_config.json`) oder Cursor (`.cursor/mcp.json`):
-```json
-{
-  "mcpServers": {
-    "markenfrei": {
-      "command": "npx",
-      "args": ["-y", "markenfrei-mcp"]
-    }
-  }
-}
-```
-
-Oder lokal aus dem Repository:
-```json
-{
-  "mcpServers": {
-    "markenfrei": {
-      "command": "node",
-      "args": ["./bin/markenfrei-mcp.mjs"]
-    }
-  }
-}
-```
-
-#### Bereitgestellte MCP-Tools:
-1. `markenfrei_clearance_check`: Vorprüfung auf Domains, App Stores (§ 5 Abs. 3 MarkenG), Paketnamen und bekannte Namen, dazu Phonetik und Freihaltebedürfnis (§ 8 MarkenG) als Heuristik. Die Markenregister werden nicht abgefragt.
-2. `markenfrei_domain_pricing`: Vergleicht Netcup, Hetzner, Cloudflare Wholesale & warnt vor 1-€-Lockvogelangeboten.
-3. `markenfrei_generate_ideas`: Generiert Kunstwörter & Portmanteaus aus Open-Data Wortfeldern (OpenThesaurus & Datamuse).
-4. `markenfrei_inspect_bundle`: Prüft Reverse-DNS App-Bundle-IDs (`de.app.name`) auf iOS App Store & Android Play Store.
-5. `markenfrei_list_open_apis`: Liefert das Inventar aller Quellen mit Angabe, ob sie abgefragt oder nur verlinkt werden.
-
-Remote steht derselbe Server unter `POST /api/mcp` bereit (MCP Streamable HTTP, zustandslos, Antworten als JSON). Beispiel für Claude Code:
+Voraussetzung: Node.js 20.9 oder neuer.
 
 ```bash
-claude mcp add --transport http markenfrei https://markenfrei.app/api/mcp
-```
-
-`markenfrei_clearance_check` liefert zusätzlich `structuredContent` im stabilen Schema `PublicReport` (siehe `src/lib/public-report.ts`), das auch der JSON-Export der Oberfläche nutzt.
-
----
-
-## 🚀 Installation & Start
-
-### Lokal ausführen
-
-```bash
-# 1. Klonen
 git clone https://github.com/darkspike1988/markenfrei.git
 cd markenfrei
-
-# 2. Abhängigkeiten installieren
 npm install
-
-# 3. Starten
 npm run dev
-# oder für Produktion:
-npm run build && npm run start
 ```
 
-Im Browser öffnen: **`http://localhost:3000`**
+Danach `http://localhost:3000` öffnen. Für den Produktionsbetrieb:
 
----
+```bash
+npm run build
+npm run start
+```
 
-### Mit Docker ausführen
+Oder mit Docker:
 
 ```bash
 docker compose up -d --build
 ```
 
----
+Hinter einem Reverse-Proxy (z. B. Caddy oder Nginx) betreiben und `x-forwarded-for` nur von
+diesem Proxy setzen lassen, weil das Rate-Limit die IP daraus liest.
 
-### Deployment auf `markenfrei.app`
+### HTTP-Schnittstelle
 
-#### Option A: Vercel (Empfohlen für Next.js)
-1. Repository `https://github.com/darkspike1988/markenfrei` bei [Vercel](https://vercel.com) importieren.
-2. In den Vercel-Projekteinstellungen unter **Domains** `markenfrei.app` und `www.markenfrei.app` hinzufügen.
-3. Bei deinem Domain-Registrar die DNS-Einträge hinterlegen:
-   * **A-Record** für `@` auf `76.76.21.21`
-   * **CNAME-Record** für `www` auf `cname.vercel-dns.com`
+`POST /api/check` mit `{ "names": ["wachwerk"], "tlds"?: [...], "namespaces"?: [...], "sources"?: [...] }`
+liefert `{ ranking, reports }`. Höchstens 10 Namen, Body höchstens 16 KB, jeder Name zählt
+einzeln fürs Rate-Limit. Details: [src/app/api/README.md](src/app/api/README.md).
 
-#### Option B: Docker / VPS (Hetzner, Netcup, etc.)
-1. Git-Repository auf den Server klonen.
-2. `docker compose up -d` starten.
-3. Nginx / Caddy als Reverse-Proxy mit automatischem Let's Encrypt SSL vorschalten:
-   ```caddy
-   markenfrei.app, www.markenfrei.app {
-       reverse_proxy 127.0.0.1:3000
-   }
-   ```
+## MCP-Server für Agenten
 
-#### Sicherheitsrelevante Umgebungsvariablen
+Vier Tools, alle schreibgeschützt und mit `outputSchema`:
 
-Markenfrei braucht keine API-Keys. Alle Variablen sind optional, eine Vorlage steht in [`.env.example`](.env.example):
+| Tool | Eingabe | Ergebnis |
+|---|---|---|
+| `markenfrei_check_name` | `name`, optional `namespaces`, `tlds`, `sources` | Ampel, Status je Quelle, Lücken, Markenvorbereitung |
+| `markenfrei_check_names` | `names` (1 bis 10), sonst wie oben | Rangliste und ein Bericht je Name |
+| `markenfrei_trademark_prep` | `name`, optional `classes` (1 bis 45) | Registerlinks, DPMA-Expertensuchstring, Varianten, Klassen, Checkliste; ohne Netzabfrage |
+| `markenfrei_suggest_names` | `keywords` (1 bis 6), optional `count` (1 bis 20) | ungeprüfte Kandidaten zum Weiterreichen an `markenfrei_check_names` |
+
+### Über HTTP
+
+Jede laufende Instanz stellt den Server unter `POST /api/mcp` bereit (Streamable HTTP,
+zustandslos). Für Claude Code:
+
+```bash
+claude mcp add --transport http markenfrei https://markenfrei.app/api/mcp
+```
+
+Der Endpunkt lehnt Batch-Anfragen ab, nimmt höchstens 64 KB an und prüft den `Origin`-Header
+(siehe `MARKENFREI_ALLOWED_ORIGINS` unten).
+
+### Lokal über stdio
+
+Das npm-Paket `markenfrei-mcp` liegt im Ordner [`mcp/`](mcp/README.md). Solange es noch nicht
+veröffentlicht ist, funktioniert `npx -y markenfrei-mcp` nicht; dann das Bündel aus dem
+Repository bauen und direkt starten:
+
+```bash
+npm run build:mcp
+claude mcp add markenfrei -- node /pfad/zu/markenfrei/mcp/dist/markenfrei-mcp.mjs
+```
+
+Für Claude Desktop (`claude_desktop_config.json`) oder Cursor (`.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "markenfrei": {
+      "command": "node",
+      "args": ["/pfad/zu/markenfrei/mcp/dist/markenfrei-mcp.mjs"],
+      "env": { "MARKENFREI_CONTACT": "mailto:du@example.org" }
+    }
+  }
+}
+```
+
+Nach der Veröffentlichung ersetzt `"command": "npx", "args": ["-y", "markenfrei-mcp"]` den
+lokalen Pfad. Weitere Varianten stehen in [mcp/README.md](mcp/README.md) und auf der Seite
+`/mcp`.
+
+## Umgebungsvariablen
+
+Markenfrei braucht keine API-Schlüssel. Alle Variablen sind optional, eine Vorlage steht in
+[`.env.example`](.env.example).
 
 | Variable | Wirkung |
 |---|---|
-| `GITHUB_TOKEN` | Höheres Rate-Limit für die GitHub-Abfragen (ohne Token 60 pro Stunde, 10 Suchen pro Minute je IP). Ohne Token funktioniert die Prüfung weiterhin. |
-| `MARKENFREI_CACHE_TTL_SEC` | Lebensdauer des Caches für eindeutige Quellenantworten in Sekunden (Standard 600, `0` schaltet ihn aus). |
-| `MARKENFREI_RATE_LIMIT` | Anfragen pro Minute und IP für alle öffentlichen Routen (Standard 60). Der Zähler gilt pro Serverprozess, bei mehreren Instanzen zusätzlich am Reverse-Proxy begrenzen. Die IP kommt aus `x-forwarded-for`, das nur hinter einem vertrauenswürdigen Proxy verlässlich ist. |
-| `MARKENFREI_ENABLE_LOCAL_INSPECT=1` | Erlaubt `appPath` in `/api/rea-inspect` (liest lokale `.app`-Pakete und `Info.plist`). In Produktion standardmäßig gesperrt, nur für lokalen Betrieb sinnvoll. |
+| `MARKENFREI_CONTACT` | Kontakt im User-Agent, z. B. `mailto:ops@example.org`. Der User-Agent lautet dann `Markenfrei/2.0 (+https://markenfrei.app; mailto:ops@example.org)`. Packagist wird nur mit einer E-Mail-Adresse abgefragt, sonst meldet die Quelle `unknown`. |
+| `MARKENFREI_ALLOWED_ORIGINS` | Kommagetrennte Liste zusätzlicher Origins (z. B. `https://example.org`), die `/api/mcp` aufrufen dürfen. Ohne `Origin`-Header ist der Aufruf immer erlaubt; mit Header sind sonst nur der eigene Host, `localhost` und `127.0.0.1` erlaubt. |
+| `GITHUB_TOKEN` | Token für die GitHub-Abfrage (Nutzer und Organisationen). Ohne Token gilt das Limit von 60 Anfragen pro Stunde und IP. Das Token braucht keine Berechtigungen. |
+| `MARKENFREI_RATE_LIMIT` | Anfragen pro Minute und IP für alle öffentlichen Routen (Standard 60). Bei `/api/check` und `markenfrei_check_names` zählt jeder Name einzeln. Der Zähler gilt pro Serverprozess; bei mehreren Instanzen zusätzlich am Reverse-Proxy begrenzen. |
+| `MARKENFREI_CACHE_TTL_SEC` | Lebensdauer des Zwischenspeichers für eindeutige Quellenantworten im Arbeitsspeicher, Standard 600 Sekunden, `0` schaltet ihn aus. `unknown` wird nie zwischengespeichert, nichts wird auf die Platte geschrieben. |
 
----
+## Entwicklung
 
-## 🛠️ Tech-Stack
+```bash
+npm test               # Offline-Tests (node:test über tsx, Netz gestubbt)
+npm run lint           # ESLint
+npm run build          # Next.js-Build
+npm run build:mcp      # MCP-Bündel nach mcp/dist/
+npm run test:mcp-package  # npm pack und Start aus dem entpackten Paket
+```
 
-* **Framework:** Next.js 16 (App Router, Turbopack, React 19)
-* **Sprache:** TypeScript
-* **Styling:** Tailwind CSS (Warm Monochrome, `#fbfbfa` Canvas, `#111111` Ink, 0 Drop Shadows)
-* **Icons:** Phosphor Icons (`@phosphor-icons/react`)
-* **Protokolle & APIs:** IETF RDAP (RFC 7484), DNS-over-HTTPS (RFC 8484), Apple iTunes Search & Lookup API, Google Play, Wikipedia REST API, DuckDuckGo Instant Answer API, Wikidata API, GitHub REST API, npm, PyPI, Crates.io, Homebrew API, Go Module Proxy.
+Aufbau und Beitragsregeln: [CONTRIBUTING.md](CONTRIBUTING.md). Weitere Dokumentation:
 
----
+- [`src/README.md`](src/README.md): Aufbau und Datenfluss
+- [`src/lib/README.md`](src/lib/README.md): Engine, Quellen und Hilfsmodule
+- [`src/app/api/README.md`](src/app/api/README.md): HTTP-Routen
+- [`docs/v2-spec.md`](docs/v2-spec.md): verbindliche Spezifikation
+- [`ROADMAP.md`](ROADMAP.md): Stand und offene Punkte
 
-## 📚 EGM (Elephant-Goldfish-Method) Dokumentation
+Tech-Stack: Next.js 16 (App Router, Turbopack), React 19, TypeScript, Tailwind CSS 4,
+MCP TypeScript SDK, zod.
 
-Die Architektur und Schnittstellen sind modular dokumentiert:
-* [`src/README.md`](src/README.md) – Gesamtarchitektur & Datenfluss
-* [`src/lib/README.md`](src/lib/README.md) – Scoring, Phonetik, DoH, Domain-Pricing & Open APIs
-* [`src/app/api/README.md`](src/app/api/README.md) – API-Routen, Invarianten & Endpunkte
+## Rechtlicher Hinweis
 
----
-
-## ⚖️ Rechtlicher Hinweis
-*Markenfrei* dient der technischen und algorithmischen Vorab-Recherche. Es ersetzt keine anwaltliche Markenberatung oder verbindliche Ähnlichkeitsrecherche durch einen Fachanwalt für gewerblichen Rechtsschutz.
+Markenfrei dient der technischen Vorab-Recherche. Es ersetzt keine anwaltliche
+Markenberatung und keine verbindliche Ähnlichkeitsrecherche.
