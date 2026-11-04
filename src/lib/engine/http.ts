@@ -15,6 +15,52 @@ import type { HttpClient, HttpRequest, HttpResponse } from "@/lib/engine/types";
 const DEFAULT_TIMEOUT_MS = 5000;
 const DEFAULT_MAX_BYTES = 512 * 1024;
 const PER_HOST_LIMIT = 4;
+
+/**
+ * Abfragebudget je Zieldienst, prozessweit. Es gilt zusätzlich zur Zahl gleichzeitiger Anfragen
+ * und hält dokumentierte Grenzen der Anbieter ein. Ist es erschöpft, wartet die Anfrage kurz oder
+ * gibt auf (error "budget"), statt den Dienst zu überlasten oder die Server-IP sperren zu lassen.
+ * Gilt pro Prozess: Bei mehreren Instanzen teilt sich das Budget nicht, dort entsprechend senken.
+ *
+ * Belege (Stand 4. November 2026):
+ * - itunes.apple.com: Apple nennt "approximately 20 calls per minute" (iTunes Search API) und empfiehlt
+ *   Caching. Wir nehmen 18 pro Minute.
+ * - crates.io: Crawler-Richtlinie, höchstens 1 Anfrage pro Sekunde.
+ * - hex.pm: 100 Anfragen pro Minute ohne Anmeldung. Wir nehmen 90.
+ * - mastodon.social: 300 Anfragen je 5 Minuten und IP. Wir nehmen 250.
+ */
+export type HostBudget = { max: number; windowMs: number };
+export const HOST_BUDGETS: Record<string, HostBudget> = {
+  "itunes.apple.com": { max: 18, windowMs: 60_000 },
+  "crates.io": { max: 1, windowMs: 1_000 },
+  "hex.pm": { max: 90, windowMs: 60_000 },
+  "mastodon.social": { max: 250, windowMs: 300_000 },
+};
+/** Längste Wartezeit auf ein freies Budget, danach error "budget" */
+const MAX_BUDGET_WAIT_MS = 1500;
+
+const budgetLog = new Map<string, number[]>();
+
+/**
+ * Verbraucht ein Budget, wenn eines frei ist (Rückgabe 0). Sonst Millisekunden bis zum nächsten
+ * freien Platz, ohne etwas zu verbrauchen.
+ */
+export function takeBudget(host: string, budget: HostBudget, nowMs: number): number {
+  const log = budgetLog.get(host) ?? [];
+  const recent = log.filter((t) => nowMs - t < budget.windowMs);
+  if (recent.length < budget.max) {
+    recent.push(nowMs);
+    budgetLog.set(host, recent);
+    return 0;
+  }
+  budgetLog.set(host, recent);
+  return Math.max(1, recent[0] + budget.windowMs - nowMs);
+}
+
+/** Nur für Tests */
+export function resetHostBudgets(): void {
+  budgetLog.clear();
+}
 /** Höchstens so viele Slots je Host für eine Prüfung, damit andere nicht verhungern */
 const PER_OWNER_LIMIT = 3;
 
@@ -177,6 +223,8 @@ export function createHttpClient(opts: {
   perHostLimit?: number;
   /** Höchstens so viele Slots je Host für diesen Besitzer, Standard 3 */
   perOwnerLimit?: number;
+  /** Abfragebudgets je Host, Standard HOST_BUDGETS (für Tests überschreibbar) */
+  hostBudgets?: Record<string, HostBudget>;
   /**
    * Wem die Anfragen zugerechnet werden. Mehrere Clients mit demselben Besitzer teilen
    * sich dessen Slot-Grenze (z. B. alle Namen eines checkNames-Aufrufs). Standard: eigener.
@@ -199,6 +247,20 @@ export function createHttpClient(opts: {
       host = new URL(url).host;
     } catch {
       return { status: 0, headers: empty, error: "network" };
+    }
+
+    const budget = (opts.hostBudgets ?? HOST_BUDGETS)[host];
+    if (budget) {
+      let wait = takeBudget(host, budget, now());
+      if (wait > 0) {
+        // Warten nur, wenn es sich lohnt: kurz genug und mit Luft bis zur Deadline
+        if (wait > Math.min(MAX_BUDGET_WAIT_MS, opts.deadlineAt - now() - 1000)) {
+          return { status: 0, headers: empty, error: "budget" };
+        }
+        await new Promise((r) => setTimeout(r, wait));
+        wait = takeBudget(host, budget, now());
+        if (wait > 0) return { status: 0, headers: empty, error: "budget" };
+      }
     }
 
     const release = await acquireSlot(host, owner, {

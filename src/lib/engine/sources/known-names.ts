@@ -30,7 +30,9 @@ function failure(base: Base, res: HttpResponse, url?: string): SourceResult | nu
     const note =
       res.error === "timeout" || res.error === "deadline"
         ? "Zeitüberschreitung, nicht geprüft"
-        : res.error === "too_large"
+        : res.error === "budget"
+          ? "Abfragelimit des Dienstes erreicht, später erneut prüfen"
+          : res.error === "too_large"
           ? "Antwort zu groß, nicht geprüft"
           : res.error === "parse"
             ? "Antwort nicht lesbar, nicht geprüft"

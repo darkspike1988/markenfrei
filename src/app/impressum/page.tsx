@@ -13,9 +13,9 @@ export default function ImpressumPage() {
       <h1 className="font-serif text-4xl leading-[1.1] tracking-[-0.02em] text-ink sm:text-5xl">Impressum</h1>
       <Suspense fallback={<p className="mt-6 text-soft">Lädt …</p>}>
         <WithOperator>
-          {({ operator, missing }) => (
+          {({ operator, missing, recommendations }) => (
             <>
-              <MissingOperatorNotice missing={missing} />
+              <MissingOperatorNotice missing={missing} recommendations={recommendations} />
               <div className="mt-6 max-w-2xl space-y-6 text-soft">
                 <section aria-labelledby="anbieter">
                   <h2 id="anbieter" className="mb-1 font-medium text-ink">Angaben nach § 5 DDG</h2>

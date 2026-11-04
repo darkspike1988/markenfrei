@@ -24,6 +24,7 @@ function evidenceOf(res: HttpResponse): string {
 function unknownFrom(base: Base, res: HttpResponse, url?: string): SourceResult {
   let note = "Keine verwertbare Antwort, bitte manuell prüfen";
   if (res.error === "timeout" || res.error === "deadline") note = "Zeitüberschreitung, bitte manuell prüfen";
+  else if (res.error === "budget") note = "Abfragelimit des Dienstes erreicht (Apple nennt etwa 20 Anfragen pro Minute), später oder manuell prüfen";
   else if (res.error === "network") note = "Dienst nicht erreichbar, bitte manuell prüfen";
   else if (res.status === 429) note = "Zu viele Anfragen, bitte später oder manuell prüfen";
   else if (res.status >= 500) note = "Dienst gestört, bitte manuell prüfen";

@@ -26,6 +26,7 @@ const ERROR_NOTE: Record<NonNullable<HttpResponse["error"]>, string> = {
   network: "Netzwerkfehler, Quelle nicht erreichbar",
   too_large: "Antwort größer als erwartet",
   parse: "Antwort nicht lesbar",
+  budget: "Abfragelimit des Dienstes erreicht, später erneut prüfen",
 };
 
 function unknownResult(b: Base, res: HttpResponse, note?: string): SourceResult {
