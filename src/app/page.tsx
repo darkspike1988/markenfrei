@@ -25,6 +25,7 @@ import { ResultRow, ResultSkeleton } from "@/components/result-row";
 import { DetailPanel } from "@/components/detail-panel";
 import { InfoModal } from "@/components/info-modal";
 import { normalizeName } from "@/lib/name";
+import { toPublicReport } from "@/lib/public-report";
 
 const TLDS = ["de", "com", "app", "ai", "io", "dev"];
 
@@ -342,6 +343,19 @@ export default function Home() {
     const a = document.createElement("a");
     a.href = url;
     a.download = `markenfrei-${clean(query || "export") || "export"}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Gleiches Schema wie die MCP-Antwort (schemaVersion im Dokument)
+  const exportJson = () => {
+    const doc = { query: query || null, reports: visible.map(toPublicReport) };
+    const url = URL.createObjectURL(
+      new Blob([JSON.stringify(doc, null, 2)], { type: "application/json" }),
+    );
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `markenfrei-${clean(query || "export") || "export"}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -667,6 +681,16 @@ export default function Home() {
                     >
                       <Download size={13} weight="bold" />
                       <span>Export</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={exportJson}
+                      className="inline-flex cursor-pointer items-center gap-1 text-muted hover:text-ink"
+                      title="Als JSON exportieren (gleiches Schema wie MCP)"
+                    >
+                      <Download size={13} weight="bold" />
+                      <span>JSON</span>
                     </button>
                   </div>
                 )}
