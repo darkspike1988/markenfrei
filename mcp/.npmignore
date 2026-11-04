@@ -1,0 +1,7 @@
+# Ins Paket gehören nur dist/ und README.md (siehe "files" in package.json).
+# Diese Liste ist eine zweite Absicherung für Build- und Testdateien.
+build.mjs
+test-package.mjs
+server.json
+*.tgz
+*.map

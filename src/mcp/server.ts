@@ -1,393 +1,292 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { toPublicReport } from "@/lib/public-report";
-import { SUPPORTED_TLDS } from "@/lib/tlds";
 import {
-  performClearanceCheck,
-} from "@/lib/clearance";
+  CheckInputError,
+  checkName,
+  checkNames,
+  DEFAULT_NAMESPACES,
+  MAX_NAMES,
+  MAX_TLDS,
+  STATIC_SOURCES,
+  type CheckOptions,
+  type NameReport,
+} from "@/lib/engine/check";
 import {
-  compareDomainPrices,
-} from "@/lib/domain-pricing";
-import {
-  discoverOpenDataWords,
-} from "@/lib/opendata";
-import {
-  auditCandidateBundleIds,
-  checkAppleBundleId,
-  checkGooglePlayPackage,
-} from "@/lib/rea";
-import {
-  OPEN_APIS_INVENTORY,
-  getApiCategories,
-  getApisByCategory,
-} from "@/lib/open-apis";
+  NameReportSchema,
+  NamespaceSchema,
+  ShortlistEntrySchema,
+  TrademarkPrepSchema,
+} from "@/lib/engine/report-schema";
+import { DEFAULT_DOMAIN_TLDS, DOMAIN_TLDS } from "@/lib/engine/sources/domains";
+import { trademarkPrep, type TrademarkPrep } from "@/lib/engine/trademark-prep";
+import { NAMESPACE_LABEL, NAMESPACES } from "@/lib/engine/types";
+import { STATUS_LABEL, type ShortlistEntry, type Verdict } from "@/lib/engine/verdict";
+import { normalizeName } from "@/lib/name";
+import { discoverOpenDataWords } from "@/lib/opendata";
 
-export function createMarkenfreiMcpServer(): McpServer {
-  const server = new McpServer({
-    name: "markenfrei",
-    version: "1.0.0",
+export const MCP_SERVER_VERSION = "2.0.0";
+
+export const TOOL_NAMES = [
+  "markenfrei_check_name",
+  "markenfrei_check_names",
+  "markenfrei_trademark_prep",
+  "markenfrei_suggest_names",
+] as const;
+
+const SERVER_INSTRUCTIONS = [
+  "Markenfrei prüft Namen deterministisch in offenen Quellen: Domains (RDAP), Paketregister, App Stores, bekannte Namen und auf Wunsch Social-Plattformen. Kein LLM, keine Speicherung der Anfragen.",
+  "Status je Quelle: taken = vergeben; not_found = die Quelle kennt den Namen nicht (das heißt nicht registrierbar); similar = ähnlicher Treffer; invalid = dort nicht zulässig; unknown = keine verwertbare Antwort. unknown nie als frei werten.",
+  "Ampel je Name: green (Keine Treffer) heißt nur, dass die geprüften Quellen nichts gefunden haben. Das ist keine Markenfreigabe.",
+  "Markenregister werden nicht abgefragt, die Marke ist immer „nicht geprüft“. Die Recherche mit markenfrei_trademark_prep vorbereiten und dem Menschen die Links und den DPMA-Suchstring geben.",
+  "Beim Benennen: Kandidaten selbst erzeugen oder markenfrei_suggest_names nutzen, dann alle zusammen mit markenfrei_check_names prüfen (bis 10 Namen).",
+].join("\n");
+
+const STATUS_HELP =
+  "Status je Quelle: taken = vergeben, not_found = nicht gefunden (heißt nicht registrierbar), similar = ähnlich, invalid = nicht zulässig, unknown = keine Antwort (nie als frei werten). Ampel: green = keine Treffer in den geprüften Quellen, yellow = Treffer oder Lücken prüfen, red = vergeben. Grün ist keine Markenfreigabe: Markenregister werden nicht abgefragt.";
+
+// --- Eingaben ---------------------------------------------------------------
+
+const SOURCE_IDS = STATIC_SOURCES.map((s) => s.id) as [string, ...string[]];
+const DEFAULT_SOURCE_IDS = STATIC_SOURCES.filter((s) => s.defaultEnabled).map((s) => s.id);
+
+const nameField = z
+  .string()
+  .min(2, { error: "Der Name braucht mindestens 2 Zeichen." })
+  .max(63, { error: "Der Name darf höchstens 63 Zeichen lang sein." });
+
+const checkFields = {
+  namespaces: z
+    .array(NamespaceSchema)
+    .optional()
+    .describe(
+      `Namensräume (Standard: ${DEFAULT_NAMESPACES.join(", ")}). Erlaubt: ${NAMESPACES.map((n) => `${n} (${NAMESPACE_LABEL[n]})`).join(", ")}.`,
+    ),
+  tlds: z
+    .array(z.enum(DOMAIN_TLDS as unknown as [string, ...string[]]))
+    .max(MAX_TLDS, { error: `Höchstens ${MAX_TLDS} Endungen pro Anfrage.` })
+    .optional()
+    .describe(`Domain-Endungen ohne Punkt, höchstens ${MAX_TLDS} (Standard: ${DEFAULT_DOMAIN_TLDS.join(", ")}).`),
+  sources: z
+    .array(z.enum(SOURCE_IDS))
+    .optional()
+    .describe(
+      `Ausdrückliche Quellen statt der Standardauswahl außerhalb von Domains (Standard: ${DEFAULT_SOURCE_IDS.join(", ")}). Alle: ${STATIC_SOURCES.map((s) => `${s.id} (${s.label})`).join(", ")}.`,
+    ),
+};
+
+// --- Ausgaben ---------------------------------------------------------------
+
+export const CheckNamesOutputSchema = z.object({
+  ranking: z.array(ShortlistEntrySchema).describe("Frei in allen gewählten Quellen zuerst, dann wenige Treffer, dann wenige Lücken"),
+  reports: z.array(NameReportSchema),
+});
+
+export const TrademarkPrepOutputSchema = TrademarkPrepSchema.extend({
+  name: z.string().describe("Normalisierter Name"),
+});
+
+export const SuggestNamesOutputSchema = z.object({
+  keywords: z.array(z.string()),
+  checked: z.literal(false).describe("Die Kandidaten sind ungeprüft"),
+  note: z.string(),
+  candidates: z.array(z.object({ name: z.string(), origin: z.string(), category: z.string() })),
+  sourcesQueried: z.array(z.string()),
+});
+
+// --- Texte ------------------------------------------------------------------
+
+const VERDICT_WORD: Record<Verdict, string> = { green: "GRÜN", yellow: "GELB", red: "ROT" };
+const NOTE_MAX = 60;
+
+function shortNote(note: string | undefined): string {
+  if (!note) return "";
+  const n = note.replace(/\s+/g, " ").trim();
+  return ` (${n.length > NOTE_MAX ? `${n.slice(0, NOTE_MAX - 1)}…` : n})`;
+}
+
+/** Kompakter Bericht, eine Zeile je Namensraum. */
+export function formatReport(report: NameReport): string {
+  const lines = [`${report.name}: ${VERDICT_WORD[report.verdict]} (${report.verdictLabel})`];
+  for (const ns of NAMESPACES) {
+    const rows = report.results.filter((r) => r.namespace === ns);
+    if (rows.length === 0) continue;
+    // Hinweise nur bei "ähnlich" und "nicht zulässig"; Lücken stehen gesammelt in einer eigenen Zeile.
+    const parts = rows.map(
+      (r) => `${r.label} ${STATUS_LABEL[r.status]}${r.status === "similar" || r.status === "invalid" ? shortNote(r.note) : ""}`,
+    );
+    lines.push(`${NAMESPACE_LABEL[ns]}: ${parts.join(" | ")}`);
+  }
+  if (report.incomplete.length > 0) {
+    lines.push(`Lücken: ${report.incomplete.join(", ")} (keine verwertbare Antwort, nicht als frei werten)`);
+  }
+  lines.push("Marke: nicht geprüft → markenfrei_trademark_prep");
+  return lines.join("\n");
+}
+
+function formatRanking(ranking: ShortlistEntry[]): string {
+  const lines = [`Rangliste (${ranking.length} ${ranking.length === 1 ? "Name" : "Namen"}, frei in allen gewählten Quellen zuerst):`];
+  ranking.forEach((e, i) => {
+    let line = `${i + 1}. ${e.name}: ${VERDICT_WORD[e.verdict]}`;
+    if (e.taken.length > 0) line += ` · vergeben: ${e.taken.join(", ")}`;
+    if (e.unknown.length > 0) line += ` · Lücken: ${e.unknown.join(", ")}`;
+    lines.push(line);
   });
+  lines.push("Grün heißt nur: in den geprüften Quellen nichts gefunden. Marke: nicht geprüft → markenfrei_trademark_prep");
+  return lines.join("\n");
+}
 
-  // Tool 1: Full clearance check
-  server.tool(
-    "markenfrei_clearance_check",
-    "Vorprüfung eines Namens: Domains (RDAP-Registries mit DNS-Fallback), Apple App Store und Google Play, Paketnamen (GitHub, npm, PyPI, crates.io, Homebrew, Go), bekannte Namen (Wikidata, Wikipedia, DuckDuckGo) sowie Kölner Phonetik und Freihaltebedürfnis (§ 8 MarkenG) als Heuristik. Die Markenregister (DPMA, EUIPO, WIPO, USPTO) werden NICHT abgefragt, der Bericht verlinkt sie für die manuelle Recherche. Eine grüne Ampel heißt nicht, dass der Name als Marke frei ist. Das Ergebnis ist deterministisch bei gleichen Antworten der Quellen und liegt als structuredContent im Schema PublicReport vor.",
+function formatTrademarkPrep(name: string, prep: TrademarkPrep): string {
+  return [
+    `${name}: Marke nicht geprüft. ${prep.note}`,
+    "",
+    "Recherche-Links:",
+    ...prep.links.map((l) => `- ${l.label}: ${l.url}`),
+    "",
+    `DPMA-Expertensuchstring: ${prep.dpmaExpertQuery}`,
+    `Schreibvarianten: ${prep.variants.length > 0 ? prep.variants.join(", ") : "keine"}`,
+    `Klassen: ${prep.classes.map((c) => `${c.number} (${c.title})`).join("; ") || "keine"}`,
+    "",
+    "Checkliste:",
+    ...prep.checklist.map((c, i) => `${i + 1}. ${c}`),
+  ].join("\n");
+}
+
+// --- Ergebnisse -------------------------------------------------------------
+
+function ok(text: string, structured: object): CallToolResult {
+  return {
+    content: [{ type: "text", text }],
+    structuredContent: structured as Record<string, unknown>,
+  };
+}
+
+function toolError(err: unknown): CallToolResult {
+  const text =
+    err instanceof CheckInputError
+      ? `Eingabefehler: ${err.message}`
+      : `Interner Fehler: ${err instanceof Error ? err.message : String(err)}`;
+  return { isError: true, content: [{ type: "text", text }] };
+}
+
+export type MarkenfreiServerOptions = Pick<CheckOptions, "fetchImpl" | "now" | "contact">;
+
+export function createMarkenfreiMcpServer(opts: MarkenfreiServerOptions = {}): McpServer {
+  const server = new McpServer(
+    { name: "markenfrei", title: "Markenfrei", version: MCP_SERVER_VERSION },
+    { instructions: SERVER_INSTRUCTIONS },
+  );
+
+  server.registerTool(
+    "markenfrei_check_name",
     {
-      name: z
-        .string()
-        .min(2)
-        .describe("Der zu prüfende Name (z. B. 'WachWerk' oder 'CloudPilot')"),
-      description: z
-        .string()
-        .optional()
-        .describe("Optionale Beschreibung des Projekts oder Produkts"),
-      tagline: z.string().optional().describe("Optionale Tagline"),
-      tlds: z
-        .array(z.string())
-        .optional()
-        .describe(
-          `Endungen zur Prüfung, höchstens 8 (Standard: de, com, app, ai, io). Unterstützt: ${SUPPORTED_TLDS.join(", ")}`,
-        ),
+      title: "Namen prüfen",
+      description: `Prüft einen Namen, bevor ein Projekt, Paket, Repo, App-Eintrag oder eine Domain angelegt wird: Domains per RDAP, Paketregister (npm, PyPI, GitHub, crates.io, Homebrew), App Stores und bekannte Namen (Marken-Heuristik, Wikidata, GLEIF). Liefert eine Ampel, je Quelle einen Status mit Link zum Nachprüfen und die Vorbereitung der Markenrecherche. ${STATUS_HELP} Für mehrere Kandidaten markenfrei_check_names verwenden.`,
+      inputSchema: {
+        name: nameField.describe("Der zu prüfende Name, z. B. wachwerk. Umlaute werden ausgeschrieben, eine angehängte Endung entfernt."),
+        ...checkFields,
+      },
+      outputSchema: NameReportSchema,
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    async ({ name, description, tagline, tlds }) => {
+    async ({ name, namespaces, tlds, sources }) => {
       try {
-        const report = await performClearanceCheck({
-          name,
-          description,
-          tagline,
-          tlds,
-        });
-        const publicReport = toPublicReport(report);
-
-        const freeDomains = report.domains
-          .filter((d) => d.status === "available")
-          .map((d) => `.${d.tld}`);
-        const takenDomains = report.domains
-          .filter((d) => d.status === "taken")
-          .map((d) => `.${d.tld}`);
-
-        const summaryText = [
-          `# Markenfrei Vorab-Prüfung: „${report.name}“`,
-          ``,
-          `* **Gesamt-Urteil:** ${report.matrixScore.verdict.toUpperCase()} (${report.matrixScore.verdictLabel})`,
-          `* **Clearance-Score:** ${report.matrixScore.totalScore} / 100 Punkte`,
-          `* **Phonetischer Code (Kölner Phonetik):** \`${report.trademark.koelnerPhonetik}\` (Soundex: \`${report.trademark.soundex}\`)`,
-          `* **Freihaltebedürfnis (§ 8 MarkenG):** Risiko ${report.trademark.descriptivenessRisk.toUpperCase()} (${report.trademark.descriptivenessNote})`,
-          ``,
-          `## 🌐 Domain-Verfügbarkeit`,
-          `* **Frei:** ${freeDomains.length > 0 ? freeDomains.join(", ") : "keine"}`,
-          `* **Vergeben:** ${takenDomains.length > 0 ? takenDomains.join(", ") : "keine"}`,
-          ``,
-          `## 📱 Mobile App Stores & Werktitelschutz (§ 5 Abs. 3 MarkenG)`,
-          `* **Status:** ${report.appStore.status}`,
-          `* **Apple App Store Treffer:** ${report.appStore.hits.length}`,
-          report.appStore.hits.length > 0
-            ? report.appStore.hits
-                .slice(0, 3)
-                .map((h) => `  - ${h.trackName} (${h.sellerName}) [${h.primaryGenreName}]`)
-                .join("\n")
-            : `  - Keine identischen oder ähnlichen Apps im deutschen App Store gefunden.`,
-          ``,
-          `## 💻 Entwickler-Namensräume`,
-          `* **GitHub Handle:** ${report.devAndSocial.githubHandle}`,
-          `* **npm Package:** ${report.devAndSocial.npmPackage}`,
-          `* **PyPI Package:** ${report.devAndSocial.pypiPackage}`,
-          `* **Crates.io:** ${report.devAndSocial.cratesIo}`,
-          `* **Homebrew:** ${report.devAndSocial.homebrew}`,
-          `* **Go Module:** ${report.devAndSocial.golangModule}`,
-          ``,
-          `## ⚖️ Empfohlene Nizza-Klassen & Amtsgebühren`,
-          `* Klassen: ${report.trademark.niceClasses.map((c) => `Klasse ${c.classNumber} (${c.title})`).join("; ")}`,
-          `* **DPMA (DE):** ${report.trademark.officialFees.dpma}`,
-          `* **EUIPO (EU):** ${report.trademark.officialFees.euipo}`,
-          `* **USPTO (US):** ${report.trademark.officialFees.uspto}`,
-          ``,
-          `## 🔍 Amtliche Register-Links`,
-          `* DPMAregister: ${report.trademark.registryLinks.dpma}`,
-          `* TMview (EU & DE): ${report.trademark.registryLinks.tmview}`,
-          `* EUIPO eSearch: ${report.trademark.registryLinks.euipo}`,
-          `* WIPO Brand DB: ${report.trademark.registryLinks.wipo}`,
-          `* USPTO TSDR: ${report.trademark.registryLinks.uspto}`,
-        ].join("\n");
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: summaryText,
-            },
-            {
-              type: "text",
-              text: JSON.stringify(publicReport, null, 2),
-            },
-          ],
-          // Maschinenlesbar im stabilen Schema (siehe lib/public-report.ts)
-          structuredContent: publicReport as unknown as Record<string, unknown>,
-        };
+        const report = await checkName(name, { ...opts, namespaces, tlds, sources });
+        return ok(formatReport(report), report);
       } catch (err) {
-        return {
-          isError: true,
-          content: [
-            {
-              type: "text",
-              text: `Fehler bei der Prüfung von „${name}“: ${err instanceof Error ? err.message : String(err)}`,
-            },
-          ],
-        };
+        return toolError(err);
       }
     },
   );
 
-  // Tool 2: Domain price comparison
-  server.tool(
-    "markenfrei_domain_pricing",
-    "Vergleicht hinterlegte Registrar-Dauerpreise für eine Domain oder Endung (Stand 2026, fest eingetragen, nicht live abgefragt). Zeigt die günstigsten Anbieter und warnt vor Lockangeboten.",
+  server.registerTool(
+    "markenfrei_check_names",
     {
-      domainOrTld: z
-        .string()
-        .describe("Domainname (z. B. 'meinprojekt.de') oder TLD (z. B. 'de', 'com', 'app')"),
+      title: "Shortlist prüfen",
+      description: `Prüft bis zu ${MAX_NAMES} Kandidaten in denselben Quellen wie markenfrei_check_name und sortiert sie: frei in allen gewählten Quellen zuerst, dann wenige Treffer, dann wenige Lücken. Gedacht für die Namenssuche: Kandidaten erzeugen (selbst oder mit markenfrei_suggest_names) und hier gesammelt prüfen. ${STATUS_HELP}`,
+      inputSchema: {
+        names: z
+          .array(nameField)
+          .min(1, { error: "Bitte mindestens einen Namen angeben." })
+          .max(MAX_NAMES, { error: `Höchstens ${MAX_NAMES} Namen pro Anfrage.` })
+          .describe(`1 bis ${MAX_NAMES} Namen`),
+        ...checkFields,
+      },
+      outputSchema: CheckNamesOutputSchema,
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    async ({ domainOrTld }) => {
-      const clean = domainOrTld.toLowerCase().trim().replace(/^\./, "");
-      const tld = clean.includes(".") ? clean.split(".").pop() || "de" : clean;
-      const domain = clean.includes(".") ? clean : `name.${clean}`;
-
-      const comparison = compareDomainPrices(domain);
-
-      if (!comparison) {
-        return {
-          isError: true,
-          content: [
-            {
-              type: "text",
-              text: `Keine Preisdaten für TLD .${tld} verfügbar. Unterstützt werden: .de, .com, .app, .ai, .io, .dev.`,
-            },
-          ],
-        };
+    async ({ names, namespaces, tlds, sources }) => {
+      try {
+        const result = await checkNames(names, { ...opts, namespaces, tlds, sources });
+        return ok(formatRanking(result.ranking), result);
+      } catch (err) {
+        return toolError(err);
       }
-
-      const teaserTrap = comparison.registrars.find((r) => r.isTeaserTrap);
-
-      const lines = [
-        `# Domain-Preisvergleich für .${tld.toUpperCase()} (${domain})`,
-        ``,
-        `* **Günstigster Dauerpreis:** ${comparison.cheapestRenewal.name} mit **${comparison.cheapestRenewal.renewalEur.toFixed(2)} € / Jahr**`,
-        comparison.atCostRecommendation
-          ? `* **At-Cost Großhandel (0 $ Markup):** ${comparison.atCostRecommendation.name} mit **${comparison.atCostRecommendation.renewalEur.toFixed(2)} € / Jahr**`
-          : "",
-        teaserTrap && teaserTrap.trapWarning
-          ? `⚠️ **Lockvogel-Warnung:** ${teaserTrap.name} (${teaserTrap.trapWarning})`
-          : "",
-        ``,
-        `### Alle Anbieter im Vergleich (sortiert nach Dauerpreis):`,
-        ...comparison.registrars.map(
-          (r, i) =>
-            `${i + 1}. **${r.name}**: Erstes Jahr: ${r.firstYearEur.toFixed(2)} € | **Verlängerung: ${r.renewalEur.toFixed(2)} €/Jahr**${r.isAtCost ? " *(At-Cost Wholesale)*" : ""}${r.isTeaserTrap ? " ⚠️ *(Lockvogelangebot)*" : ""} [Link](${r.registerUrl})`,
-        ),
-      ].filter(Boolean);
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: lines.join("\n"),
-          },
-        ],
-      };
     },
   );
 
-  // Tool 3: Generate brand ideas (Open-Data zero-key morphology)
-  server.tool(
-    "markenfrei_generate_ideas",
-    "Generiert unbedenkliche Markennamen, Portmanteaus und Kunstwörter basierend auf einem Thema oder einer Projektidee. Nutzt 100% deutsches Open-Data Wortfeld-Morphing ohne API-Key.",
+  server.registerTool(
+    "markenfrei_trademark_prep",
     {
-      query: z
-        .string()
-        .min(2)
-        .describe("Thema oder Projektidee (z. B. 'Schichtplaner Hilfsorganisationen' oder 'Cloud Kosten')"),
-      count: z
-        .number()
-        .optional()
-        .default(10)
-        .describe("Anzahl gewünschter Namensvorschläge (Standard: 10)"),
+      title: "Markenrecherche vorbereiten",
+      description:
+        "Bereitet die Markenrecherche ohne Netzabfrage vor: Links zu DPMAregister, TMview, EUIPO, WIPO, TMDB und USPTO, ein DPMA-Expertensuchstring, Schreibvarianten, Nizza-Klassen und eine Checkliste. Markenfrei fragt keine Markenregister ab; das Ergebnis ist eine Anleitung für den Menschen, keine Freigabe. Verwenden, sobald ein Name in die engere Wahl kommt.",
+      inputSchema: {
+        name: nameField.describe("Der Name, für den die Recherche vorbereitet wird"),
+        classes: z
+          .array(
+            z
+              .number()
+              .int({ error: "Klassen sind ganze Zahlen." })
+              .min(1, { error: "Nizza-Klassen reichen von 1 bis 45." })
+              .max(45, { error: "Nizza-Klassen reichen von 1 bis 45." }),
+          )
+          .max(45)
+          .optional()
+          .describe("Nizza-Klassen 1 bis 45; ohne Angabe ein Vorschlag (z. B. 9 und 42 für Software)"),
+      },
+      outputSchema: TrademarkPrepOutputSchema,
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    async ({ query, count = 10 }) => {
-      const tokens = query.split(/[\s,.;:!?()/-]+/).filter((w) => w.length >= 3);
-      const wordField = await discoverOpenDataWords({
-        keywords: tokens,
-        description: query,
-        maxLen: 12,
-      });
-
-      const candidates = wordField.synthesizedCandidates.slice(0, count);
-
-      const lines = [
-        `# Markenfrei Namens-Generierung für: „${query}“`,
-        ``,
-        `Hier sind ${candidates.length} konstruierte Kunstwörter und Portmanteaus (generiert aus OpenThesaurus & Datamuse), bereit für die Sofort-Clearance-Prüfung:`,
-        ``,
-        ...candidates.map(
-          (c, i) =>
-            `${i + 1}. **${c.name}** – *${c.origin}* [Kategorie: ${c.category}]`,
-        ),
-      ];
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: lines.join("\n"),
-          },
-          {
-            type: "text",
-            text: JSON.stringify(candidates, null, 2),
-          },
-        ],
-      };
+    async ({ name, classes }) => {
+      const n = normalizeName(name);
+      if (!n.ok) return toolError(new CheckInputError(n.error));
+      const prep = trademarkPrep(n.name, { classes });
+      return ok(formatTrademarkPrep(n.name, prep), { name: n.name, ...prep });
     },
   );
 
-  // Tool 4: Inspect App Bundle ID & Mobile Stores
-  server.tool(
-    "markenfrei_inspect_bundle",
-    "Prüft einen Reverse-DNS App-Bundle-Identifier (z. B. 'de.wachwerk.app') oder Paketnamen auf Apple App Store und Google Play Store Präsenz (Werktitelschutz § 5 Abs. 3 MarkenG).",
+  server.registerTool(
+    "markenfrei_suggest_names",
     {
-      identifier: z
-        .string()
-        .min(3)
-        .describe("Der zu prüfende Bundle-Identifier oder Name (z. B. 'de.wachwerk.app')"),
+      title: "Namen vorschlagen",
+      description:
+        "Erzeugt Namenskandidaten (Kunstwörter, Portmanteaus) aus einem Wortfeld zu den Stichwörtern (OpenThesaurus, Datamuse, feste Regeln, kein LLM). Die Kandidaten sind ungeprüft: anschließend mit markenfrei_check_names prüfen.",
+      inputSchema: {
+        keywords: z
+          .array(z.string().min(2, { error: "Stichwörter brauchen mindestens 2 Zeichen." }).max(40))
+          .min(1, { error: "Bitte mindestens ein Stichwort angeben." })
+          .max(6, { error: "Höchstens 6 Stichwörter." })
+          .describe("1 bis 6 Stichwörter zum Projekt, z. B. [\"schicht\", \"planung\"]"),
+        count: z.number().int().min(1).max(20).default(10).describe("Anzahl der Kandidaten, 1 bis 20 (Standard 10)"),
+      },
+      outputSchema: SuggestNamesOutputSchema,
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    async ({ identifier }) => {
-      const clean = identifier.trim().toLowerCase();
-      const isReverseDns = clean.includes(".");
-
-      if (isReverseDns) {
-        const [apple, google] = await Promise.all([
-          checkAppleBundleId(clean),
-          checkGooglePlayPackage(clean),
-        ]);
-
-        const summary = [
-          `# App-Bundle & Werktitelschutz: \`${clean}\``,
-          ``,
-          `* **Apple App Store:** ${apple.status === "taken" ? `❌ Vergeben (${apple.app?.trackName ?? "vorhanden"})` : apple.status === "available" ? "✅ Frei" : "⚠️ Unbekannt"}`,
-          `* **Google Play Store:** ${google.status === "taken" ? "❌ Paket existiert bereits im Play Store" : google.status === "available" ? "✅ Frei" : "⚠️ Unbekannt"}`,
+    async ({ keywords, count }) => {
+      try {
+        const field = await discoverOpenDataWords({ keywords, maxLen: 12 });
+        const candidates = field.synthesizedCandidates.slice(0, count);
+        const note = "Ungeprüft, mit markenfrei_check_names prüfen.";
+        const text = [
+          `${candidates.length} Kandidaten zu ${keywords.join(", ")} (${note})`,
+          ...candidates.map((c, i) => `${i + 1}. ${c.name}: ${c.origin}`),
         ].join("\n");
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: summary,
-            },
-            {
-              type: "text",
-              text: JSON.stringify({ bundleId: clean, apple, google }, null, 2),
-            },
-          ],
-        };
-      } else {
-        const audit = await auditCandidateBundleIds(clean);
-        return {
-          content: [
-            {
-              type: "text",
-              text: `# Kandidaten-Bundle-IDs für „${clean}“\n\n` +
-                audit
-                  .map(
-                    (b) =>
-                      `* \`${b.bundleId}\`: Apple [${b.appleStatus}], Google Play [${b.googlePlayStatus}]`,
-                  )
-                  .join("\n"),
-            },
-            {
-              type: "text",
-              text: JSON.stringify(audit, null, 2),
-            },
-          ],
-        };
+        return ok(text, { keywords, checked: false, note, candidates, sourcesQueried: field.sourcesQueried });
+      } catch (err) {
+        return toolError(err);
       }
     },
-  );
-
-  // Tool 5: Quelleninventar (abgefragte Quellen und reine Verweise)
-  server.tool(
-    "markenfrei_list_open_apis",
-    "Liefert das vollständige Verzeichnis aller weltweiten (europäischen, amerikanischen & asiatischen) von Markenfrei genutzten Open APIs und autoritativen Register mit Endpunkten und Dokumentations-URLs.",
-    {
-      category: z
-        .string()
-        .optional()
-        .describe("Optionale Kategorie-Filterung (z. B. 'Domains & DNS', 'Mobile App Stores', etc.)"),
-    },
-    async ({ category }) => {
-      const categories = getApiCategories();
-      const selectedCategories = category ? [category] : categories;
-
-      const lines: string[] = [
-        `# Markenfrei: Verwendete weltweite Open APIs & Datenquellen (Europa, Amerika, Asien)`,
-        ``,
-        `Markenfrei arbeitet nach dem Open-Data-First-Prinzip: Alle Kernabfragen erfolgen direkt gegen offizielle, kostenfreie Register und autoritative Schnittstellen ohne Tracking und ohne Paywall.`,
-        ``,
-      ];
-
-      for (const cat of selectedCategories) {
-        const apis = getApisByCategory(cat);
-        if (apis.length === 0) continue;
-        lines.push(`## ${cat}`);
-        for (const api of apis) {
-          lines.push(
-            `* **${api.name}** (\`${api.protocol}\` | ${api.auth}): ${api.purpose}\n  - Endpoint: \`${api.endpoint}\`\n  - Doku: ${api.docsUrl}`,
-          );
-        }
-        lines.push(``);
-      }
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: lines.join("\n"),
-          },
-          {
-            type: "text",
-            text: JSON.stringify(
-              category ? getApisByCategory(category) : OPEN_APIS_INVENTORY,
-              null,
-              2,
-            ),
-          },
-        ],
-      };
-    },
-  );
-
-  // Prompt: Structured brand clearance audit
-  server.prompt(
-    "clearance_audit_prompt",
-    "Führt einen vollständigen Marken-, Domain- und Identitäts-Audit für einen Projektnamen durch.",
-    {
-      name: z.string().describe("Der zu prüfende Name"),
-      purpose: z.string().describe("Zweck des Projekts oder der App"),
-    },
-    ({ name, purpose }) => ({
-      messages: [
-        {
-          role: "user",
-          content: {
-            type: "text",
-            text: `Bitte prüfe den Namen „${name}“ für das Projekt „${purpose}“.
-Rufe dazu das Tool markenfrei_clearance_check auf und erstelle mir einen detaillierten Bericht:
-1. Markenrechtliche Risikoeinstufung (§ 8 Freihaltebedürfnis, § 9 Verwechslungsgefahr, phonetische Zwillinge)
-2. Domain-Verfügbarkeit (.de, .com, .app) und günstigste Registrar-Preise (unter Vermeidung von Lockvogelangeboten)
-3. App Store & Werktitelschutz (§ 5 Abs. 3 MarkenG)
-4. Entwickler-Handles (GitHub, npm, PyPI)
-5. Konkrete Empfehlungen für Nizza-Klassen und offizielle Register-Recherche (DPMAregister, TMview).`,
-          },
-        },
-      ],
-    }),
   );
 
   return server;

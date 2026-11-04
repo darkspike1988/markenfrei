@@ -10,9 +10,8 @@ import type { HttpClient, HttpResponse, Source, SourceResult } from "@/lib/engin
  * nie als Beleg für „frei“.
  *
  * Live geprüft am 4. November 2026 mit google.<tld> (200) und zzqxkvjwabc.<tld> (404)
- * für alle RDAP-Endungen unten. Die Basis-URLs aus dem Bootstrap stimmen mit RDAP_BASE
- * in src/lib/clearance.ts überein; .de und .io stehen dort fälschlich als Bootstrap-Einträge,
- * sie fehlen im Bootstrap und kommen hier aus den Overrides.
+ * für alle RDAP-Endungen unten. .de und .io fehlen im IANA-Bootstrap und kommen deshalb
+ * aus den Overrides.
  */
 
 const BOOTSTRAP_URL = "https://data.iana.org/rdap/dns.json";
@@ -191,7 +190,7 @@ function stripDot(s: string): string {
 }
 
 /**
- * NS-Abfrage über DoH (Logik wie src/lib/doh.ts, aber über ctx.http).
+ * NS-Abfrage über DoH (Google, dann Cloudflare), über ctx.http.
  * "ns" heißt: Delegation in der Zone der Endung vorhanden, also registriert.
  * "no_ns" (NXDOMAIN oder keine NS) beweist nichts über die Registrierbarkeit.
  */

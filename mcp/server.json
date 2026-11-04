@@ -1,0 +1,47 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "app.markenfrei/mcp",
+  "title": "Markenfrei",
+  "description": "Namen prüfen: Domains, Paketregister, App Stores, bekannte Namen. Markenrecherche vorbereiten.",
+  "websiteUrl": "https://markenfrei.app",
+  "repository": {
+    "url": "https://github.com/darkspike1988/markenfrei",
+    "source": "github",
+    "subfolder": "mcp"
+  },
+  "version": "0.2.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "markenfrei-mcp",
+      "version": "0.2.0",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "MARKENFREI_CONTACT",
+          "description": "Kontakt im User-Agent, z. B. mailto:du@example.org (Packagist nur damit)",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "string"
+        },
+        {
+          "name": "GITHUB_TOKEN",
+          "description": "Optionales GitHub-Token ohne Berechtigungen gegen das Limit von 60 Anfragen pro Stunde",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
+        }
+      ]
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://markenfrei.app/api/mcp"
+    }
+  ]
+}
