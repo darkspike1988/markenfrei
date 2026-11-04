@@ -1,5 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { toPublicReport } from "@/lib/public-report";
+import { SUPPORTED_TLDS } from "@/lib/tlds";
 import {
   performClearanceCheck,
 } from "@/lib/clearance";
@@ -43,7 +45,9 @@ export function createMarkenfreiMcpServer(): McpServer {
       tlds: z
         .array(z.string())
         .optional()
-        .describe("TLDs zur Prüfung (Standard: ['de', 'com', 'app', 'ai', 'io'])"),
+        .describe(
+          `Endungen zur Prüfung, höchstens 8 (Standard: de, com, app, ai, io). Unterstützt: ${SUPPORTED_TLDS.join(", ")}`,
+        ),
     },
     async ({ name, description, tagline, tlds }) => {
       try {
@@ -51,8 +55,9 @@ export function createMarkenfreiMcpServer(): McpServer {
           name,
           description,
           tagline,
-          tlds: tlds && tlds.length > 0 ? tlds : ["de", "com", "app", "ai", "io"],
+          tlds,
         });
+        const publicReport = toPublicReport(report);
 
         const freeDomains = report.domains
           .filter((d) => d.status === "available")
@@ -113,9 +118,11 @@ export function createMarkenfreiMcpServer(): McpServer {
             },
             {
               type: "text",
-              text: JSON.stringify(report, null, 2),
+              text: JSON.stringify(publicReport, null, 2),
             },
           ],
+          // Maschinenlesbar im stabilen Schema (siehe lib/public-report.ts)
+          structuredContent: publicReport as unknown as Record<string, unknown>,
         };
       } catch (err) {
         return {
