@@ -3,8 +3,8 @@
 Stand: 4. November 2026, Version 2. Grundlage ist [docs/v2-spec.md](docs/v2-spec.md), die aus
 dem [Review und der Konkurrenzanalyse](docs/review-and-competition-2026-11.md) entstanden ist.
 
-Markenfrei beantwortet eine Frage: „Kann ich diesen Namen überall nutzen, und wo muss ich für
-Marken selbst nachsehen?“ Ohne LLM, ohne Konto, ohne Tracking. Agenten nutzen Markenfrei
+Markenfrei beantwortet eine Frage: „Kann ich diesen Namen in den gängigen Namensräumen nutzen,
+und wo muss ich für Marken selbst nachsehen?“ Ohne LLM, ohne Konto, ohne Tracking. Agenten nutzen Markenfrei
 über den [MCP-Server](README.md#mcp-server-für-agenten).
 
 **Legende:** ✅ gebaut und mit Tests abgedeckt · 🔗 nur Link, keine Abfrage ·
@@ -40,11 +40,31 @@ keine Rechtsberatung.
 
 | Status | Thema | Frage |
 |---|---|---|
-| 🟡 | Veröffentlichung des MCP-Pakets | `markenfrei-mcp` ist gebaut und getestet, aber nicht auf npm. Der Registry-Name `app.markenfrei/mcp` setzt eine Domain-Verifizierung für markenfrei.app voraus. Paketversion (0.2.0) und gemeldete Serverversion (2.0.0) sollten vorher angeglichen werden. |
+| 🟡 | Veröffentlichung des MCP-Pakets | `markenfrei-mcp` ist gebaut und getestet, aber nicht auf npm. Der Registry-Name `app.markenfrei/mcp` setzt eine Domain-Verifizierung für markenfrei.app voraus. Vorher die Versionen nach dem Schema unten angleichen. |
+| 🟡 | Öffentliches Repository | `github.com/darkspike1988/markenfrei` ist öffentlich nicht erreichbar. Anleitung (`git clone`), CI-Badge und die Links in `mcp/package.json` und `server.json` führen erst nach der Freigabe zum Ziel. Vor der Veröffentlichung des Pakets das Repository öffentlich machen. |
+| 🟡 | Docker und Umgebungsvariablen | Der Container übernimmt keine `.env.local`, `docker-compose.yml` reicht noch keine `MARKENFREI_*`- oder `GITHUB_TOKEN`-Variable durch, und ohne `.dockerignore` landen `node_modules`, `.next` und eine lokale `.env.local` per `COPY . .` in der Build-Stufe. Geplant: `.dockerignore` (`node_modules`, `.next`, `.env*`, `mcp/dist`) und `env_file: .env.local` in der Compose-Datei. |
 | 🟡 | Name und Anspruch | „Markenfrei“ verspricht mehr als die Vorprüfung leistet. Soll der Name bleiben? |
 | 🟡 | Echte Registerabfrage | EUIPO (Registrierung, Sandbox) und USPTO (API-Schlüssel) wären die einzigen Wege. Möglich als optionale Quelle mit eigenem Schlüssel des Betreibers, nach Prüfung der Nutzungsbedingungen. |
 | 🟡 | GitHub-Token | Ein Token beim Betreiber hebt das Limit von 60 auf 5.000 Anfragen pro Stunde, ist aber ein Geheimnis in der Server-Umgebung. |
 | 🟡 | Origin-Prüfung für `/api/mcp` | Der Abgleich mit dem eigenen Host schützt nicht vor DNS-Rebinding. Für eine strengere Prüfung `MARKENFREI_ALLOWED_ORIGINS` setzen und den Host-Abgleich entfernen. |
+
+### Versionsschema
+
+Maßgeblich ist die **Produktversion**, derzeit 2.0.0. Die Hauptversion folgt der
+Spezifikation (v2) und dem Berichtsschema (`schemaVersion: 2`). Sie steht an diesen Stellen
+und muss dort gleich sein:
+
+| Stelle | Heute | Soll |
+|---|---|---|
+| `MCP_SERVER_VERSION` in `src/mcp/server.ts` | 2.0.0 | 2.0.0 |
+| User-Agent in `src/lib/engine/http.ts` | `Markenfrei/2.0` | `Markenfrei/<Haupt>.<Neben>` |
+| `mcp/package.json` und `mcp/server.json` | 0.2.0 | 2.0.0 |
+| `package.json` (Wurzel, `private: true`, wird nicht veröffentlicht) | 0.1.0 | 2.0.0 |
+
+Regeln: Eine neue Hauptversion nur bei einer Änderung am Berichtsschema oder an den
+Tool-Eingaben, die alte Clients bricht. Neue Quellen oder Endungen erhöhen die Nebenversion,
+Fehlerbehebungen die dritte Stelle. MCP-Paket und Server erscheinen immer mit derselben
+Version.
 
 ---
 

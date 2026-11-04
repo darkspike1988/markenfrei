@@ -13,6 +13,8 @@ ohne Schlüssel, ehrliche Texte („nicht gefunden“ statt „frei“, Marke im
 
 Voraussetzung: Node.js 20.9 oder neuer.
 
+Solange das GitHub-Repository nicht öffentlich ist, braucht `git clone` Zugriff darauf.
+
 ```bash
 git clone https://github.com/darkspike1988/markenfrei.git
 cd markenfrei
@@ -55,8 +57,8 @@ ins Client-Bundle.
    oder `similar`, nie `not_found`.
 3. Bei unscharfen oder indirekten Quellen im `SourceResult` `weak: true` setzen; ein Treffer
    ergibt dann höchstens Gelb.
-4. Mit einem bekannten und einem sicher freien Namen live gegenprüfen und das im Kommentar
-   festhalten.
+4. Mit einem bekannten und einem sicher nicht vergebenen Testnamen (z. B. `zzqxkvjwabc`)
+   live gegenprüfen und das im Kommentar festhalten.
 5. Tests mit gestubbtem HTTP ergänzen.
 
 ---

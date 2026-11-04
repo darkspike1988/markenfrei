@@ -4,6 +4,9 @@ import { NextRequest } from "next/server";
 import { clearAllCaches } from "@/lib/cache";
 import { clearResultCache } from "@/lib/engine/check";
 import { POST } from "@/app/api/check/route";
+import type { SourceResult } from "@/lib/engine/types";
+import { rankReports, type ShortlistEntry } from "@/lib/engine/verdict";
+import { shortlistCount, shortlistSummary } from "@/components/verdict-text";
 
 const realFetch = globalThis.fetch;
 before(() => {
@@ -126,4 +129,57 @@ test("Rate-Limit zählt jeden Namen", async () => {
     last = res.status;
   }
   assert.equal(last, 429);
+});
+
+// Texte der Oberfläche zu Ergebnissen der API: nie „frei“, „vergeben“ nur bei echtem Treffer.
+
+function res(label: string, status: SourceResult["status"], weak?: boolean): SourceResult {
+  return { sourceId: label, label, namespace: "packages", target: "x", status, weak };
+}
+
+test("nur „nicht zulässig“ (Ziffer am Anfang) ist weder Rot noch „vergeben“", async () => {
+  const response = await call({ names: ["9zqxkvjwq"], namespaces: ["packages", "stores"] });
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as {
+    ranking: ShortlistEntry[];
+    reports: { verdict: string; verdictLabel: string; results: SourceResult[] }[];
+  };
+  const report = body.reports[0];
+  assert.ok(report.results.some((r) => r.status === "invalid"));
+  assert.ok(!report.results.some((r) => r.status === "taken"));
+  assert.notEqual(report.verdict, "red");
+  assert.notEqual(report.verdictLabel, "Vergeben");
+  assert.deepEqual(body.ranking[0].taken, []);
+  const summary = shortlistSummary(body.ranking[0]);
+  assert.match(summary, /^nicht zulässig: /);
+  assert.doesNotMatch(summary, /vergeben/);
+});
+
+test("vergeben und nicht zulässig werden in der Rangliste getrennt genannt", () => {
+  const results = [res("npm", "taken"), res("crates.io", "invalid"), res("PyPI", "unknown"), res("Go", "taken", true)];
+  const [entry] = rankReports([{ name: "x", verdict: "red", results }]);
+  assert.equal(shortlistSummary(entry), "vergeben: npm · nicht zulässig: crates.io · ohne Antwort: PyPI");
+});
+
+test("Rangliste sagt „nicht gefunden“ statt „frei“ und zählt erst mit Ergebnis", () => {
+  const green = [res("npm", "not_found"), res("PyPI", "not_found")];
+  const ranking = rankReports([
+    { name: "a", verdict: "green", results: green },
+    { name: "b", verdict: "green", results: green },
+    { name: "c", verdict: "red", results: [res("npm", "taken")] },
+  ]);
+  const texts = [
+    shortlistSummary(ranking[0]),
+    shortlistCount(ranking, 0),
+    shortlistCount(ranking, 3),
+    shortlistCount(ranking.slice(0, 1), 0),
+    shortlistCount([], 10),
+  ];
+  for (const t of texts) assert.doesNotMatch(t, /\bfrei\b/);
+  assert.equal(texts[0], "in allen gewählten Quellen nicht gefunden");
+  assert.equal(texts[1], "2 Namen ohne Treffer in allen gewählten Quellen");
+  assert.equal(texts[2], "Bisher 2 Namen ohne Treffer in allen gewählten Quellen");
+  assert.equal(texts[3], "1 Name ohne Treffer in allen gewählten Quellen");
+  // direkt nach dem Absenden kein „0 Namen …“
+  assert.equal(texts[4], "Prüfung läuft …");
 });

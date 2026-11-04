@@ -1,14 +1,7 @@
 import type { ShortlistEntry } from "@/lib/engine/verdict";
 import { VerdictBadge } from "@/components/status-badge";
 import { reportAnchor } from "@/components/report-card";
-
-function summary(e: ShortlistEntry): string {
-  if (e.freeInAll) return "frei in allen gewählten Quellen";
-  const parts: string[] = [];
-  if (e.taken.length) parts.push(`vergeben: ${e.taken.join(", ")}`);
-  if (e.unknown.length) parts.push(`ohne Antwort: ${e.unknown.join(", ")}`);
-  return parts.join(" · ") || "ähnliche oder schwache Treffer prüfen";
-}
+import { shortlistCount, shortlistSummary } from "@/components/verdict-text";
 
 export function ShortlistRanking({
   ranking,
@@ -19,7 +12,6 @@ export function ShortlistRanking({
   pending: string[];
   failed: string[];
 }) {
-  const free = ranking.filter((e) => e.freeInAll).length;
   return (
     <section aria-labelledby="rangliste" className="rounded-xl border border-line bg-surface">
       <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-4 pt-4 sm:px-5">
@@ -27,7 +19,7 @@ export function ShortlistRanking({
           Rangliste
         </h2>
         <p className="text-sm text-muted">
-          {free === 1 ? "1 Name" : `${free} Namen`} frei in allen gewählten Quellen
+          {shortlistCount(ranking, pending.length)}
         </p>
       </header>
       <ol className="mt-3 divide-y divide-line border-t border-line">
@@ -39,7 +31,7 @@ export function ShortlistRanking({
             </a>
             <VerdictBadge verdict={e.verdict} size="sm" />
             <span className="basis-full pl-8 text-[13px] leading-snug text-muted">
-              {summary(e)}
+              {shortlistSummary(e)}
             </span>
           </li>
         ))}

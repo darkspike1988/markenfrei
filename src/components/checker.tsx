@@ -88,6 +88,9 @@ export function Checker({
   const errorId = useId();
   const fieldRef = useRef<HTMLTextAreaElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  /** Lauf-ID, für die nach dem Rendern Fokus und Ansicht zu den Ergebnissen wandern sollen */
+  const revealFor = useRef<number | null>(null);
 
   const [text, setText] = useState(() => initial.names.join(", "));
   const [namespaces, setNamespaces] = useState<Namespace[]>(initial.namespaces);
@@ -129,11 +132,12 @@ export function Checker({
     setRun((r) => (r && r.id === id ? { ...r, items: { ...r.items, [name]: item } } : r));
   }
 
-  function start(sel: Selection) {
+  function start(sel: Selection, reveal = false) {
     abort.current?.abort();
     const ac = new AbortController();
     abort.current = ac;
     const id = ++runId.current;
+    revealFor.current = reveal ? id : null;
     setRun({ id, sel, items: Object.fromEntries(sel.names.map((n) => [n, { state: "loading" } as Item])) });
 
     const qs = buildQuery(sel, config);
@@ -172,7 +176,7 @@ export function Checker({
       return;
     }
     setFormError("");
-    start(sel);
+    start(sel, true);
   }
 
   function onSubmit(e: React.FormEvent) {
@@ -194,6 +198,23 @@ export function Checker({
 
   useEffect(() => () => abort.current?.abort(), []);
 
+  // Nach „Prüfen“ (nicht beim automatischen Start über ?q=) Fokus auf die Ergebnis-Überschrift
+  // setzen und den Bereich zeigen, wenn er außerhalb des sichtbaren Ausschnitts liegt.
+  const currentRunId = run?.id;
+  useEffect(() => {
+    if (currentRunId === undefined || revealFor.current !== currentRunId) return;
+    revealFor.current = null;
+    const heading = headingRef.current;
+    const area = resultsRef.current;
+    if (!heading || !area) return;
+    heading.focus({ preventScroll: true });
+    const top = heading.getBoundingClientRect().top;
+    if (top < 0 || top > window.innerHeight * 0.6) {
+      const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      area.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+    }
+  }, [currentRunId]);
+
   function toggleNs(ns: Namespace) {
     setNamespaces((cur) => (cur.includes(ns) ? cur.filter((x) => x !== ns) : [...cur, ns]));
   }
@@ -210,7 +231,6 @@ export function Checker({
     const list = names.slice(0, config.maxNames);
     setText(list.join(", "));
     submitNames(list);
-    requestAnimationFrame(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
   }
 
   function exportJson() {
@@ -401,7 +421,7 @@ export function Checker({
         {run && (
           <>
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="font-serif text-2xl tracking-tight text-ink">
+              <h2 ref={headingRef} tabIndex={-1} className="font-serif text-2xl tracking-tight text-ink outline-none">
                 {names.length === 1 ? "Ergebnis" : "Ergebnisse"}
               </h2>
               {done.length > 0 && (
@@ -452,13 +472,13 @@ function Legend() {
           <dt className="sm:w-56 sm:shrink-0">
             <VerdictBadge verdict="yellow" size="sm" />
           </dt>
-          <dd className="text-soft">Ähnliche oder schwache Treffer, oder eine Quelle hat nicht geantwortet.</dd>
+          <dd className="text-soft">Ähnliche oder schwache Treffer, in einer Quelle nicht zulässig, oder eine Quelle hat nicht geantwortet.</dd>
         </div>
         <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-3">
           <dt className="sm:w-56 sm:shrink-0">
             <VerdictBadge verdict="red" size="sm" />
           </dt>
-          <dd className="text-soft">Mindestens eine Quelle meldet den Namen als vergeben oder nicht zulässig.</dd>
+          <dd className="text-soft">Mindestens eine Quelle meldet den Namen als vergeben.</dd>
         </div>
       </dl>
       <p className="mt-4 border-t border-line pt-3 text-sm text-muted">

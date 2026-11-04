@@ -1,0 +1,8 @@
+node_modules
+.next
+mcp/dist
+*.tgz
+.env*
+!.env.example
+.git
+.claude

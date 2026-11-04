@@ -16,15 +16,23 @@ export const STATUS_LABEL: Record<Status, string> = {
   unknown: "unbekannt",
 };
 
+/** Harter Treffer: "taken" aus einer Quelle, die kein schwaches Signal ist. */
+function isHardTaken(r: SourceResult): boolean {
+  return r.status === "taken" && !r.weak;
+}
+
 /**
  * Eine Quelle der Wahrheit für die Ampel (docs/v2-spec.md, "Ergebnismodell"):
- * - rot: eine Quelle meldet "taken" (nicht schwach) oder "invalid"
+ * - rot: eine Quelle meldet "taken" (nicht schwach)
  * - grün: alle Quellen melden "not_found"
- * - gelb: alles andere (ähnlich, unbekannt, schwache Treffer)
+ * - gelb: alles andere (ähnlich, unzulässig, unbekannt, schwache Treffer)
+ *
+ * "invalid" ist bewusst nicht rot: Der Name ist dort nicht zulässig, aber nicht vergeben.
+ * Das Label „Vergeben“ wäre falsch.
  */
 export function computeVerdict(results: SourceResult[]): Verdict {
   if (results.length === 0) return "yellow";
-  if (results.some((r) => (r.status === "taken" && !r.weak) || r.status === "invalid")) return "red";
+  if (results.some(isHardTaken)) return "red";
   if (results.every((r) => r.status === "not_found")) return "green";
   return "yellow";
 }
@@ -39,8 +47,10 @@ export type ShortlistEntry = {
   name: string;
   verdict: Verdict;
   freeInAll: boolean;
-  /** Labels der Quellen mit "vergeben" oder "nicht zulässig" */
+  /** Labels der Quellen mit "vergeben" (ohne schwache Signale) */
   taken: string[];
+  /** Labels der Quellen, in denen der Name "nicht zulässig" ist */
+  invalid: string[];
   /** Labels der Quellen ohne verwertbare Antwort */
   unknown: string[];
 };
@@ -48,7 +58,8 @@ export type ShortlistEntry = {
 const RANK: Record<Verdict, number> = { green: 0, yellow: 1, red: 2 };
 
 /**
- * Rangliste einer Shortlist: frei zuerst, dann wenige Treffer, dann wenige Lücken.
+ * Rangliste einer Shortlist: frei zuerst, dann wenige Treffer, dann wenige unzulässige
+ * Namensräume, dann wenige Lücken.
  * Rein (ohne Netz), damit Server und Oberfläche dieselbe Reihenfolge nutzen.
  */
 export function rankReports(
@@ -59,13 +70,15 @@ export function rankReports(
       name: r.name,
       verdict: r.verdict,
       freeInAll: r.verdict === "green",
-      taken: r.results.filter((x) => (x.status === "taken" && !x.weak) || x.status === "invalid").map((x) => x.label),
+      taken: r.results.filter(isHardTaken).map((x) => x.label),
+      invalid: r.results.filter((x) => x.status === "invalid").map((x) => x.label),
       unknown: r.results.filter((x) => x.status === "unknown").map((x) => x.label),
     }))
     .sort(
       (a, b) =>
         RANK[a.verdict] - RANK[b.verdict] ||
         a.taken.length - b.taken.length ||
+        a.invalid.length - b.invalid.length ||
         a.unknown.length - b.unknown.length ||
         a.name.localeCompare(b.name),
     );

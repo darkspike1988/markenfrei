@@ -171,7 +171,7 @@ export function domainLookupUrl(domain: string, tld: string): string {
     case "eu":
       return `https://whois.eurid.eu/de/search/?domain=${enc}`;
     default:
-      return `https://lookup.icann.org/de/lookup?name=${enc}`;
+      return `https://lookup.icann.org/en/lookup?name=${enc}`;
   }
 }
 

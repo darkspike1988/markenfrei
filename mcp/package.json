@@ -1,6 +1,6 @@
 {
   "name": "markenfrei-mcp",
-  "version": "0.2.0",
+  "version": "2.0.0",
   "description": "MCP-Server für Namensprüfung: Domains, Paketregister, App Stores und bekannte Namen deterministisch in offenen Quellen prüfen, Markenrecherche vorbereiten. Kein LLM, keine Konten, keine Speicherung der Anfragen.",
   "mcpName": "app.markenfrei/mcp",
   "type": "module",

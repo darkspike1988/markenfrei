@@ -34,14 +34,17 @@ war in dieser Prüfung nicht möglich oder die Aussage ist nicht belegt.
   nennen weder eine Schnittstelle noch eine Erlaubnis für automatisierte Abfragen.
 
 **Entscheidung:** Markenfrei fragt TMDB nicht automatisiert ab und versucht nicht, die
-Bot-Abwehr zu umgehen. Der Bericht enthält nur einen Link zur Suche (`registryLinks.tmdb`),
-den Menschen selbst öffnen.
+Bot-Abwehr zu umgehen. Der Bericht enthält nur einen Link zur Suche: einen Eintrag in
+`trademark.links` mit `office: "TMDB"`, den Menschen selbst öffnen.
 
 ## Folgen für das Produkt
 
-- Die Ampel prüft Domains, App Stores, Paketnamen und bekannte Namen (Wikidata, Wikipedia,
-  DuckDuckGo) sowie eine Heuristik mit 89 bekannten Marken. **Sie ersetzt keine
-  Registerrecherche.** Texte in der Oberfläche und in der MCP-Beschreibung sagen das.
+- Die Ampel entsteht aus Domains, Paketregistern, App Stores und bekannten Namen. Standard
+  bei den bekannten Namen sind die Quelle `known_brands` (Heuristik ohne Netz mit 89
+  bekannten Tech-Marken), Wikidata und GLEIF. Wikipedia und Show HN laufen nur auf Wunsch und
+  zählen als schwache Signale: Ein Treffer ergibt dort höchstens Gelb. Markenregister gehen
+  nicht in die Ampel ein, die Marke steht immer auf „nicht geprüft“. **Die Ampel ersetzt
+  keine Registerrecherche.** Texte in der Oberfläche und in der MCP-Beschreibung sagen das.
 - Ähnlichkeitsrecherchen (Klang, Schrift, Bild) bieten die Ämter selbst nicht kostenlos an
   (Hinweis des DPMA). Kommerzielle Recherchedienste oder eine anwaltliche Prüfung bleiben
   der Weg vor einer Anmeldung.

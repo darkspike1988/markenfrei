@@ -18,7 +18,7 @@ const VERDICTS = ["green", "yellow", "red"] as const satisfies readonly Verdict[
 export const StatusSchema = z
   .enum(STATUSES)
   .describe(
-    "taken = vergeben; not_found = die Quelle kennt den Namen nicht (heißt nicht registrierbar); similar = ähnlicher oder nicht eindeutiger Treffer; invalid = in diesem Namensraum nicht zulässig; unknown = keine verwertbare Antwort, nie als frei werten",
+    "taken = vergeben; not_found = die Quelle kennt den Namen nicht, das heißt nicht, dass er frei oder registrierbar ist; similar = ähnlicher oder nicht eindeutiger Treffer; invalid = in diesem Namensraum nicht zulässig; unknown = keine verwertbare Antwort, nie als frei werten",
   );
 
 export const NamespaceSchema = z.enum(NAMESPACES as unknown as [Namespace, ...Namespace[]]);
@@ -86,11 +86,21 @@ export const NameReportSchema = z.object({
     .describe("Nur Links zur manuellen Prüfung (Instagram, TikTok, X, YouTube, Chrome Web Store)"),
 });
 
+/**
+ * Bericht in der Shortlist (markenfrei_check_names): ohne die Markenvorbereitung, die für
+ * jeden Namen gleich aufgebaut ist und den größten Teil des Berichts ausmacht. Sie kommt
+ * gezielt über markenfrei_trademark_prep.
+ */
+export const ShortlistReportSchema = NameReportSchema.omit({ trademark: true }).describe(
+  "Bericht je Name ohne Markenvorbereitung (dafür markenfrei_trademark_prep)",
+);
+
 export const ShortlistEntrySchema = z.object({
   name: z.string(),
   verdict: VerdictSchema,
   freeInAll: z.boolean().describe("In allen gewählten Quellen nicht gefunden"),
-  taken: z.array(z.string()).describe("Quellen mit vergeben oder nicht zulässig"),
+  taken: z.array(z.string()).describe("Quellen mit vergeben (ohne schwache Signale)"),
+  invalid: z.array(z.string()).describe("Quellen, in denen der Name nicht zulässig ist"),
   unknown: z.array(z.string()).describe("Quellen ohne verwertbare Antwort"),
 });
 
@@ -104,4 +114,5 @@ function assertSame<T extends true>(): T | undefined {
 assertSame<Same<z.infer<typeof SourceResultSchema>, SourceResult>>();
 assertSame<Same<z.infer<typeof TrademarkPrepSchema>, TrademarkPrep>>();
 assertSame<Same<z.infer<typeof NameReportSchema>, NameReport>>();
+assertSame<Same<z.infer<typeof ShortlistReportSchema>, Omit<NameReport, "trademark">>>();
 assertSame<Same<z.infer<typeof ShortlistEntrySchema>, ShortlistEntry>>();

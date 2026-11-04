@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildUserAgent, createHttpClient } from "@/lib/engine/http";
+import { acquireSlot, buildUserAgent, createHttpClient, queuedForHost } from "@/lib/engine/http";
 
 const far = () => Date.now() + 60_000;
 
@@ -111,4 +111,86 @@ test("ungültiges JSON ergibt parse-Fehler mit Text", async () => {
   const r = await http.request("https://x.test/g", { read: "json" });
   assert.equal(r.error, "parse");
   assert.equal(r.text, "<html>");
+});
+
+test("eine einzelne Prüfung belegt höchstens drei der vier Slots je Host", async () => {
+  let active = 0;
+  let peak = 0;
+  const http = createHttpClient({
+    deadlineAt: far(),
+    userAgent: "t",
+    fetchImpl: (async () => {
+      active++;
+      peak = Math.max(peak, active);
+      await new Promise((r) => setTimeout(r, 10));
+      active--;
+      return new Response(null, { status: 200 });
+    }) as unknown as typeof fetch,
+  });
+  await Promise.all(Array.from({ length: 12 }, (_, i) => http.request(`https://cap.test/${i}`)));
+  assert.equal(peak, 3);
+});
+
+test("eine kleine Prüfung wartet nicht hinter der Warteschlange einer großen", async () => {
+  const started: string[] = [];
+  const pending: (() => void)[] = [];
+  const slowFetch = (async (u: string) => {
+    started.push(new URL(u).pathname);
+    await new Promise<void>((r) => pending.push(r));
+    return new Response(null, { status: 404 });
+  }) as unknown as typeof fetch;
+  const big = createHttpClient({ deadlineAt: far(), userAgent: "t", fetchImpl: slowFetch });
+  const small = createHttpClient({ deadlineAt: far(), userAgent: "t", fetchImpl: slowFetch });
+
+  const bigAll = Promise.all(Array.from({ length: 20 }, (_, i) => big.request(`https://fair.test/a${i}`)));
+  await new Promise((r) => setTimeout(r, 5));
+  const smallOne = small.request("https://fair.test/b0");
+  await new Promise((r) => setTimeout(r, 5));
+  // Ohne Fairness stünde b0 hinter 17 wartenden Anfragen von "big"
+  assert.ok(started.includes("/b0"), `gestartet: ${started.join(",")}`);
+
+  // Neue Slots gehen an den Besitzer mit den wenigsten aktiven Slots
+  const smallTwo = small.request("https://fair.test/b1");
+  const smallThree = small.request("https://fair.test/b2");
+  pending.shift()!();
+  await new Promise((r) => setTimeout(r, 5));
+  assert.ok(started.includes("/b1"), `gestartet: ${started.join(",")}`);
+
+  const drain = setInterval(() => pending.splice(0).forEach((r) => r()), 1);
+  const [s1, s2, s3] = await Promise.all([smallOne, smallTwo, smallThree]);
+  await bigAll;
+  clearInterval(drain);
+  assert.equal(s1.status, 404);
+  assert.equal(s2.status, 404);
+  assert.equal(s3.status, 404);
+});
+
+test("Wartende geben an ihrer Deadline auf und verlassen die Schlange", async () => {
+  const hold: (() => void)[] = [];
+  const owner = {};
+  for (let i = 0; i < 4; i++) {
+    const rel = await acquireSlot("wait.test", { i }, { deadlineAt: far() });
+    assert.ok(rel);
+    hold.push(rel);
+  }
+  const t0 = Date.now();
+  const r = await acquireSlot("wait.test", owner, { deadlineAt: Date.now() + 40 });
+  assert.equal(r, null);
+  assert.ok(Date.now() - t0 < 1000);
+  assert.equal(queuedForHost("wait.test"), 0);
+  hold.forEach((rel) => rel());
+
+  const http = createHttpClient({
+    deadlineAt: Date.now() + 40,
+    userAgent: "t",
+    perOwnerLimit: 1,
+    fetchImpl: ((_u: string, init?: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(init.signal!.reason));
+      })) as unknown as typeof fetch,
+  });
+  const [first, second] = await Promise.all([http.request("https://wait2.test/1"), http.request("https://wait2.test/2")]);
+  assert.equal(first.error, "deadline");
+  assert.equal(second.error, "deadline", "wartet nicht bis zum Slot, sondern gibt an der Deadline auf");
+  assert.equal(queuedForHost("wait2.test"), 0);
 });

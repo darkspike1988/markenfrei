@@ -51,6 +51,11 @@ export type CheckOptions = {
   now?: () => number;
   /** Nur für Tests: eigene Quellen statt der eingebauten */
   registry?: readonly Source[];
+  /**
+   * Intern: Besitzer für die Slot-Grenze je Host im HTTP-Client. checkNames setzt einen
+   * gemeinsamen Besitzer für alle Namen, damit eine Shortlist andere Prüfungen nicht verdrängt.
+   */
+  httpOwner?: object;
 };
 
 export type NameReport = {
@@ -140,6 +145,7 @@ export async function checkName(input: unknown, opts: CheckOptions = {}): Promis
     userAgent: buildUserAgent(contact),
     fetchImpl: opts.fetchImpl,
     now,
+    owner: opts.httpOwner,
   });
   const ctx = { http, contact };
 
@@ -184,7 +190,15 @@ export async function checkNames(
   if (!Array.isArray(inputs) || inputs.length === 0) throw new CheckInputError("Bitte mindestens einen Namen angeben.");
   if (inputs.length > MAX_NAMES) throw new CheckInputError(`Höchstens ${MAX_NAMES} Namen pro Anfrage.`);
   const unique = [...new Set(inputs.map((i) => String(i ?? "")))];
-  const reports = await Promise.all(unique.map((i) => checkName(i, opts)));
+  // Erst alles prüfen, dann abfragen: Ein ungültiger Name darf keine Anfragen an Dritte
+  // auslösen, deren Ergebnis niemand mehr bekommt.
+  for (const i of unique) {
+    const n = normalizeName(i);
+    if (!n.ok) throw new CheckInputError(n.error);
+  }
+  resolveSources(opts);
+  const shared: CheckOptions = { ...opts, httpOwner: opts.httpOwner ?? {} };
+  const reports = await Promise.all(unique.map((i) => checkName(i, shared)));
   const ranking = rankReports(reports);
   return { ranking, reports };
 }

@@ -3,6 +3,10 @@ import type { HttpClient, HttpRequest, HttpResponse } from "@/lib/engine/types";
 /**
  * HTTP-Client für Quellenabfragen.
  * - Semaphor pro Host (Standard 4 gleichzeitige Anfragen, prozessweit)
+ * - Fairness: Eine Prüfung (Besitzer, z. B. ein checkNames-Aufruf) belegt höchstens
+ *   PER_OWNER_LIMIT Slots je Host. Freie Slots gehen an den Wartenden, dessen Besitzer
+ *   gerade die wenigsten Slots auf dem Host hält (bei Gleichstand der älteste).
+ * - Wartende geben auf, sobald ihre Deadline abläuft (error "deadline")
  * - Bündelt gleiche gleichzeitige Anfragen (gleiche Methode, URL, Lesemodus)
  * - Timeout pro Anfrage und eine gemeinsame Deadline pro Prüfung
  * - liest Antwortkörper nur bis maxBytes, sonst Abbruch
@@ -11,30 +15,127 @@ import type { HttpClient, HttpRequest, HttpResponse } from "@/lib/engine/types";
 const DEFAULT_TIMEOUT_MS = 5000;
 const DEFAULT_MAX_BYTES = 512 * 1024;
 const PER_HOST_LIMIT = 4;
+/** Höchstens so viele Slots je Host für eine Prüfung, damit andere nicht verhungern */
+const PER_OWNER_LIMIT = 3;
 
-type Waiter = () => void;
-const hostSlots = new Map<string, { active: number; queue: Waiter[] }>();
+type Owner = object;
+type Waiter = { owner: Owner; seq: number; grant: () => void };
+type HostSlots = {
+  active: number;
+  byOwner: Map<Owner, number>;
+  queue: Waiter[];
+  limit: number;
+  ownerLimit: number;
+};
+const hostSlots = new Map<string, HostSlots>();
+let waiterSeq = 0;
 
-async function acquire(host: string, limit: number): Promise<() => void> {
+function ownerActive(s: HostSlots, owner: Owner): number {
+  return s.byOwner.get(owner) ?? 0;
+}
+
+function canStart(s: HostSlots, owner: Owner): boolean {
+  return s.active < s.limit && ownerActive(s, owner) < s.ownerLimit;
+}
+
+function take(s: HostSlots, owner: Owner): void {
+  s.active++;
+  s.byOwner.set(owner, ownerActive(s, owner) + 1);
+}
+
+/** Vergibt freie Slots: wenigste aktive Slots des Besitzers zuerst, dann FIFO. */
+function dispatch(s: HostSlots): void {
+  while (s.active < s.limit && s.queue.length > 0) {
+    let best = -1;
+    for (let i = 0; i < s.queue.length; i++) {
+      const w = s.queue[i];
+      if (ownerActive(s, w.owner) >= s.ownerLimit) continue;
+      if (best === -1) {
+        best = i;
+        continue;
+      }
+      const b = s.queue[best];
+      const diff = ownerActive(s, w.owner) - ownerActive(s, b.owner);
+      if (diff < 0 || (diff === 0 && w.seq < b.seq)) best = i;
+    }
+    if (best === -1) return;
+    const [w] = s.queue.splice(best, 1);
+    take(s, w.owner);
+    w.grant();
+  }
+}
+
+/**
+ * Wartet auf einen Slot für `host`. Gibt eine Freigabefunktion zurück oder null, wenn
+ * die Deadline vorher abläuft (dann wird der Wartende aus der Schlange entfernt).
+ */
+export async function acquireSlot(
+  host: string,
+  owner: Owner,
+  opts: { deadlineAt: number; now?: () => number; limit?: number; ownerLimit?: number },
+): Promise<(() => void) | null> {
+  const now = opts.now ?? Date.now;
   let slot = hostSlots.get(host);
   if (!slot) {
-    slot = { active: 0, queue: [] };
+    slot = {
+      active: 0,
+      byOwner: new Map(),
+      queue: [],
+      limit: opts.limit ?? PER_HOST_LIMIT,
+      ownerLimit: opts.ownerLimit ?? PER_OWNER_LIMIT,
+    };
     hostSlots.set(host, slot);
   }
   const s = slot;
-  if (s.active >= limit) {
-    await new Promise<void>((resolve) => s.queue.push(resolve));
-  }
-  s.active++;
-  let released = false;
-  return () => {
-    if (released) return;
-    released = true;
-    s.active--;
-    const next = s.queue.shift();
-    if (next) next();
-    else if (s.active === 0) hostSlots.delete(host);
+
+  const release = () => {
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      s.active--;
+      const left = ownerActive(s, owner) - 1;
+      if (left > 0) s.byOwner.set(owner, left);
+      else s.byOwner.delete(owner);
+      dispatch(s);
+      if (s.active === 0 && s.queue.length === 0 && hostSlots.get(host) === s) hostSlots.delete(host);
+    };
   };
+
+  if (s.queue.length === 0 && canStart(s, owner)) {
+    take(s, owner);
+    return release();
+  }
+
+  const remaining = opts.deadlineAt - now();
+  if (remaining <= 0) return null;
+
+  return new Promise((resolve) => {
+    const waiter: Waiter = {
+      owner,
+      seq: waiterSeq++,
+      grant: () => {
+        clearTimeout(timer);
+        resolve(release());
+      },
+    };
+    s.queue.push(waiter);
+    const timer = setTimeout(() => {
+      const i = s.queue.indexOf(waiter);
+      if (i === -1) return;
+      s.queue.splice(i, 1);
+      if (s.active === 0 && s.queue.length === 0 && hostSlots.get(host) === s) hostSlots.delete(host);
+      resolve(null);
+    }, remaining);
+    timer.unref?.();
+    // Ein Slot kann frei sein, obwohl andere warten (deren Besitzer am Limit sind)
+    dispatch(s);
+  });
+}
+
+/** Nur für Tests: Anzahl der Wartenden je Host */
+export function queuedForHost(host: string): number {
+  return hostSlots.get(host)?.queue.length ?? 0;
 }
 
 const inflight = new Map<string, Promise<HttpResponse>>();
@@ -74,10 +175,19 @@ export function createHttpClient(opts: {
   fetchImpl?: typeof fetch;
   now?: () => number;
   perHostLimit?: number;
+  /** Höchstens so viele Slots je Host für diesen Besitzer, Standard 3 */
+  perOwnerLimit?: number;
+  /**
+   * Wem die Anfragen zugerechnet werden. Mehrere Clients mit demselben Besitzer teilen
+   * sich dessen Slot-Grenze (z. B. alle Namen eines checkNames-Aufrufs). Standard: eigener.
+   */
+  owner?: object;
 }): HttpClient {
   const fetchImpl = opts.fetchImpl ?? fetch;
   const now = opts.now ?? Date.now;
   const perHostLimit = opts.perHostLimit ?? PER_HOST_LIMIT;
+  const perOwnerLimit = opts.perOwnerLimit ?? PER_OWNER_LIMIT;
+  const owner = opts.owner ?? {};
 
   async function run(url: string, req: HttpRequest): Promise<HttpResponse> {
     const empty = new Headers();
@@ -91,7 +201,13 @@ export function createHttpClient(opts: {
       return { status: 0, headers: empty, error: "network" };
     }
 
-    const release = await acquire(host, perHostLimit);
+    const release = await acquireSlot(host, owner, {
+      deadlineAt: opts.deadlineAt,
+      now,
+      limit: perHostLimit,
+      ownerLimit: perOwnerLimit,
+    });
+    if (!release) return { status: 0, headers: empty, error: "deadline" };
     try {
       const left = opts.deadlineAt - now();
       if (left <= 0) return { status: 0, headers: empty, error: "deadline" };
