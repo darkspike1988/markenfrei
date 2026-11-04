@@ -101,10 +101,9 @@ Inspiriert von wegweisenden GitHub-Projekten wie `facundoolano/app-store-scraper
 
 ### 7. Verwendete Open APIs & Quellen-Transparenz (Europa, Amerika, Asien)
 Über den Button **„Infos & MCP“** im Header zeigt Markenfrei alle verwendeten weltweiten Schnittstellen übersichtlich an:
-* Europa (DENIC, AFNIC, Nominet, EUIPO, TMview, OpenThesaurus, OffeneRegister)
-* Amerika (Verisign, Google Registry, Identity Digital, Apple iTunes, Google Play, USPTO, SEC EDGAR, DuckDuckGo)
-* Asien (JPRS Japan, KISA Korea, TWNIC Taiwan, APNIC, J-PlatPat Japan, IPOS Singapur)
-* Endpoint-URL, Region, Protokoll (RDAP, DoH, REST) und Dokumentationslinks.
+* **Live abgefragt:** RDAP-Registries (DENIC, NIC.fr, Nominet, Verisign, Google Registry, Identity Digital, KRNIC), DNS-over-HTTPS (Google, Cloudflare), Apple iTunes, Google Play, Wikidata, Wikipedia, DuckDuckGo, GitHub, npm, PyPI, crates.io, Homebrew, Go-Proxy, OpenThesaurus und Datamuse.
+* **Nur Verweise, keine Abfrage:** DPMAregister, TMview, EUIPO eSearch, OffeneRegister, USPTO und WIPO Global Brand Database. Das Tool prüft also keine Markenregister, sondern verlinkt sie für die manuelle Recherche.
+* Endpoint-URL, Region, Protokoll (RDAP, DoH, REST, Deep-Link) und Dokumentationslinks.
 
 ---
 
@@ -140,7 +139,7 @@ Oder lokal aus dem Repository:
 2. `markenfrei_domain_pricing`: Vergleicht Netcup, Hetzner, Cloudflare Wholesale & warnt vor 1-€-Lockvogelangeboten.
 3. `markenfrei_generate_ideas`: Generiert Kunstwörter & Portmanteaus aus Open-Data Wortfeldern (OpenThesaurus & Datamuse).
 4. `markenfrei_inspect_bundle`: Prüft Reverse-DNS App-Bundle-IDs (`de.app.name`) auf iOS App Store & Android Play Store.
-5. `markenfrei_list_open_apis`: Liefert das komplette Inventar aller 25+ Open APIs.
+5. `markenfrei_list_open_apis`: Liefert das Inventar aller Quellen mit Angabe, ob sie abgefragt oder nur verlinkt werden.
 
 Zusätzlich steht ein nativer HTTP JSON-RPC Endpunkt unter `POST /api/mcp` zur Verfügung.
 

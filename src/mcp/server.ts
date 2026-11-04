@@ -304,7 +304,7 @@ export function createMarkenfreiMcpServer(): McpServer {
     },
   );
 
-  // Tool 5: List all 25+ Open APIs used
+  // Tool 5: Quelleninventar (abgefragte Quellen und reine Verweise)
   server.tool(
     "markenfrei_list_open_apis",
     "Liefert das vollständige Verzeichnis aller weltweiten (europäischen, amerikanischen & asiatischen) von Markenfrei genutzten Open APIs und autoritativen Register mit Endpunkten und Dokumentations-URLs.",

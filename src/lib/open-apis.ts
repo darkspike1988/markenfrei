@@ -1,7 +1,7 @@
 /**
- * Central Inventory of all Open Data APIs & Registries used by Markenfrei.
- * 100% Zero-Key, Public, Transparent.
- * Umfasst europäische, amerikanische und asiatische Schnittstellen.
+ * Zentrales Inventar der Quellen von Markenfrei. Zero-Key, öffentlich.
+ * Einträge mit Protokoll "Deep-Link" sind reine Verweise (es erfolgt keine Abfrage).
+ * Alle anderen Einträge werden im Code live abgefragt.
  */
 
 export type OpenApiRegion = "Europa" | "Amerika" | "Asien" | "Global";
@@ -41,11 +41,11 @@ export const OPEN_APIS: OpenApiEntry[] = [
   },
   {
     id: "afnic-rdap",
-    name: "AFNIC RDAP (.fr)",
+    name: "NIC.fr (AFNIC) RDAP (.fr)",
     provider: "Association Française pour le Nommage Internet en Coopération (Frankreich)",
     region: "Europa",
     category: "Domains & DNS",
-    endpoint: "https://rdap.afnic.fr/rdap/domain/{domain}",
+    endpoint: "https://rdap.nic.fr/domain/{domain}",
     protocol: "RDAP (RFC 7484)",
     auth: "100% Kostenlos / Zero-Key",
     purpose: "Offizielle französische Registry-Abfrage für .fr-Domains.",
@@ -57,10 +57,10 @@ export const OPEN_APIS: OpenApiEntry[] = [
     provider: "Nominet UK (Oxford, Vereinigtes Königreich)",
     region: "Europa",
     category: "Domains & DNS",
-    endpoint: "https://rdap.nominet.uk/rdap/domain/{domain}",
+    endpoint: "https://rdap.nominet.uk/uk/domain/{domain}",
     protocol: "RDAP (RFC 7484)",
     auth: "100% Kostenlos / Zero-Key",
-    purpose: "Offizieller RDAP-Dienst der britischen Registry für .uk- und .co.uk-Domains.",
+    purpose: "Offizieller RDAP-Dienst der britischen Registry für .uk-Domains.",
     docsUrl: "https://www.nominet.uk/rdap/",
   },
 
@@ -104,52 +104,16 @@ export const OPEN_APIS: OpenApiEntry[] = [
 
   // --- Domains & DNS: Asien ---
   {
-    id: "jprs-rdap",
-    name: "JPRS RDAP (.jp)",
-    provider: "Japan Registry Services Co., Ltd. (Tokio, Japan)",
-    region: "Asien",
-    category: "Domains & DNS",
-    endpoint: "https://rdap.jprs.jp/rdap/domain/{domain}",
-    protocol: "RDAP (RFC 7484)",
-    auth: "100% Kostenlos / Zero-Key",
-    purpose: "Autoritative japanische Registry-Auskunft für .jp- und .tokyo-Domains.",
-    docsUrl: "https://jprs.co.jp/rdap/",
-  },
-  {
     id: "kisa-rdap",
     name: "KISA / KRNIC RDAP (.kr)",
     provider: "Korea Internet & Security Agency (Seoul, Südkorea)",
     region: "Asien",
     category: "Domains & DNS",
-    endpoint: "https://rdap.krnic.or.kr/rdap/domain/{domain}",
+    endpoint: "https://rdap.nic.or.kr/domain/{domain}",
     protocol: "RDAP (RFC 7484)",
     auth: "100% Kostenlos / Zero-Key",
-    purpose: "Offizielle südkoreanische Registry für nationale .kr- und .한국-Domains.",
+    purpose: "Offizielle südkoreanische Registry für .kr-Domains.",
     docsUrl: "https://krnic.or.kr/",
-  },
-  {
-    id: "twnic-rdap",
-    name: "TWNIC RDAP (.tw)",
-    provider: "Taiwan Network Information Center (Taipeh, Taiwan)",
-    region: "Asien",
-    category: "Domains & DNS",
-    endpoint: "https://rdap.twnic.tw/rdap/domain/{domain}",
-    protocol: "RDAP (RFC 7484)",
-    auth: "100% Kostenlos / Zero-Key",
-    purpose: "Autoritative taiwanische Registry für .tw- und .taiwan-Domains.",
-    docsUrl: "https://www.twnic.tw/",
-  },
-  {
-    id: "apnic-rdap",
-    name: "APNIC RDAP (Asia-Pacific)",
-    provider: "Asia-Pacific Network Information Centre (Brisbane / Asien-Pazifik)",
-    region: "Asien",
-    category: "Domains & DNS",
-    endpoint: "https://rdap.apnic.net/domain/{domain}",
-    protocol: "RDAP (RFC 7484)",
-    auth: "100% Kostenlos / Zero-Key",
-    purpose: "Regionales Internet-Register für den gesamten Asien-Pazifik-Raum.",
-    docsUrl: "https://www.apnic.net/manage-ip/using-whois/rdap/",
   },
 
   // --- DNS-over-HTTPS Fallback (Global) ---
@@ -252,18 +216,6 @@ export const OPEN_APIS: OpenApiEntry[] = [
     auth: "100% Kostenlos / Zero-Key",
     purpose: "Durchsucht strukturierte Wissensgraphen nach bestehenden Unternehmen, Softwareprojekten und Marken.",
     docsUrl: "https://www.wikidata.org/w/api.php",
-  },
-  {
-    id: "sec-edgar",
-    name: "U.S. SEC EDGAR Company API",
-    provider: "U.S. Securities and Exchange Commission (Washington, D.C., USA)",
-    region: "Amerika",
-    category: "Wissen & Enzyklopädie",
-    endpoint: "https://data.sec.gov/submissions/CIK{cik}.json",
-    protocol: "REST (JSON)",
-    auth: "100% Kostenlos / Zero-Key",
-    purpose: "Öffentliches Register US-amerikanischer börsennotierter Unternehmen und Marken.",
-    docsUrl: "https://www.sec.gov/edgar/sec-api-documentation",
   },
 
   // --- Entwickler-Ökosysteme ---
@@ -454,31 +406,6 @@ export const OPEN_APIS: OpenApiEntry[] = [
     docsUrl: "https://branddb.wipo.int/",
   },
 
-  // --- Marken & Amtsregister: Asien ---
-  {
-    id: "j-platpat",
-    name: "J-PlatPat (Japan Patent & Trademark Office)",
-    provider: "National Center for Industrial Property Information and Training (Tokio, Japan)",
-    region: "Asien",
-    category: "Marken & Amtsregister",
-    endpoint: "https://www.j-platpat.inpit.go.jp/?lang=en",
-    protocol: "Deep-Link",
-    auth: "100% Kostenlos / Zero-Key",
-    purpose: "Offizielles japanisches Marken- und Patentinformationssystem für Markenrecherchen in Asien.",
-    docsUrl: "https://www.j-platpat.inpit.go.jp/",
-  },
-  {
-    id: "ipos-registry",
-    name: "IPOS Digital Hub (Singapore)",
-    provider: "Intellectual Property Office of Singapore (Singapur)",
-    region: "Asien",
-    category: "Marken & Amtsregister",
-    endpoint: "https://digitalhub.ipos.gov.sg/",
-    protocol: "Deep-Link",
-    auth: "100% Kostenlos / Zero-Key",
-    purpose: "Südostasiatisches IP-Portal für Marken und Handelsnamen im pazifischen Wirtschaftsraum.",
-    docsUrl: "https://www.ipos.gov.sg/",
-  },
 ];
 
 export const OPEN_APIS_INVENTORY = OPEN_APIS;

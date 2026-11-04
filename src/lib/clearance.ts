@@ -494,6 +494,12 @@ export async function performClearanceCheck(
   if (!wikidata.ok) incomplete.push("Wikidata");
   if (!appStoreOk) incomplete.push("App Store");
   if (
+    candidateBundleIds.every(
+      (b) => b.appleStatus === "unknown" && b.googlePlayStatus === "unknown",
+    )
+  )
+    incomplete.push("Bundle-IDs");
+  if (
     devAndSocial.npmPackage === "unknown" &&
     devAndSocial.githubHandle === "unknown" &&
     devAndSocial.pypiPackage === "unknown"
@@ -524,8 +530,9 @@ export async function performClearanceCheck(
     if (duckDuckGoHit) tmRiskScore = Math.max(1, tmRiskScore - 1);
   }
 
-  // Compute App Store Werktitelschutz score (1..10)
-  let appStoreScore = 10;
+  // Compute App Store Werktitelschutz score (1..10).
+  // Ohne Antwort des App Stores gilt ein neutraler Wert, nicht die Bestnote.
+  let appStoreScore = appStoreOk ? 10 : 5;
   if (appStore.status === "collision") {
     appStoreScore = 2;
   } else if (appStore.status === "similar") {
@@ -554,8 +561,9 @@ export async function performClearanceCheck(
     (r) =>
       r.fullName.split("/")[1]?.toLowerCase() === clean && r.stars >= 100,
   );
+  // Ohne bekannte Handles (alle Quellen ohne Antwort) neutral bewerten, nicht gut
   let socialDevScore =
-    knownHandles > 0 ? Math.round(3 + (freeHandles / knownHandles) * 7) : 7;
+    knownHandles > 0 ? Math.round(3 + (freeHandles / knownHandles) * 7) : 5;
   if (highStarRepo) socialDevScore = Math.max(2, socialDevScore - 3);
 
   // Domain availability ratio
@@ -576,9 +584,13 @@ export async function performClearanceCheck(
   });
 
   // Ein "grün" darf es nur geben, wenn die wesentlichen Quellen geantwortet haben.
-  if (incomplete.length > 0 && matrixScore.verdict === "grün") {
-    matrixScore.verdict = "gelb";
-    matrixScore.verdictLabel = `Unvollständig geprüft (${incomplete.join(", ")})`;
+  // Der Score bleibt dann unter 80, damit Zahl und Ampel zusammenpassen.
+  if (incomplete.length > 0) {
+    matrixScore.totalScore = Math.min(matrixScore.totalScore, 79);
+    if (matrixScore.verdict === "grün") {
+      matrixScore.verdict = "gelb";
+      matrixScore.verdictLabel = `Unvollständig geprüft (${incomplete.join(", ")})`;
+    }
   }
 
   return {
