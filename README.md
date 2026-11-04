@@ -8,6 +8,8 @@
 
 Das Tool prüft Namen und App-Identitäten in Echtzeit gegen **Marken-Kollisionen, phonetische Zwillinge (§ 9 MarkenG), deutsches Freihaltebedürfnis (§ 8 MarkenG), Apple & Google Play Werktitelschutz (§ 5 Abs. 3 MarkenG), autoritative Registries (Europa, Amerika, Asien), DoH, Enzyklopädien (Wikipedia & DuckDuckGo), globale Entwickler-Namensräume (GitHub, npm, PyPI, Crates.io, Homebrew, Go Proxy) und liefert einen transparenten Preisvergleich für europäische und amerikanische Hoster ohne Lockvogel-Fallen**.
 
+**Was geplant ist, was schon geprüft wird und wo die Grenzen liegen:** siehe [ROADMAP.md](ROADMAP.md).
+
 Inspiriert von wegweisenden GitHub-Projekten wie `facundoolano/app-store-scraper`, `DunlapCoddingPC/pyUSPTO`, `r13i/dodomains`, `faizul666/domain-search-agent` und REA (Reverse Engineering Anything).
 
 ---
