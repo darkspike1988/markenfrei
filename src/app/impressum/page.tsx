@@ -40,9 +40,21 @@ export default function ImpressumPage() {
                   <h2 id="haftung" className="mb-1 font-medium text-ink">Hinweis zum Angebot</h2>
                   <p>
                     Markenfrei ist eine Vorprüfung und keine Rechtsberatung. Die Ergebnisse stammen von Diensten
-                    Dritter. Für Richtigkeit, Vollständigkeit und Aktualität wird keine Gewähr übernommen. Markenregister
-                    werden nicht abgefragt; ob ein Name als Marke frei ist, muss vor der Nutzung selbst oder durch eine
-                    fachkundige Person geprüft werden.
+                    Dritter. Markenregister werden nicht abgefragt; ob ein Name als Marke frei ist, muss vor der Nutzung
+                    selbst oder durch eine fachkundige Person geprüft werden.
+                  </p>
+                </section>
+                <section aria-labelledby="haftungsausschluss">
+                  <h2 id="haftungsausschluss" className="mb-1 font-medium text-ink">Haftung und Gewährleistung</h2>
+                  <p>
+                    Markenfrei ist ein kostenloses, privat betriebenes Open-Source-Projekt und wird wie besehen
+                    bereitgestellt. Es wird keine Gewährleistung für Richtigkeit, Vollständigkeit, Aktualität und
+                    ständige Verfügbarkeit übernommen. Für Schäden, die aus der Nutzung der Ergebnisse entstehen, etwa
+                    bei der Wahl eines Namens, einer Markenanmeldung oder einem Domainkauf, wird nicht gehaftet.
+                  </p>
+                  <p className="mt-2">
+                    Unberührt bleibt die Haftung bei Vorsatz und grober Fahrlässigkeit, bei der Verletzung von Leben,
+                    Körper oder Gesundheit sowie nach zwingenden gesetzlichen Vorschriften.
                   </p>
                 </section>
               </div>

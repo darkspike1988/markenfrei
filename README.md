@@ -85,6 +85,9 @@ Gelb, dann Rot, innerhalb davon nach Zahl der Treffer und dann der Lücken.
   Wortbausteinen. Die Vorschläge sind ungeprüft, bis du sie prüfst.
 - **Keine Rechtsberatung.** Vor Anmeldung oder Nutzung eines Namens gehört eine fachkundige
   Markenrecherche dazu.
+- **Keine Gewährleistung, keine Haftung für die Ergebnisse.** Markenfrei wird wie besehen
+  bereitgestellt ([MIT-Lizenz](LICENSE)); die Haftung bei Vorsatz, grober Fahrlässigkeit und nach
+  zwingenden gesetzlichen Vorschriften bleibt unberührt.
 
 ## Start
 
