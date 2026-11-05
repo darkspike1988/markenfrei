@@ -47,7 +47,7 @@ hinzufügen will, schickt die Standardquellen-IDs mit: `npm`, `pypi`, `github`, 
 `homebrew`, `appstore`, `googleplay`, `known_brands`, `wikidata`, `gleif`, dazu die
 gewünschten Zusatzquellen. Alle IDs stehen auf der Seite `/quellen`.
 
-Alle 21 Endungen und alle Quellen mit Endpunkt stehen auf der Seite `/quellen`.
+Alle 33 Endungen und alle Quellen mit Endpunkt stehen auf der Seite `/quellen`.
 
 ### Status und Ampel
 

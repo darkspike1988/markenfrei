@@ -59,7 +59,7 @@ beforeEach(() => resetRdapBootstrapCache());
 // --- Exporte ---
 
 test("DOMAIN_TLDS und Standardauswahl", () => {
-  for (const t of ["de", "com", "net", "org", "dev", "app", "io", "ai", "ch", "li", "fr", "uk", "nl"]) {
+  for (const t of ["de", "com", "net", "org", "dev", "app", "io", "ai", "ch", "li", "fr", "uk", "nl", "cloud", "online", "site", "store", "blog", "design", "space", "biz", "pro", "ca", "tv", "berlin"]) {
     assert.ok(DOMAIN_TLDS.includes(t), t);
   }
   assert.deepEqual([...DEFAULT_DOMAIN_TLDS], ["de", "com", "dev", "app", "io"]);

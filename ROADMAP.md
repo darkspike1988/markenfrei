@@ -17,7 +17,7 @@ und wo muss ich für Marken selbst nachsehen?“ Ohne LLM, ohne Konto, ohne Trac
 | Bereich | Ergebnis |
 |---|---|
 | Engine | ✅ Eine Engine in `src/lib/engine/` für Oberfläche, `/api/check` und MCP. Fünf Status (`taken`, `not_found`, `similar`, `invalid`, `unknown`), Ampel ohne Score aus einer einzigen Funktion. |
-| Domains | ✅ RDAP für 19 Endungen (IANA-Bootstrap, feste Einträge für `.de`, `.io`, `.ch`, `.li`), `.at` und `.eu` nur über DNS. DNS über HTTPS bestätigt nur „vergeben“. |
+| Domains | ✅ RDAP für 31 Endungen (IANA-Bootstrap, feste Einträge für `.de`, `.io`, `.ch`, `.li`), `.at` und `.eu` nur über DNS. DNS über HTTPS bestätigt nur „vergeben“. |
 | Pakete | ✅ Standard: npm, PyPI, GitHub, crates.io, Homebrew. Auf Wunsch: NuGet, RubyGems, Maven Central, Packagist, pub.dev, JSR, Hex.pm, CRAN, Open VSX, Hugging Face, Hackage, Terraform Registry, DEV (dev.to). |
 | App Stores | ✅ Apple App Store, Google Play; auf Wunsch F-Droid und Firefox Add-ons. |
 | Bekannte Namen | ✅ Marken-Heuristik als Quelle `known_brands`, Wikidata, GLEIF; Wikipedia und Show HN als schwache Signale auf Wunsch. |
