@@ -63,7 +63,7 @@ In `~/.cursor/mcp.json` (für alle Projekte) oder `.cursor/mcp.json` (nur dieses
 
 Derselbe Server läuft auch über HTTP unter `/api/mcp` jeder Markenfrei-Instanz (MCP Streamable
 HTTP, zustandslos, mit Rate-Limit). Die öffentliche Adresse `https://markenfrei.app/api/mcp` ist
-erst nach dem Deployment erreichbar (Stand 4. November 2026: noch nicht):
+erreichbar:
 
 ```sh
 claude mcp add --transport http markenfrei https://markenfrei.app/api/mcp

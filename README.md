@@ -146,8 +146,7 @@ Vier Tools, alle schreibgeschützt und mit `outputSchema`:
 ### Über HTTP
 
 Jede laufende Instanz stellt den Server unter `POST /api/mcp` bereit (Streamable HTTP,
-zustandslos). Die öffentliche Adresse unten funktioniert erst nach dem Deployment auf
-markenfrei.app (Stand 4. November 2026: noch nicht erreichbar); lokal ersetzt du sie durch
+zustandslos). Die öffentliche Adresse unten ist unter markenfrei.app erreichbar; lokal ersetzt du sie durch
 `http://localhost:3000/api/mcp`. Für Claude Code:
 
 ```bash

@@ -86,9 +86,8 @@ export default function McpPage() {
         Das npm-Paket <code className="font-mono">markenfrei-mcp</code> muss erst vom Betreiber veröffentlicht werden.
         Bis dahin funktioniert <code className="font-mono">npx</code> nicht; starte den Server lokal aus dem
         Repository mit <code className="font-mono">node mcp/dist/markenfrei-mcp.mjs</code>. Die HTTP-Adresse{" "}
-        <code className="font-mono">{HTTP_URL}</code> funktioniert erst, wenn diese Instanz unter markenfrei.app
-        erreichbar ist (Stand 4. November 2026: noch nicht). Jede selbst betriebene Instanz bietet sie unter{" "}
-        <code className="font-mono">/api/mcp</code>.
+        <code className="font-mono">{HTTP_URL}</code> ist erreichbar. Jede selbst betriebene Instanz bietet sie
+        unter <code className="font-mono">/api/mcp</code>.
       </div>
 
       <section aria-labelledby="claude-code">
