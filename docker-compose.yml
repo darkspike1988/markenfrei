@@ -5,6 +5,8 @@ services:
       dockerfile: Dockerfile
     container_name: markenfrei-app
     restart: unless-stopped
+    # tini als PID 1: leitet SIGTERM weiter und räumt Kindprozesse ab
+    init: true
     ports:
       # Nur lokal erreichbar: Der Zugriff läuft über den Reverse-Proxy (TLS, x-forwarded-for).
       # Bei "3000:3000" wäre die App direkt aus dem Internet erreichbar und das Rate-Limit über einen
@@ -17,3 +19,19 @@ services:
     env_file:
       - path: .env
         required: false
+    # Härtung: die App schreibt nichts außer in den Next-Cache und braucht keine Linux-Rechte
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/.next/cache:uid=1001,gid=1001
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s

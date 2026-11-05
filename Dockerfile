@@ -8,6 +8,11 @@ FROM base AS deps
 COPY package.json package-lock.json ./
 RUN npm ci
 
+# Nur Laufzeit-Abhängigkeiten für das fertige Image (ohne ESLint, TypeScript-Werkzeuge, Tests)
+FROM base AS prod-deps
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -25,10 +30,13 @@ RUN addgroup --system --gid 1001 nodejs && \
 
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/node_modules ./node_modules
+# next start liest die Laufzeit-Optionen (cacheComponents, poweredByHeader) erneut aus der Konfiguration
+COPY --from=builder /app/next.config.ts ./next.config.ts
+COPY --from=builder /app/src/lib/security-headers.ts ./src/lib/security-headers.ts
+COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
 
 USER nextjs
 EXPOSE 3000
 
-CMD ["npm", "run", "start"]
+CMD ["node_modules/.bin/next", "start"]
