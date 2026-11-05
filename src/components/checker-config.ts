@@ -2,7 +2,7 @@
  * Daten, die die Server-Komponente zur Buildzeit an die Oberfläche übergibt, und der
  * Zustand im Link. Nur Typen und reine Funktionen: hier darf kein Server-Code landen.
  */
-import type { Namespace } from "@/lib/engine/types";
+import { NAMESPACES, type Namespace } from "@/lib/engine/types";
 
 export type SourceInfo = {
   id: string;
@@ -115,4 +115,30 @@ export function buildRequestBody(
 /** Prüft, ob die Auswahl überhaupt eine Quelle ergibt. */
 export function hasAnySource(sel: Pick<Selection, "namespaces" | "extra">): boolean {
   return sel.namespaces.length > 0 || sel.extra.length > 0;
+}
+
+/**
+ * Eine ruhige Zeile für die aktuelle Auswahl, z. B. „Domains, Pakete · .de .com · +2 weitere Quellen“.
+ * Dient auch Screenreadern als Zusammenfassung hinter dem Schalter „Anpassen“.
+ */
+export function selectionSummary(
+  sel: Pick<Selection, "namespaces" | "tlds" | "extra">,
+  config: Pick<CheckerConfig, "namespaces">,
+): string {
+  const labels = config.namespaces.filter((n) => sel.namespaces.includes(n.id)).map((n) => n.label);
+  const parts: string[] = [];
+  if (labels.length) parts.push(labels.join(", "));
+  if (sel.namespaces.includes("domains") && sel.tlds.length) parts.push(sel.tlds.map((t) => `.${t}`).join(" "));
+  if (sel.extra.length) parts.push(`+${sel.extra.length} ${sel.extra.length === 1 ? "weitere Quelle" : "weitere Quellen"}`);
+  return parts.join(" · ") || "Keine Quelle gewählt";
+}
+
+/** Wählbare Zusatzquellen nach Namensraum gruppiert, in der Reihenfolge der Namensräume. */
+export function groupOptional(sources: SourceInfo[]): { ns: Namespace; list: SourceInfo[] }[] {
+  const m = new Map<Namespace, SourceInfo[]>();
+  for (const s of sources) {
+    if (s.defaultEnabled) continue;
+    m.set(s.namespace, [...(m.get(s.namespace) ?? []), s]);
+  }
+  return NAMESPACES.filter((ns) => m.has(ns)).map((ns) => ({ ns, list: m.get(ns)! }));
 }

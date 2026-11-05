@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import type { NameReport } from "@/lib/engine/check";
 import type { Namespace } from "@/lib/engine/types";
 import { NAMESPACE_LABEL } from "@/lib/engine/types";
@@ -9,17 +10,21 @@ import { rankReports } from "@/lib/engine/verdict";
 import {
   buildQuery,
   buildRequestBody,
+  groupOptional,
   hasAnySource,
   parseSelection,
+  selectionSummary,
   splitNames,
   type CheckerConfig,
   type Selection,
+  type SourceInfo,
 } from "@/components/checker-config";
+import { Chevron } from "@/components/chevron";
 import { CopyButton } from "@/components/copy-button";
 import { IdeaFinder } from "@/components/idea-finder";
-import { ReportCard, ReportError, ReportSkeleton } from "@/components/report-card";
-import { ShortlistRanking } from "@/components/shortlist-ranking";
+import { QUIET_BUTTON, ReportEntry, ReportError, ReportSkeleton } from "@/components/report-card";
 import { VerdictBadge } from "@/components/status-badge";
+import { shortlistCount } from "@/components/verdict-text";
 
 const CONCURRENCY = 3;
 
@@ -58,16 +63,19 @@ function Chip({
   disabled,
   children,
   mono,
+  title,
 }: {
   pressed: boolean;
   onClick: () => void;
   disabled?: boolean;
   children: React.ReactNode;
   mono?: boolean;
+  title?: string;
 }) {
   return (
     <button
       type="button"
+      title={title}
       aria-pressed={pressed}
       onClick={onClick}
       disabled={disabled}
@@ -120,12 +128,7 @@ export function Checker({
     retryAttempts.current.clear();
   }
 
-  const optional = useMemo(() => config.sources.filter((s) => !s.defaultEnabled), [config.sources]);
-  const optionalByNs = useMemo(() => {
-    const m = new Map<Namespace, typeof optional>();
-    for (const s of optional) m.set(s.namespace, [...(m.get(s.namespace) ?? []), s]);
-    return [...m.entries()];
-  }, [optional]);
+  const optionalGroups = useMemo(() => groupOptional(config.sources), [config.sources]);
 
   async function checkOne(name: string, sel: Selection, signal: AbortSignal, id: number) {
     let item: Item;
@@ -323,10 +326,12 @@ export function Checker({
   const ranking = rankReports(done);
   const finished = run !== null && pending.length === 0;
   const domainsOn = namespaces.includes("domains");
+  /** Beim Einhängen offen: bei mehreren Namen der erste mit Treffer oder Lücke (Rangfolge), sonst nichts */
+  const firstOpen = ranking.find((e) => e.verdict !== "green")?.name;
 
   return (
-    <div className="space-y-10">
-      <form onSubmit={onSubmit} noValidate aria-label="Namen prüfen" className="space-y-5">
+    <div className="space-y-8">
+      <form onSubmit={onSubmit} noValidate aria-label="Namen prüfen" className="space-y-4">
         <div>
           <label htmlFor={fieldId} className="mb-2 block text-sm font-medium text-ink">
             Name oder Shortlist
@@ -361,10 +366,7 @@ export function Checker({
             </button>
           </div>
           <p id={hintId} className="mt-2 text-sm text-muted">
-            Bis zu {config.maxNames} Namen, getrennt durch Komma oder neue Zeile. Enter prüft,{" "}
-            <kbd className="rounded border border-line bg-wash px-1 font-mono text-xs">Umschalt</kbd> +{" "}
-            <kbd className="rounded border border-line bg-wash px-1 font-mono text-xs">Enter</kbd> beginnt eine neue
-            Zeile.
+            Bis zu {config.maxNames} Namen, mit Komma getrennt
           </p>
           {formError && (
             <p id={errorId} role="alert" className="mt-2 text-sm font-medium text-bad">
@@ -373,92 +375,90 @@ export function Checker({
           )}
         </div>
 
-        <div className="space-y-4 rounded-xl border border-line bg-surface px-4 py-4 sm:px-5">
-          <fieldset>
-            <legend className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">Namensräume</legend>
-            <div className="flex flex-wrap gap-1.5">
-              {config.namespaces.map((n) => (
-                <Chip key={n.id} pressed={namespaces.includes(n.id)} onClick={() => toggleNs(n.id)}>
-                  {n.label}
-                </Chip>
-              ))}
-            </div>
-          </fieldset>
+        <details>
+          <summary className="flex min-h-8 items-center justify-between gap-3 text-sm">
+            <span className="min-w-0 text-muted">{selectionSummary({ namespaces, tlds, extra }, config)}</span>
+            <span className="inline-flex shrink-0 items-center gap-1 text-soft underline hover:text-ink">
+              Anpassen
+              <Chevron />
+            </span>
+          </summary>
 
-          <fieldset disabled={!domainsOn} className="disabled:opacity-60">
-            <legend className="mb-2 flex w-full flex-wrap items-baseline justify-between gap-x-3 text-xs font-medium uppercase tracking-wide text-muted">
-              <span>Endungen</span>
-              <span className="font-normal normal-case tracking-normal">
-                {domainsOn ? `${tlds.length} von höchstens ${config.maxTlds}` : "Domains abgewählt"}
-              </span>
-            </legend>
-            <div className="flex flex-wrap gap-1.5">
-              {tlds.map((t) => (
-                <Chip key={t} pressed onClick={() => toggleTld(t)} mono>
-                  .{t}
-                  <span className="sr-only"> (abwählen)</span>
-                </Chip>
-              ))}
-            </div>
-            <details className="mt-2">
-              <summary className="inline-flex min-h-8 items-center gap-1.5 text-sm text-soft hover:text-ink">
-                <span aria-hidden className="toggle-sign" />
-                Alle {config.tlds.length} Endungen
-              </summary>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {config.tlds.map((t) => (
-                  <Chip
-                    key={t}
-                    mono
-                    pressed={tlds.includes(t)}
-                    disabled={!tlds.includes(t) && tlds.length >= config.maxTlds}
-                    onClick={() => toggleTld(t)}
-                  >
-                    .{t}
+          <div className="mt-3 space-y-5 border-t border-line pt-4">
+            <fieldset>
+              <legend className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">Namensräume</legend>
+              <div className="flex flex-wrap gap-1.5">
+                {config.namespaces.map((n) => (
+                  <Chip key={n.id} pressed={namespaces.includes(n.id)} onClick={() => toggleNs(n.id)}>
+                    {n.label}
                   </Chip>
                 ))}
               </div>
-            </details>
-          </fieldset>
+            </fieldset>
 
-          <details className="border-t border-line pt-3">
-            <summary className="inline-flex min-h-8 items-center gap-1.5 text-sm text-soft hover:text-ink">
-              <span aria-hidden className="toggle-sign" />
-              Weitere Quellen
-              {extra.length > 0 && <span className="text-muted">({extra.length} gewählt)</span>}
-            </summary>
-            <div className="mt-3 space-y-4">
-              {optionalByNs.map(([ns, list]) => (
-                <fieldset key={ns}>
-                  <legend className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted">
-                    {NAMESPACE_LABEL[ns]}
-                  </legend>
-                  <ul className="grid gap-x-4 sm:grid-cols-2">
-                    {list.map((s) => (
-                      <li key={s.id}>
-                        <label className="flex min-h-8 cursor-pointer items-start gap-2.5 py-1">
-                          <input
-                            type="checkbox"
-                            checked={extra.includes(s.id)}
-                            onChange={() => toggleExtra(s.id)}
-                            className="mt-1 size-4 shrink-0 accent-[var(--ink)]"
-                          />
-                          <span className="text-sm leading-snug">
-                            <span className="text-ink">{s.label}</span>
-                            <span className="block text-[13px] text-muted">{s.description}</span>
-                          </span>
-                        </label>
-                      </li>
-                    ))}
-                  </ul>
-                </fieldset>
-              ))}
-            </div>
-          </details>
-        </div>
+            <fieldset disabled={!domainsOn} className="disabled:opacity-60">
+              <legend className="mb-2 flex w-full flex-wrap items-baseline justify-between gap-x-3 text-xs font-medium uppercase tracking-wide text-muted">
+                <span>Endungen</span>
+                <span className="font-normal normal-case tracking-normal">
+                  {domainsOn ? `${tlds.length} von höchstens ${config.maxTlds}` : "Domains abgewählt"}
+                </span>
+              </legend>
+              <div className="flex flex-wrap gap-1.5">
+                {tlds.map((t) => (
+                  <Chip key={t} pressed onClick={() => toggleTld(t)} mono>
+                    .{t}
+                    <span className="sr-only"> (abwählen)</span>
+                  </Chip>
+                ))}
+              </div>
+              <details className="mt-2">
+                <summary className="inline-flex min-h-8 items-center gap-1.5 text-sm text-soft hover:text-ink">
+                  <span aria-hidden className="toggle-sign" />
+                  Alle {config.tlds.length} Endungen
+                </summary>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {config.tlds.map((t) => (
+                    <Chip
+                      key={t}
+                      mono
+                      pressed={tlds.includes(t)}
+                      disabled={!tlds.includes(t) && tlds.length >= config.maxTlds}
+                      onClick={() => toggleTld(t)}
+                    >
+                      .{t}
+                    </Chip>
+                  ))}
+                </div>
+              </details>
+            </fieldset>
+
+            {optionalGroups.length > 0 && (
+              <fieldset>
+                <legend className="mb-1 flex w-full flex-wrap items-baseline justify-between gap-x-3 text-xs font-medium uppercase tracking-wide text-muted">
+                  <span>Weitere Quellen</span>
+                  <span className="font-normal normal-case tracking-normal">
+                    {extra.length > 0 ? `${extra.length} gewählt` : "keine gewählt"}
+                  </span>
+                </legend>
+                <div className="divide-y divide-line border-y border-line">
+                  {optionalGroups.map((g) => (
+                    <ExtraGroup key={g.ns} ns={g.ns} list={g.list} extra={extra} onToggle={toggleExtra} />
+                  ))}
+                </div>
+                <p className="mt-2 text-[13px] text-muted">
+                  Was jede Quelle prüft, steht unter{" "}
+                  <Link href="/quellen" className="underline hover:text-ink">
+                    Quellen
+                  </Link>
+                  .
+                </p>
+              </fieldset>
+            )}
+          </div>
+        </details>
       </form>
 
-      <div ref={resultsRef} className="scroll-mt-6 space-y-4">
+      <div ref={resultsRef} className="scroll-mt-6 space-y-3">
         <p className="sr-only" aria-live="polite">
           {run
             ? finished
@@ -467,44 +467,62 @@ export function Checker({
             : ""}
         </p>
 
-        {!run && <Legend />}
-
         {run && (
           <>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 ref={headingRef} tabIndex={-1} className="font-serif text-2xl tracking-tight text-ink outline-none">
-                {names.length === 1 ? "Ergebnis" : "Ergebnisse"}
-              </h2>
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+              <div className="flex flex-wrap items-baseline gap-x-3">
+                <h2 ref={headingRef} tabIndex={-1} className="font-serif text-2xl tracking-tight text-ink outline-none">
+                  {names.length === 1 ? "Ergebnis" : "Ergebnisse"}
+                </h2>
+                {names.length > 1 && <p className="text-sm text-muted">{shortlistCount(ranking, pending.length)}</p>}
+              </div>
               {done.length > 0 && (
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-x-4">
                   <CopyButton text={() => window.location.href} label="Link kopieren" />
-                  <button
-                    type="button"
-                    onClick={exportJson}
-                    className="inline-flex min-h-8 items-center rounded-md border border-line-strong bg-surface px-3 text-sm text-ink hover:bg-wash active:scale-[0.98]"
-                  >
+                  <button type="button" onClick={exportJson} className={QUIET_BUTTON}>
                     JSON exportieren
                   </button>
                 </div>
               )}
             </div>
 
-            {names.length > 1 && <ShortlistRanking ranking={ranking} pending={pending} failed={failed} />}
+            <div className="divide-y divide-line border-y border-line">
+              {ranking.map((e) => {
+                const key = names.find((n) => {
+                  const it = run.items[n];
+                  return it?.state === "done" && it.report.name === e.name;
+                });
+                const it = key === undefined ? undefined : run.items[key];
+                if (key === undefined || it?.state !== "done") return null;
+                return (
+                  <ReportEntry
+                    key={e.name}
+                    report={it.report}
+                    defaultOpen={names.length === 1 || firstOpen === e.name}
+                    settled={finished}
+                    waiting={it.waiting}
+                    rechecking={it.rechecking}
+                    onRecheck={() => recheck(key)}
+                  />
+                );
+              })}
+              {pending.map((n) => (
+                <ReportSkeleton key={`p-${n}`} name={n} />
+              ))}
+              {failed.map((n) => {
+                const it = run.items[n];
+                return (
+                  <ReportError
+                    key={`f-${n}`}
+                    name={n}
+                    message={it?.state === "error" ? it.message : ""}
+                    onRetry={() => retry(n)}
+                  />
+                );
+              })}
+            </div>
 
-            {names.map((n) => {
-              const it = run.items[n];
-              if (!it || it.state === "loading") return <ReportSkeleton key={n} name={n} />;
-              if (it.state === "error") return <ReportError key={n} name={n} message={it.message} onRetry={() => retry(n)} />;
-              return (
-                <ReportCard
-                  key={n}
-                  report={it.report}
-                  waiting={it.waiting}
-                  rechecking={it.rechecking}
-                  onRecheck={() => recheck(n)}
-                />
-              );
-            })}
+            <Legend />
           </>
         )}
       </div>
@@ -514,36 +532,57 @@ export function Checker({
   );
 }
 
+/** Zusatzquellen eines Namensraums als einzeilige Chip-Reihe, eingeklappt mit Zähler („Pakete +14“). */
+function ExtraGroup({
+  ns,
+  list,
+  extra,
+  onToggle,
+}: {
+  ns: Namespace;
+  list: SourceInfo[];
+  extra: string[];
+  onToggle: (id: string) => void;
+}) {
+  const chosen = list.filter((s) => extra.includes(s.id)).length;
+  const [open, setOpen] = useState(chosen > 0);
+  return (
+    <details open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
+      <summary className="flex min-h-9 items-center justify-between gap-3 text-sm">
+        <span>
+          <span className="font-medium text-ink">{NAMESPACE_LABEL[ns]}</span>{" "}
+          <span className="text-muted">+{list.length}</span>
+          {chosen > 0 && <span className="text-muted"> · {chosen} gewählt</span>}
+        </span>
+        <Chevron className="text-muted" />
+      </summary>
+      <div className="flex flex-wrap gap-1.5 pb-3 pt-1">
+        {list.map((s) => (
+          <Chip key={s.id} pressed={extra.includes(s.id)} onClick={() => onToggle(s.id)} title={s.description}>
+            {s.label}
+          </Chip>
+        ))}
+      </div>
+    </details>
+  );
+}
+
+/** Eine Zeile Ampel-Legende, erst sichtbar, wenn Ergebnisse da sind. Die ausführliche Erklärung steht unter Quellen. */
 function Legend() {
   return (
-    <section aria-labelledby="legende" className="rounded-xl border border-line px-4 py-4 sm:px-5">
-      <h2 id="legende" className="mb-3 text-xs font-medium uppercase tracking-wide text-muted">
-        So ist die Ampel zu lesen
-      </h2>
-      <dl className="space-y-2.5 text-sm">
-        <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-3">
-          <dt className="sm:w-56 sm:shrink-0">
-            <VerdictBadge verdict="green" size="sm" />
-          </dt>
-          <dd className="text-soft">Alle gewählten Quellen haben geantwortet und kennen den Namen nicht.</dd>
-        </div>
-        <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-3">
-          <dt className="sm:w-56 sm:shrink-0">
-            <VerdictBadge verdict="yellow" size="sm" />
-          </dt>
-          <dd className="text-soft">Ähnliche oder schwache Treffer, in einer Quelle nicht zulässig, oder eine Quelle hat nicht geantwortet.</dd>
-        </div>
-        <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-3">
-          <dt className="sm:w-56 sm:shrink-0">
-            <VerdictBadge verdict="red" size="sm" />
-          </dt>
-          <dd className="text-soft">Mindestens eine Quelle meldet den Namen als vergeben.</dd>
-        </div>
-      </dl>
-      <p className="mt-4 border-t border-line pt-3 text-sm text-muted">
-        „Nicht gefunden“ heißt nicht „registrierbar“. Marken werden nicht abgefragt; zu jedem Namen gibt es eine
-        vorbereitete Markenrecherche.
-      </p>
-    </section>
+    <p className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-1 text-sm text-muted">
+      <span className="inline-flex items-center gap-2">
+        <VerdictBadge verdict="green" size="sm" /> alle Quellen ohne Fund
+      </span>
+      <span className="inline-flex items-center gap-2">
+        <VerdictBadge verdict="yellow" size="sm" /> ähnlich, unzulässig oder offen
+      </span>
+      <span className="inline-flex items-center gap-2">
+        <VerdictBadge verdict="red" size="sm" /> mindestens eine Quelle
+      </span>
+      <Link href="/quellen#ampel" className="underline hover:text-ink">
+        Mehr zur Ampel
+      </Link>
+    </p>
   );
 }

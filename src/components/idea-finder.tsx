@@ -63,15 +63,15 @@ export function IdeaFinder({ max, onUse }: { max: number; onUse: (names: string[
   }
 
   return (
-    <details className="group rounded-xl border border-line bg-surface">
-      <summary className="flex min-h-11 items-center justify-between gap-3 px-4 py-3 sm:px-5">
+    <details className="group">
+      <summary className="inline-flex min-h-8 items-center gap-1.5 text-sm text-soft hover:text-ink">
+        <span aria-hidden className="toggle-sign text-muted" />
         <span>
           <span className="font-medium text-ink">Keine Idee?</span>{" "}
-          <span className="text-sm text-muted">Vorschläge aus Stichwörtern</span>
+          <span className="text-muted">Vorschläge aus Stichwörtern</span>
         </span>
-        <span aria-hidden className="toggle-sign text-muted" />
       </summary>
-      <div className="space-y-4 px-4 pb-5 sm:px-5">
+      <div className="space-y-4 pb-2 pt-3">
         <p className="text-sm text-muted">
           Regelbasiert, ohne KI: Wortstämme aus OpenThesaurus und Datamuse werden nach festen Regeln zu Kunstwörtern
           kombiniert. Die Vorschläge sind ungeprüft, bis du sie prüfst.

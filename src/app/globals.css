@@ -170,3 +170,16 @@ details[open] > summary .toggle-sign::before {
     animation: none;
   }
 }
+
+/* Pfeil an aufklappbaren Zeilen: zeigt nach unten, offen nach oben */
+.chevron {
+  transition: transform 150ms ease;
+}
+details[open] > summary .chevron {
+  transform: rotate(180deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .chevron {
+    transition: none;
+  }
+}

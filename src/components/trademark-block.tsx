@@ -1,19 +1,20 @@
 import type { TrademarkPrep } from "@/lib/engine/trademark-prep";
+import { Chevron } from "@/components/chevron";
 import { CopyButton } from "@/components/copy-button";
 
 /** „Marke: nicht geprüft“ mit Recherche-Vorbereitung, standardmäßig zugeklappt. */
 export function TrademarkBlock({ prep, name }: { prep: TrademarkPrep; name: string }) {
   return (
-    <details className="group border-t border-line">
-      <summary className="flex min-h-11 items-center justify-between gap-3 px-4 py-3 sm:px-5">
+    <details className="group border-t border-line pt-1">
+      <summary className="flex min-h-11 items-center justify-between gap-3 py-2">
         <span className="flex flex-wrap items-baseline gap-x-2">
           <span className="font-medium text-ink">Marke: nicht geprüft</span>
           <span className="text-sm text-muted">Recherche vorbereiten</span>
         </span>
-        <span aria-hidden className="toggle-sign text-muted" />
+        <Chevron className="text-muted" />
       </summary>
 
-      <div className="space-y-6 px-4 pb-5 text-sm sm:px-5">
+      <div className="space-y-6 pb-2 pt-1 text-sm">
         <p className="text-soft">{prep.note}</p>
 
         <section aria-labelledby={`tm-links-${name}`}>

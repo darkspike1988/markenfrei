@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { VerdictBadge } from "@/components/status-badge";
 import { STATIC_SOURCES } from "@/lib/engine/check";
 import { DEFAULT_DOMAIN_TLDS, DOH_ONLY_TLDS, DOMAIN_TLDS } from "@/lib/engine/sources/domains";
 import { TRADEMARK_LINKS_CHECKED, trademarkPrep } from "@/lib/engine/trademark-prep";
@@ -56,6 +57,9 @@ export default function QuellenPage() {
       </div>
 
       <nav aria-label="Abschnitte" className="mt-6 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+        <a href="#ampel" className="underline">
+          Ampel
+        </a>
         <a href="#domains" className="underline">
           Domains
         </a>
@@ -69,6 +73,36 @@ export default function QuellenPage() {
         </a>
       </nav>
 
+      <section aria-labelledby="ampel">
+        <H2 id="ampel">Ampel</H2>
+        <dl className="max-w-2xl space-y-3 text-sm">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-4">
+            <dt className="sm:w-56 sm:shrink-0">
+              <VerdictBadge verdict="green" size="sm" />
+            </dt>
+            <dd className="text-soft">Alle gewählten Quellen haben geantwortet und kennen den Namen nicht.</dd>
+          </div>
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-4">
+            <dt className="sm:w-56 sm:shrink-0">
+              <VerdictBadge verdict="yellow" size="sm" />
+            </dt>
+            <dd className="text-soft">
+              Ähnliche oder schwache Treffer, in einer Quelle nicht zulässig, oder eine Quelle hat nicht geantwortet.
+            </dd>
+          </div>
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-4">
+            <dt className="sm:w-56 sm:shrink-0">
+              <VerdictBadge verdict="red" size="sm" />
+            </dt>
+            <dd className="text-soft">Mindestens eine Quelle meldet den Namen als vergeben.</dd>
+          </div>
+        </dl>
+        <p className="mt-4 max-w-2xl text-sm text-muted">
+          „Nicht gefunden“ heißt nicht „registrierbar“. Marken werden nicht abgefragt; zu jedem Namen gibt es eine
+          vorbereitete Markenrecherche.
+        </p>
+      </section>
+
       <section aria-labelledby="domains">
         <H2 id="domains">Domains</H2>
         <p className="mb-4 max-w-2xl text-sm text-soft">
@@ -77,17 +111,17 @@ export default function QuellenPage() {
           HTTPS bestätigt nur „vergeben“ und ist nie ein Beleg für „frei“. Premium- und reservierte Domains erkennt
           RDAP nicht.
         </p>
-        <div className="overflow-hidden rounded-xl border border-line bg-surface">
+        <div className="border-y border-line">
           <table className="w-full text-left text-sm">
-            <thead className="bg-wash text-xs uppercase tracking-wide text-muted">
+            <thead className="border-b border-line text-xs uppercase tracking-wide text-muted">
               <tr>
-                <th scope="col" className="px-4 py-2 font-medium">
+                <th scope="col" className="py-2 pr-4 font-medium">
                   Endung
                 </th>
-                <th scope="col" className="px-4 py-2 font-medium">
+                <th scope="col" className="py-2 pr-4 font-medium">
                   Verfahren
                 </th>
-                <th scope="col" className="px-4 py-2 font-medium">
+                <th scope="col" className="py-2 font-medium">
                   Standard
                 </th>
               </tr>
@@ -95,9 +129,9 @@ export default function QuellenPage() {
             <tbody className="divide-y divide-line">
               {DOMAIN_TLDS.map((t) => (
                 <tr key={t}>
-                  <td className="px-4 py-2 font-mono text-ink">.{t}</td>
-                  <td className="px-4 py-2 text-soft">{tldMethod(t)}</td>
-                  <td className="px-4 py-2 text-soft">{DEFAULT_DOMAIN_TLDS.includes(t) ? "ja" : "nein"}</td>
+                  <td className="py-2 pr-4 font-mono text-ink">.{t}</td>
+                  <td className="py-2 pr-4 text-soft">{tldMethod(t)}</td>
+                  <td className="py-2 text-soft">{DEFAULT_DOMAIN_TLDS.includes(t) ? "ja" : "nein"}</td>
                 </tr>
               ))}
             </tbody>
@@ -108,9 +142,9 @@ export default function QuellenPage() {
       {groups.map((g) => (
         <section key={g.ns} aria-labelledby={g.ns}>
           <H2 id={g.ns}>{NAMESPACE_LABEL[g.ns]}</H2>
-          <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
+          <ul className="divide-y divide-line border-y border-line">
             {g.list.map((s) => (
-              <li key={s.id} className="px-4 py-3.5 sm:px-5">
+              <li key={s.id} className="py-3.5">
                 <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                   <h3 className="font-medium text-ink">{s.label}</h3>
                   <span
@@ -136,9 +170,9 @@ export default function QuellenPage() {
           DPMA-Expertensuchstring, Schreibvarianten, einen Klassenvorschlag und eine Checkliste. Links zuletzt geprüft
           am {checked}; „beispiel“ steht hier für den geprüften Namen.
         </p>
-        <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
+        <ul className="divide-y divide-line border-y border-line">
           {tm.map((l) => (
-            <li key={l.label} className="px-4 py-3.5 sm:px-5">
+            <li key={l.label} className="py-3.5">
               <h3 className="font-medium text-ink">
                 {l.label} <span className="font-normal text-muted">({l.office})</span>
               </h3>

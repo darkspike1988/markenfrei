@@ -32,7 +32,7 @@ export function CopyButton({
     <button
       type="button"
       onClick={copy}
-      className={`inline-flex min-h-8 items-center rounded-md border border-line-strong bg-surface px-3 text-sm text-ink transition-colors hover:bg-wash active:scale-[0.98] ${className}`}
+      className={`inline-flex min-h-6 items-center text-sm text-soft underline transition-colors hover:text-ink ${className}`}
     >
       <span aria-live="polite">
         {state === "done" ? "Kopiert" : state === "failed" ? "Nicht kopiert, bitte markieren" : label}

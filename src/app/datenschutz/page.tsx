@@ -20,7 +20,7 @@ export default function DatenschutzPage() {
   return (
     <div className="pt-8 sm:pt-14">
       <h1 className="font-serif text-4xl leading-[1.1] tracking-[-0.02em] text-ink sm:text-5xl">Datenschutz</h1>
-      <Suspense fallback={<p className="mt-6 text-soft">Lädt …</p>}>
+      <Suspense fallback={<div className="mt-6 min-h-[70vh]" aria-hidden />}>
         <WithOperator>
           {({ operator, missing, recommendations }) => (
             <>

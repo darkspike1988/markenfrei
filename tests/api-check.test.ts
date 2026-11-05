@@ -158,7 +158,7 @@ test("nur „nicht zulässig“ (Ziffer am Anfang) ist weder Rot noch „vergebe
 test("vergeben und nicht zulässig werden in der Rangliste getrennt genannt", () => {
   const results = [res("npm", "taken"), res("crates.io", "invalid"), res("PyPI", "unknown"), res("Go", "taken", true)];
   const [entry] = rankReports([{ name: "x", verdict: "red", results }]);
-  assert.equal(shortlistSummary(entry), "vergeben: npm · nicht zulässig: crates.io · ohne Antwort: PyPI");
+  assert.equal(shortlistSummary(entry), "vergeben: npm · nicht zulässig: crates.io · 1 ohne Antwort");
 });
 
 test("Rangliste sagt „nicht gefunden“ statt „frei“ und zählt erst mit Ergebnis", () => {
@@ -176,7 +176,7 @@ test("Rangliste sagt „nicht gefunden“ statt „frei“ und zählt erst mit E
     shortlistCount([], 10),
   ];
   for (const t of texts) assert.doesNotMatch(t, /\bfrei\b/);
-  assert.equal(texts[0], "in allen gewählten Quellen nicht gefunden");
+  assert.equal(texts[0], "in allen Quellen nicht gefunden");
   assert.equal(texts[1], "2 Namen ohne Treffer in allen gewählten Quellen");
   assert.equal(texts[2], "Bisher 2 Namen ohne Treffer in allen gewählten Quellen");
   assert.equal(texts[3], "1 Name ohne Treffer in allen gewählten Quellen");

@@ -40,7 +40,7 @@ Annahme: Jeder dieser Zähler ist Modulzustand je Prozess. Ob Next.js dieselben 
 
 Ist das Abfragebudget eines Dienstes ausgeschöpft, wird keine Abfrage gesendet: `HttpResponse.error` lautet `"budget"` (`src/lib/engine/types.ts`), die Quelle meldet `unknown`. Bei vorübergehenden Gründen (Abfragebudget, Zeitüberschreitung, Ablauf der Frist, HTTP 429) trägt sie `retryable: true`. Das Ergebnis ist nie „frei“. Die Oberfläche (`src/components/checker.tsx`) wiederholt solche Ergebnisse automatisch; jede Wiederholung kostet Einheiten und Budget. API und MCP liefern das Flag, wiederholen aber nicht selbst.
 
-Der Reverse-Proxy zählt keine ausgehenden Abfragen; teilen können das Abfragebudget die Anwendung (D), ein gemeinsamer Zähler (B) oder ein ausgehender Proxy (E). Der Kommentar zu `HOST_BUDGETS` belegt Limits für Apple („ungefähr 20 pro Minute“; das Budget ist mit 18 bewusst darunter), crates.io (Crawler-Richtlinie), Hex, Mastodon und Hugging Face; für GLEIF ist die Zahl nicht offiziell bestätigt. Auch GitHub hat ein belegtes Limit (60 Abfragen pro Stunde ohne Token), das D nicht löst. Welche Folge eine Überschreitung hat (Sperre der IP, HTTP 429, Dauer), ist für die meisten Dienste nicht belegt. Für Slots belegt das Repository kein Limit eines Dienstes; ob Dienste wie Wikidata eigene Drosselung anwenden, ist nicht geprüft.
+Der Reverse-Proxy zählt keine ausgehenden Abfragen; teilen können das Abfragebudget die Anwendung (D), ein gemeinsamer Zähler (B) oder ein ausgehender Proxy (E). Der Kommentar zu `HOST_BUDGETS` belegt Limits für Apple („ungefähr 20 pro Minute“; das Budget ist mit 18 bewusst darunter), crates.io (Crawler-Richtlinie), Hex, Mastodon, Hugging Face, Repology (1 pro Sekunde), ecosyste.ms (5.000 pro Stunde ohne E-Mail-Adresse im User-Agent) und das AUR (4000 pro Tag); für GLEIF ist die Zahl nicht offiziell bestätigt. Auch GitHub hat ein belegtes Limit (60 Abfragen pro Stunde ohne Token), das D nicht löst. Welche Folge eine Überschreitung hat (Sperre der IP, HTTP 429, Dauer), ist für die meisten Dienste nicht belegt. Für Slots belegt das Repository kein Limit eines Dienstes; ob Dienste wie Wikidata eigene Drosselung anwenden, ist nicht geprüft.
 
 ### crates.io: ein Mangel schon bei einem Prozess
 
@@ -110,6 +110,9 @@ Unverändert bleiben diese Stellen, die bereits „pro Prozess“ sagen: README 
 | `mastodon.social` | 250 pro 5 Minuten | 125 pro 5 Minuten | 83 pro 5 Minuten |
 | `huggingface.co` (anonym) | 450 pro 5 Minuten | 225 pro 5 Minuten | 150 pro 5 Minuten |
 | `crates.io` | 1 pro Sekunde | 1 pro 2 Sekunden | 1 pro 3 Sekunden |
+| `repology.org` | 1 pro Sekunde | 1 pro 2 Sekunden | 1 pro 3 Sekunden |
+| `packages.ecosyste.ms` | 4500 pro Stunde | 2250 pro Stunde | 1500 pro Stunde |
+| `aur.archlinux.org` | 3600 pro Tag | 1800 pro Tag | 1200 pro Tag |
 
 Mit `HF_TOKEN` gilt für Hugging Face das Gesamtbudget 900 pro 5 Minuten. Die Tabelle zeigt abgerundete Werte; ein Rest bleibt ungenutzt (50 / 3: 16 je Prozess, zusammen 48 von 50).
 

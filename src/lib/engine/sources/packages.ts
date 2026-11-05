@@ -11,7 +11,7 @@ type Base = Pick<SourceResult, "sourceId" | "namespace" | "label" | "target" | "
 
 const enc = encodeURIComponent;
 
-function base(sourceId: string, label: string, target: string, url: string): Base {
+export function base(sourceId: string, label: string, target: string, url: string): Base {
   return { sourceId, namespace: "packages", label, target, url };
 }
 
@@ -29,7 +29,7 @@ const ERROR_NOTE: Record<NonNullable<HttpResponse["error"]>, string> = {
   budget: "Abfragelimit des Dienstes erreicht, später erneut prüfen",
 };
 
-function unknownResult(b: Base, res: HttpResponse, note?: string): SourceResult {
+export function unknownResult(b: Base, res: HttpResponse, note?: string): SourceResult {
   let n = note;
   if (!n) {
     if (res.error) n = ERROR_NOTE[res.error];
@@ -40,17 +40,17 @@ function unknownResult(b: Base, res: HttpResponse, note?: string): SourceResult 
   return { ...b, status: "unknown", note: n, evidence: evidenceOf(res) };
 }
 
-function invalidResult(b: Base, note: string): SourceResult {
+export function invalidResult(b: Base, note: string): SourceResult {
   return { ...b, status: "invalid", note, evidence: "Syntaxprüfung, keine Abfrage" };
 }
 
-function crashResult(b: Base, err: unknown): SourceResult {
+export function crashResult(b: Base, err: unknown): SourceResult {
   const msg = err instanceof Error ? err.message : String(err);
   return { ...b, status: "unknown", note: "interner Fehler bei der Abfrage", evidence: msg.slice(0, 120) };
 }
 
 /** 200 => taken, 404 => not_found, sonst unknown. */
-function byStatus(
+export function byStatus(
   b: Base,
   res: HttpResponse,
   notes: { taken?: string; notFound: string },
@@ -109,7 +109,7 @@ function statusSource(def: {
 
 const NORMALIZED = /^[a-z0-9-]+$/;
 
-function basicProblem(name: string): string | null {
+export function basicProblem(name: string): string | null {
   if (!NORMALIZED.test(name)) return "nur a-z, 0-9 und Bindestrich erlaubt";
   return null;
 }

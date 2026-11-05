@@ -12,7 +12,7 @@ export function VerdictBadge({ verdict, size = "md" }: { verdict: Verdict; size?
   const s = VERDICT_STYLE[verdict];
   return (
     <span
-      className={`inline-flex items-center gap-2 rounded-md font-medium ${s.box} ${
+      className={`inline-flex items-center gap-2 whitespace-nowrap rounded-md font-medium ${s.box} ${
         size === "sm" ? "px-2 py-0.5 text-xs" : "px-2.5 py-1 text-sm"
       }`}
     >

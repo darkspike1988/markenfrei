@@ -9,22 +9,14 @@ export const metadata: Metadata = {
 };
 
 const HTTP_URL = "https://markenfrei.app/api/mcp";
+const LOCAL_PATH = "/pfad/zu/markenfrei/mcp/dist/markenfrei-mcp.mjs";
 
 const SNIPPETS = {
-  claudeStdio: "claude mcp add markenfrei -- npx -y markenfrei-mcp",
   claudeHttp: `claude mcp add --transport http markenfrei ${HTTP_URL}`,
-  claudeLocal: "claude mcp add markenfrei -- node /pfad/zu/markenfrei/mcp/dist/markenfrei-mcp.mjs",
-  desktop: JSON.stringify(
-    { mcpServers: { markenfrei: { command: "npx", args: ["-y", "markenfrei-mcp"] } } },
-    null,
-    2,
-  ),
-  cursorStdio: JSON.stringify(
-    { mcpServers: { markenfrei: { command: "npx", args: ["-y", "markenfrei-mcp"] } } },
-    null,
-    2,
-  ),
+  claudeLocal: `claude mcp add markenfrei -- node ${LOCAL_PATH}`,
+  desktop: JSON.stringify({ mcpServers: { markenfrei: { command: "node", args: [LOCAL_PATH] } } }, null, 2),
   cursorHttp: JSON.stringify({ mcpServers: { markenfrei: { url: HTTP_URL } } }, null, 2),
+  cursorLocal: JSON.stringify({ mcpServers: { markenfrei: { command: "node", args: [LOCAL_PATH] } } }, null, 2),
 };
 
 const TOOLS: { name: string; input: string; text: string }[] = [
@@ -53,11 +45,11 @@ const TOOLS: { name: string; input: string; text: string }[] = [
 function Code({ text, label }: { text: string; label: string }) {
   return (
     <div className="overflow-hidden rounded-lg border border-line bg-surface">
-      <div className="flex items-center justify-between gap-3 border-b border-line bg-wash px-3 py-1.5">
+      <div className="flex items-center justify-between gap-3 px-3 pt-2">
         <span className="text-xs text-muted">{label}</span>
         <CopyButton text={text} />
       </div>
-      <pre className="overflow-x-auto px-3 py-3 font-mono text-[13px] leading-relaxed text-ink">
+      <pre className="overflow-x-auto px-3 pb-3 pt-1.5 font-mono text-[13px] leading-relaxed text-ink">
         <code>{text}</code>
       </pre>
     </div>
@@ -81,21 +73,18 @@ export default function McpPage() {
         Namensräumen schon vergeben ist. Beim Benennen erzeugt das Sprachmodell deines Clients die Kandidaten,
         Markenfrei prüft sie deterministisch. Grün heißt nicht markenrechtlich frei; „unbekannt“ ist nie frei.
       </p>
-
-      <div className="mt-6 rounded-lg border border-line bg-warn-bg px-4 py-3 text-sm text-warn">
-        Das npm-Paket <code className="font-mono">markenfrei-mcp</code> muss erst vom Betreiber veröffentlicht werden.
-        Bis dahin funktioniert <code className="font-mono">npx</code> nicht; starte den Server lokal aus dem
-        Repository mit <code className="font-mono">node mcp/dist/markenfrei-mcp.mjs</code>. Die HTTP-Adresse{" "}
-        <code className="font-mono">{HTTP_URL}</code> ist erreichbar. Jede selbst betriebene Instanz bietet sie
-        unter <code className="font-mono">/api/mcp</code>.
-      </div>
+      <p className="mt-3 max-w-2xl text-sm text-muted">
+        Zwei Wege: über HTTP direkt von <code className="font-mono">{HTTP_URL}</code>, oder lokal aus dem Repository
+        (<code className="font-mono">npm run build:mcp</code>, danach{" "}
+        <code className="font-mono">node mcp/dist/markenfrei-mcp.mjs</code>). Jede selbst betriebene Instanz bietet
+        die HTTP-Adresse unter <code className="font-mono">/api/mcp</code>.
+      </p>
 
       <section aria-labelledby="claude-code">
         <H2 id="claude-code">Claude Code</H2>
         <div className="space-y-3">
-          <Code label="Lokal über npx (stdio)" text={SNIPPETS.claudeStdio} />
           <Code label="Über HTTP" text={SNIPPETS.claudeHttp} />
-          <Code label="Lokal aus dem Repository, bis das Paket veröffentlicht ist" text={SNIPPETS.claudeLocal} />
+          <Code label="Lokal aus dem Repository" text={SNIPPETS.claudeLocal} />
         </div>
       </section>
 
@@ -106,7 +95,7 @@ export default function McpPage() {
           <code className="font-mono text-[13px]">claude_desktop_config.json</code> eintragen und Claude Desktop neu
           starten.
         </p>
-        <Code label="claude_desktop_config.json" text={SNIPPETS.desktop} />
+        <Code label="claude_desktop_config.json, lokal aus dem Repository" text={SNIPPETS.desktop} />
       </section>
 
       <section aria-labelledby="cursor">
@@ -116,16 +105,16 @@ export default function McpPage() {
           <code className="font-mono text-[13px]">.cursor/mcp.json</code> im Projekt eintragen.
         </p>
         <div className="space-y-3">
-          <Code label="Lokal über npx" text={SNIPPETS.cursorStdio} />
           <Code label="Über HTTP" text={SNIPPETS.cursorHttp} />
+          <Code label="Lokal aus dem Repository" text={SNIPPETS.cursorLocal} />
         </div>
       </section>
 
       <section aria-labelledby="tools">
         <H2 id="tools">Werkzeuge</H2>
-        <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
+        <ul className="divide-y divide-line border-y border-line">
           {TOOLS.map((t) => (
-            <li key={t.name} className="px-4 py-3.5 sm:px-5">
+            <li key={t.name} className="py-3.5">
               <h3 className="font-mono text-sm font-medium text-ink">{t.name}</h3>
               <p className="mt-0.5 font-mono text-xs text-muted">{t.input}</p>
               <p className="mt-1.5 text-sm text-soft">{t.text}</p>

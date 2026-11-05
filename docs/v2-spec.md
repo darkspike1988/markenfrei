@@ -65,11 +65,17 @@ Hugging Face (Organisation und Nutzer), Hackage (Suche für andere Schreibweisen
 Registry (Modul- und Provider-Namespaces), DEV (Nutzer und Organisation)
 (Namespace), Firefox Add-ons (exakter Name), F-Droid (exakter Name), Bluesky,
 Mastodon (mastodon.social WebFinger), Hacker News (Nutzer, Show-HN-Suche als schwaches
-Signal), Wikipedia (schwaches Signal).
+Signal), Wikipedia (schwaches Signal). Seit 5. November 2026 außerdem AUR (aurweb-RPC),
+Repology (Projektname in rund 300 Paketquellen, eigener User-Agent mit Quellcode-Link) und
+über den Index von ecosyste.ms (`packages.ecosyste.ms`, nicht live aus dem Register): Docker
+Hub (offizielle Images), conda-forge, Clojars; alle mit
+`defaultEnabled: false` im Namensraum `packages`.
 
 Entfernt: Go-Proxy (liefert für bloße Namen immer 404), DuckDuckGo (keine Unterscheidung
 zwischen „nichts gefunden“ und Fehler), PyPI bleibt. Nicht aufgenommen (Gründe im Review):
-Docker Hub, conda-forge, Snapcraft, Codeberg, GitLab, SEC EDGAR, .co-RDAP, Steam,
+Docker Hub, conda-forge direkt (nur indirekt über ecosyste.ms), CocoaPods, CPAN, Julia (Namen
+brauchen die Schreibweise, ein falsches „nicht gefunden“ droht), Snapcraft,
+Codeberg, GitLab, SourceHut, Debian-Quellen, Arch-Paketsuche, WordPress.org, SEC EDGAR, .co-RDAP, Steam,
 Microsoft Store, Chrome Web Store, Reddit, Instagram, TikTok, X, YouTube. Für Instagram,
 TikTok, X, YouTube und Chrome Web Store gibt es nur Deep-Links zur manuellen Prüfung.
 

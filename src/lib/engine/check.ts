@@ -3,6 +3,7 @@ import { buildUserAgent, createHttpClient } from "@/lib/engine/http";
 import { DEFAULT_DOMAIN_TLDS, DOMAIN_TLDS, domainSources } from "@/lib/engine/sources/domains";
 import { KNOWN_NAME_SOURCES } from "@/lib/engine/sources/known-names";
 import { PACKAGE_SOURCES } from "@/lib/engine/sources/packages";
+import { REGISTRY_SOURCES } from "@/lib/engine/sources/registries";
 import { manualSocialLinks, SOCIAL_SOURCES, STORE_SOURCES } from "@/lib/engine/sources/stores-social";
 import { trademarkPrep, type TrademarkPrep } from "@/lib/engine/trademark-prep";
 import type { Namespace, Source, SourceResult, Status } from "@/lib/engine/types";
@@ -28,6 +29,7 @@ const DEADLINE_MS = 8000;
 /** Alle Quellen außer Domains (die entstehen je Endung). */
 export const STATIC_SOURCES: readonly Source[] = [
   ...PACKAGE_SOURCES,
+  ...REGISTRY_SOURCES,
   ...STORE_SOURCES,
   ...SOCIAL_SOURCES,
   ...KNOWN_NAME_SOURCES,

@@ -1,8 +1,14 @@
+"use client";
+
+import { useEffect, useId, useRef, useState } from "react";
 import type { NameReport } from "@/lib/engine/check";
 import type { SourceResult } from "@/lib/engine/types";
 import { NAMESPACE_LABEL, NAMESPACES } from "@/lib/engine/types";
+import { rankReports, STATUS_LABEL } from "@/lib/engine/verdict";
+import { Chevron } from "@/components/chevron";
 import { StatusText, VerdictBadge } from "@/components/status-badge";
 import { TrademarkBlock } from "@/components/trademark-block";
+import { groupNotes, hiddenNoteLead, shortlistSummary, type GroupNotes } from "@/components/verdict-text";
 
 const DATE = new Intl.DateTimeFormat("de-DE", { dateStyle: "long", timeStyle: "short" });
 
@@ -10,17 +16,24 @@ export function reportAnchor(name: string): string {
   return `bericht-${name.replace(/[^a-z0-9-]/gi, "")}`;
 }
 
-function SourceRow({ r, name, hideNote }: { r: SourceResult; name: string; hideNote?: boolean }) {
+export const QUIET_BUTTON =
+  "inline-flex min-h-6 items-center text-sm text-soft underline hover:text-ink disabled:cursor-wait disabled:opacity-60";
+
+/** Eine Zeile je Quelle: Name, Status, Link. Das Ziel (z. B. Paketname) steht auf kleinen Schirmen darunter. */
+function SourceRow({ r, name, note }: { r: SourceResult; name: string; note?: string }) {
+  const showTarget = r.namespace !== "domains" && r.target !== name && r.target !== r.label;
   return (
-    <li className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4 gap-y-0.5 px-4 py-2.5 sm:px-5">
+    <li className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 py-1.5">
       <div className="min-w-0">
-        <span className="font-medium text-ink">{r.label}</span>
-        {r.namespace !== "domains" && r.target !== name && r.target !== r.label && (
-          <span className="ml-2 font-mono text-[13px] text-muted">{r.target}</span>
-        )}
+        <span className="whitespace-nowrap font-medium text-ink">{r.label}</span>
         {r.weak && (
-          <span className="ml-2 inline-block rounded border border-line px-1.5 py-px text-xs text-muted">
+          <span className="ml-2 inline-block whitespace-nowrap rounded border border-line px-1.5 py-px text-xs text-muted">
             schwaches Signal
+          </span>
+        )}
+        {showTarget && (
+          <span className="block font-mono text-[13px] leading-snug text-muted [overflow-wrap:anywhere] sm:ml-2 sm:inline">
+            {r.target}
           </span>
         )}
       </div>
@@ -39,142 +52,202 @@ function SourceRow({ r, name, hideNote }: { r: SourceResult; name: string; hideN
           <span className="min-w-12" aria-hidden />
         )}
       </div>
-      {r.note && !hideNote && (
-        <p className="col-span-2 text-[13px] leading-snug text-muted sm:col-span-1">{r.note}</p>
-      )}
+      {note && <p className="col-span-2 text-[13px] leading-snug text-muted">{note}</p>}
     </li>
   );
 }
 
-export function ReportCard({
+/** Gruppenkopf: kleine Beschriftung mit feiner Linie; Hinweise zu „nicht gefunden“ auf Abruf. */
+function SourceGroup({ ns, rows, name }: { ns: (typeof NAMESPACES)[number]; rows: SourceResult[]; name: string }) {
+  const notesId = useId();
+  const [showHidden, setShowHidden] = useState(false);
+  const notes: GroupNotes = groupNotes(rows);
+
+  return (
+    <section aria-label={NAMESPACE_LABEL[ns]}>
+      <div className="flex items-center gap-3">
+        <h4 className="text-xs font-medium uppercase tracking-wide text-muted">{NAMESPACE_LABEL[ns]}</h4>
+        <span aria-hidden className="h-px flex-1 bg-line" />
+        {notes.hidden.length > 0 && (
+          <button
+            type="button"
+            aria-expanded={showHidden}
+            aria-controls={notesId}
+            onClick={() => setShowHidden((v) => !v)}
+            className="inline-flex min-h-6 items-center text-xs text-muted underline hover:text-ink"
+          >
+            Hinweise<span className="sr-only"> zu {NAMESPACE_LABEL[ns]}</span>
+          </button>
+        )}
+      </div>
+      {notes.shared.map((s) => (
+        <p key={`${s.status}-${s.note}`} className="mt-1.5 text-[13px] leading-snug text-muted">
+          {STATUS_LABEL[s.status]}: {s.note}
+        </p>
+      ))}
+      <ul>
+        {rows.map((r) => (
+          <SourceRow key={r.sourceId} r={r} name={name} note={notes.inline.get(r.sourceId)} />
+        ))}
+      </ul>
+      <div id={notesId} hidden={!showHidden}>
+        {notes.hidden.length > 0 && (
+          <ul className="mb-1 space-y-1 border-l border-line pl-3 text-[13px] leading-snug text-muted">
+            {notes.hidden.map((h) => (
+              <li key={h.note}>
+                <span className="font-medium text-soft">{hiddenNoteLead(h, notes.hidden.length)}:</span> {h.note}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
+  );
+}
+
+export function ReportEntry({
   report,
+  defaultOpen,
+  settled,
   waiting,
   rechecking,
   onRecheck,
 }: {
   report: NameReport;
+  /** Anfangszustand; gilt endgültig, sobald `settled` und der Nutzer den Eintrag nicht selbst bedient hat */
+  defaultOpen: boolean;
+  /** Alle Namen der Prüfung sind fertig, die Rangfolge ändert sich nicht mehr */
+  settled: boolean;
   /** Gesetzt, solange die Oberfläche offene Quellen automatisch erneut prüft */
   waiting?: { attempt: number; max: number };
   rechecking?: boolean;
   onRecheck?: () => void;
 }) {
-  const groups = NAMESPACES.map((ns) => {
-    const rows = report.results.filter((r) => r.namespace === ns);
-    // Gleicher Hinweis in allen Zeilen (typisch bei Domains): einmal unter der Überschrift statt je Zeile
-    const shared = rows.length > 1 && rows[0].note && rows.every((r) => r.note === rows[0].note) ? rows[0].note : undefined;
-    return { ns, rows, shared };
-  }).filter((g) => g.rows.length > 0);
+  const anchor = reportAnchor(report.name);
+  const [open, setOpen] = useState(defaultOpen);
+  const touched = useRef(false);
+
+  // Sobald alle Namen fertig sind, gilt die endgültige Rangfolge; was der Nutzer selbst auf- oder zugeklappt hat, bleibt.
+  useEffect(() => {
+    if (settled && !touched.current) setOpen(defaultOpen);
+  }, [settled, defaultOpen]);
+
+  // Link mit #bericht-… öffnet den Eintrag, auf den er zeigt.
+  useEffect(() => {
+    const check = () => {
+      if (window.location.hash === `#${anchor}`) {
+        touched.current = true;
+        setOpen(true);
+      }
+    };
+    check();
+    window.addEventListener("hashchange", check);
+    return () => window.removeEventListener("hashchange", check);
+  }, [anchor]);
+
+  const groups = NAMESPACES.map((ns) => ({ ns, rows: report.results.filter((r) => r.namespace === ns) })).filter(
+    (g) => g.rows.length > 0,
+  );
+  const reason = shortlistSummary(rankReports([report])[0]);
   const checkedAt = new Date(report.checkedAt);
 
   return (
-    <article
-      id={reportAnchor(report.name)}
-      aria-labelledby={`${reportAnchor(report.name)}-titel`}
-      className="fade-in scroll-mt-6 overflow-hidden rounded-xl border border-line bg-surface"
+    <details
+      id={anchor}
+      open={open}
+      onToggle={(e) => setOpen(e.currentTarget.open)}
+      className="fade-in scroll-mt-6"
     >
-      <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 pb-3 pt-4 sm:px-5">
-        <h3 id={`${reportAnchor(report.name)}-titel`} className="font-mono text-lg font-medium text-ink">
-          {report.name}
-        </h3>
-        <VerdictBadge verdict={report.verdict} />
-      </header>
+      <summary
+        onClick={() => (touched.current = true)}
+        className="flex min-h-12 flex-wrap items-center gap-x-3 gap-y-0.5 py-2.5 sm:flex-nowrap"
+      >
+        <h3 className="order-1 font-mono text-base font-medium text-ink sm:text-lg">{report.name}</h3>
+        <span className="order-2">
+          <VerdictBadge verdict={report.verdict} size="sm" />
+        </span>
+        <span className="order-4 min-w-0 basis-full text-sm text-muted sm:order-3 sm:basis-0 sm:flex-1 sm:truncate" title={reason}>
+          {reason}
+        </span>
+        <Chevron className="order-3 ml-auto text-muted sm:order-4" />
+      </summary>
 
-      <div className="space-y-2 px-4 pb-3 text-sm sm:px-5">
-        {report.input.trim().toLowerCase() !== report.name && (
-          <p className="text-muted">Eingabe „{report.input.trim()}“ geprüft als {report.name}.</p>
+      <div className="space-y-4 pb-5">
+        {(report.input.trim().toLowerCase() !== report.name || report.incomplete.length > 0 || waiting) && (
+          <div className="space-y-1.5 text-sm">
+            {report.input.trim().toLowerCase() !== report.name && (
+              <p className="text-muted">Eingabe „{report.input.trim()}“ geprüft als {report.name}.</p>
+            )}
+            {report.incomplete.length > 0 && (
+              <p className="text-warn">
+                Ohne Antwort: {report.incomplete.join(", ")}. Dort heißt „nichts gefunden“ nicht „frei“.
+              </p>
+            )}
+            {waiting && (
+              <p role="status" className="text-soft">
+                Einige Quellen haben ihr Abfragelimit erreicht oder waren zu langsam. Markenfrei prüft sie
+                automatisch erneut, nur diese (Versuch {waiting.attempt} von {waiting.max}).
+              </p>
+            )}
+            {!waiting && report.incomplete.length > 0 && onRecheck && (
+              <button type="button" onClick={onRecheck} disabled={rechecking} className={QUIET_BUTTON}>
+                {rechecking ? "Prüfe erneut …" : "Quellen ohne Antwort erneut prüfen"}
+              </button>
+            )}
+          </div>
         )}
-        {report.incomplete.length > 0 && (
-          <p className="rounded-md bg-warn-bg px-3 py-2 text-warn">
-            Ohne Antwort: {report.incomplete.join(", ")}. Dort heißt „nichts gefunden“ nicht „frei“.
-          </p>
-        )}
-        {waiting && (
-          <p role="status" className="rounded-md border border-line px-3 py-2 text-soft">
-            Einige Quellen haben ihr Abfragelimit erreicht oder waren zu langsam. Markenfrei prüft sie automatisch
-            erneut, nur diese (Versuch {waiting.attempt} von {waiting.max}).
-          </p>
-        )}
-        {!waiting && report.incomplete.length > 0 && onRecheck && (
-          <button
-            type="button"
-            onClick={onRecheck}
-            disabled={rechecking}
-            className="inline-flex min-h-8 items-center rounded-md border border-line-strong bg-surface px-3 text-sm text-ink hover:bg-wash disabled:cursor-wait disabled:opacity-60"
-          >
-            {rechecking ? "Prüfe erneut …" : "Quellen ohne Antwort erneut prüfen"}
-          </button>
-        )}
-      </div>
 
-      {groups.map((g) => (
-        <section key={g.ns} aria-label={NAMESPACE_LABEL[g.ns]} className="border-t border-line">
-          <h4 className="bg-wash px-4 py-1.5 text-xs font-medium uppercase tracking-wide text-muted sm:px-5">
-            {NAMESPACE_LABEL[g.ns]}
-          </h4>
-          {g.shared && <p className="px-4 pt-2 text-[13px] leading-snug text-muted sm:px-5">Alle: {g.shared}</p>}
-          <ul className="divide-y divide-line">
-            {g.rows.map((r) => (
-              <SourceRow key={r.sourceId} r={r} name={report.name} hideNote={Boolean(g.shared)} />
+        {groups.map((g) => (
+          <SourceGroup key={g.ns} ns={g.ns} rows={g.rows} name={report.name} />
+        ))}
+
+        {report.manualLinks.length > 0 && (
+          <p className="text-sm text-muted">
+            Selbst prüfen:{" "}
+            {report.manualLinks.map((l, i) => (
+              <span key={l.url}>
+                {i > 0 && ", "}
+                <a href={l.url} target="_blank" rel="noopener noreferrer" className="underline hover:text-ink">
+                  {l.label}
+                </a>
+              </span>
             ))}
-          </ul>
-        </section>
-      ))}
+          </p>
+        )}
 
-      {report.manualLinks.length > 0 && (
-        <p className="border-t border-line px-4 py-3 text-sm text-muted sm:px-5">
-          Selbst prüfen:{" "}
-          {report.manualLinks.map((l, i) => (
-            <span key={l.url}>
-              {i > 0 && ", "}
-              <a href={l.url} target="_blank" rel="noopener noreferrer" className="underline hover:text-ink">
-                {l.label}
-              </a>
-            </span>
-          ))}
+        <TrademarkBlock prep={report.trademark} name={report.name} />
+
+        <p className="text-xs text-muted">
+          „Nicht gefunden“ heißt nicht „registrierbar“. Geprüft am{" "}
+          <time dateTime={report.checkedAt}>{DATE.format(checkedAt)}</time>.
         </p>
-      )}
-
-      <TrademarkBlock prep={report.trademark} name={report.name} />
-
-      <footer className="border-t border-line px-4 py-2.5 text-xs text-muted sm:px-5">
-        Geprüft am <time dateTime={report.checkedAt}>{DATE.format(checkedAt)}</time>
-      </footer>
-    </article>
+      </div>
+    </details>
   );
 }
 
+/** Platzhalter in der Höhe einer Zeile, damit nichts springt, wenn das Ergebnis eintrifft. */
 export function ReportSkeleton({ name }: { name: string }) {
   return (
-    <div className="rounded-xl border border-line bg-surface" aria-busy="true">
-      <div className="flex items-center justify-between gap-4 px-4 py-4 sm:px-5">
-        <span className="font-mono text-lg text-muted">{name}</span>
-        <span className="text-sm text-muted">wird geprüft …</span>
-      </div>
-      <div className="skeleton space-y-2 border-t border-line px-4 py-4 sm:px-5" aria-hidden>
-        <div className="h-3 w-2/3 rounded bg-wash" />
-        <div className="h-3 w-1/2 rounded bg-wash" />
-        <div className="h-3 w-3/5 rounded bg-wash" />
-      </div>
+    <div className="flex min-h-12 items-center justify-between gap-4 py-2.5" aria-busy="true">
+      <span className="font-mono text-base text-muted sm:text-lg">{name}</span>
+      <span className="skeleton text-sm text-muted">wird geprüft …</span>
     </div>
   );
 }
 
 export function ReportError({ name, message, onRetry }: { name: string; message: string; onRetry?: () => void }) {
   return (
-    <div className="rounded-xl border border-line bg-surface px-4 py-4 sm:px-5" role="alert">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <span className="font-mono text-lg text-ink">{name}</span>
+    <div className="py-2.5" role="alert">
+      <div className="flex min-h-8 flex-wrap items-center justify-between gap-3">
+        <span className="font-mono text-base text-ink sm:text-lg">{name}</span>
         {onRetry && (
-          <button
-            type="button"
-            onClick={onRetry}
-            className="inline-flex min-h-8 items-center rounded-md border border-line-strong px-3 text-sm hover:bg-wash"
-          >
+          <button type="button" onClick={onRetry} className={QUIET_BUTTON}>
             Erneut prüfen
           </button>
         )}
       </div>
-      <p className="mt-1 text-sm text-bad">{message}</p>
+      <p className="text-sm text-bad">{message}</p>
     </div>
   );
 }

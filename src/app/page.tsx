@@ -40,8 +40,7 @@ export default function Home() {
           Wo ist der Name schon vergeben?
         </h1>
         <p className="mt-4 text-base text-soft sm:text-lg">
-          Domains, Pakete, App Stores und bekannte Namen in einem Durchgang, mit Link zu jeder Quelle. Marken prüft
-          Markenfrei nicht, bereitet die Recherche aber vor.
+          Domains, Pakete, App Stores und bekannte Namen in einem Durchgang, mit Link zu jeder Quelle.
         </p>
       </div>
       <Suspense fallback={<CheckerFallback config={config} />}>

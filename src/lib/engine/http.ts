@@ -36,6 +36,13 @@ const PER_HOST_LIMIT = 4;
  *   REST API rate limits). Wir nehmen 50 bzw. 4.500 je Stunde.
  * - query.wikidata.org: Wikimedia begrenzt die Rechenzeit je Client, nicht die Zahl der Anfragen. Unsere
  *   Abfragen sind klein; 30 pro Minute ist eine vorsichtige eigene Grenze, keine Angabe des Dienstes.
+ * - repology.org: höchstens 1 Anfrage pro Sekunde, Massenabfragen (mehr als 1000 pro Tag) unerwünscht und nur
+ *   mit eigenem User-Agent samt Link zum Quellcode (repology.org/api). Wir nehmen 1 pro Sekunde.
+ * - packages.ecosyste.ms: 5.000 Anfragen pro Stunde ohne und 15.000 mit E-Mail-Adresse im User-Agent (Betreiber,
+ *   "Building Ecosyste.ms Polite API Rate Limits", 11. Dezember 2025; der Antwortkopf X-RateLimit-Limit nannte am
+ *   5. November 2026 5000 für Anonyme). Wir nehmen 4.500 je Stunde, also unter dem Wert ohne Adresse.
+ * - aur.archlinux.org: höchstens 4000 Anfragen pro Tag und IP für die RPC-Schnittstelle (Arch Wiki,
+ *   Aurweb RPC interface). Wir nehmen 3600 je 24 Stunden.
  */
 export type HostBudget = { max: number; windowMs: number };
 
@@ -58,6 +65,9 @@ export const HOST_BUDGETS: Record<string, HostBudget> = {
   "crates.io": { max: 1, windowMs: 1_000 },
   "hex.pm": { max: 90, windowMs: 60_000 },
   "mastodon.social": { max: 250, windowMs: 300_000 },
+  "repology.org": { max: 1, windowMs: 1_000 },
+  "packages.ecosyste.ms": { max: 4500, windowMs: 3_600_000 },
+  "aur.archlinux.org": { max: 3600, windowMs: 86_400_000 },
 };
 /** Längste Wartezeit auf ein freies Budget, danach error "budget" */
 const MAX_BUDGET_WAIT_MS = 1500;
