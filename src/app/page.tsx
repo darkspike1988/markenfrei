@@ -4,6 +4,7 @@ import { DEFAULT_DOMAIN_TLDS, DOMAIN_TLDS } from "@/lib/engine/sources/domains";
 import { NAMESPACE_LABEL, NAMESPACES } from "@/lib/engine/types";
 import type { CheckerConfig } from "@/components/checker-config";
 import { CheckerFallback, CheckerFromUrl } from "@/components/checker";
+import { webApplicationJsonLd } from "@/lib/structured-data";
 
 /**
  * Startseite. Die Quellenliste wird hier (Server, Buildzeit) zu reinen Daten gemacht,
@@ -35,6 +36,7 @@ export default function Home() {
   const config = buildConfig();
   return (
     <div className="pt-8 sm:pt-14">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: webApplicationJsonLd() }} />
       <div className="mb-8 max-w-2xl sm:mb-10">
         <h1 className="font-serif text-[2.1rem] leading-[1.1] tracking-[-0.02em] text-ink sm:text-5xl">
           Wo ist der Name schon vergeben?

@@ -1,6 +1,7 @@
 import { MAX_NAMES, resolveSources, type CheckOptions } from "@/lib/engine/check";
 import { normalizeName } from "@/lib/name";
 import { createRateLimiter, guardRequest, limitedResponse, type RateLimiter } from "@/lib/rate-limit";
+import { DEFAULT_PUBLIC_URL } from "@/lib/site";
 
 /**
  * Gemeinsame Bausteine der HTTP-Routen: Body-Grenze, Content-Type, Origin-Prüfung,
@@ -59,9 +60,6 @@ function originOf(value: string): string | null {
     return null;
   }
 }
-
-/** Öffentliche Adresse des Angebots, wenn MARKENFREI_PUBLIC_URL fehlt. */
-export const DEFAULT_PUBLIC_URL = "https://markenfrei.app";
 
 const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "[::1]"]);
 

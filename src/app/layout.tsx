@@ -3,6 +3,7 @@ import { Geist, Geist_Mono, Newsreader } from "next/font/google";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { PageviewBeacon } from "@/components/pageview-beacon";
+import { publicUrl, SITE_DESCRIPTION, SITE_NAME, SITE_TITLE } from "@/lib/site";
 import "./globals.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
@@ -10,12 +11,27 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 const newsreader = Newsreader({ variable: "--font-newsreader", subsets: ["latin"], weight: ["400", "500"] });
 
 export const metadata: Metadata = {
+  metadataBase: publicUrl(),
   title: {
-    default: "Markenfrei · Namen vorprüfen",
-    template: "%s · Markenfrei",
+    default: SITE_TITLE,
+    template: `%s · ${SITE_NAME}`,
   },
-  description:
-    "Vorprüfung eines Namens in Domains, Paketregistern, App Stores und bekannten Namen, mit Link zu jeder Quelle. Marken werden nicht geprüft, sondern die Recherche vorbereitet. Keine Rechtsberatung, keine Speicherung von Suchanfragen.",
+  description: SITE_DESCRIPTION,
+  applicationName: SITE_NAME,
+  // Relativ zur aufgerufenen Seite, ohne Query: ?q=… erzeugt keine eigene Adresse in Suchmaschinen.
+  alternates: { canonical: "./" },
+  openGraph: {
+    type: "website",
+    siteName: SITE_NAME,
+    locale: "de_DE",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+  },
 };
 
 export const viewport: Viewport = {
