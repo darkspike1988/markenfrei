@@ -72,7 +72,7 @@ Version.
 | Status | Idee | Voraussetzung |
 |---|---|---|
 | ⬜ | Weitere Endungen | Eintrag im IANA-Bootstrap oder fester RDAP-Server und ein Test mit bekanntem und freiem Namen |
-| ⬜ | Rate-Limit über mehrere Instanzen (gemeinsamer Speicher) | Betrieb mit mehr als einer Instanz |
+| ⬜ | Rate-Limit über mehrere Instanzen (gemeinsamer Speicher) | Betrieb mit mehr als einer Instanz; Optionen und Entscheidung: [docs/design.md](docs/design.md) |
 | ⬜ | Einbettbare Ampel für eigene Seiten | stabiles Schema (`NameReport`, `schemaVersion: 2`) ✅ |
 
 ---
