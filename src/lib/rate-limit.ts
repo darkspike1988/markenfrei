@@ -97,10 +97,15 @@ export function clientKey(req: Request, trustedProxies = TRUSTED_PROXIES): strin
   return real ? rateLimitKey(real) : "local";
 }
 
+/** Meldung der 429-Antwort (auch für die API-Dokumentation). */
+export function rateLimitMessage(retryAfterSec: number): string {
+  return `Zu viele Anfragen. Bitte in ${retryAfterSec} Sekunden erneut versuchen.`;
+}
+
 export function limitedResponse(retryAfterSec: number): Response {
   return new Response(
     JSON.stringify({
-      error: `Zu viele Anfragen. Bitte in ${retryAfterSec} Sekunden erneut versuchen.`,
+      error: rateLimitMessage(retryAfterSec),
     }),
     {
       status: 429,
@@ -122,10 +127,15 @@ export function createGuard(limiter: RateLimiter): (req: Request, cost?: number)
 
 const perMinute = Number(process.env.MARKENFREI_RATE_LIMIT);
 
+/** Standard des Limits pro Client, wenn MARKENFREI_RATE_LIMIT fehlt (Einheiten pro Fenster). */
+export const DEFAULT_RATE_LIMIT = 60;
+/** Länge des Zeitfensters in Millisekunden. */
+export const RATE_LIMIT_WINDOW_MS = 60_000;
+
 /** Gemeinsamer Wächter für alle öffentlichen Routen (Standard: 60 Anfragen pro Minute und IP). */
 export const guardRequest = createGuard(
   createRateLimiter({
-    limit: Number.isFinite(perMinute) && perMinute > 0 ? perMinute : 60,
-    windowMs: 60_000,
+    limit: Number.isFinite(perMinute) && perMinute > 0 ? perMinute : DEFAULT_RATE_LIMIT,
+    windowMs: RATE_LIMIT_WINDOW_MS,
   }),
 );

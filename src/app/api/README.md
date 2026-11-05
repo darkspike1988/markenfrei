@@ -1,6 +1,7 @@
 # `src/app/api/`: HTTP-Routen
 
-Vier Route Handler, alle nur `POST`. Keine LLM-Aufrufe, keine Speicherung von Anfragen.
+Sechs Route Handler: vier mit `POST` (Prüfung, MCP, Wortfeld, Kontakt) und zwei mit `GET`
+(`/api/openapi.json`, `/api/health`). Keine LLM-Aufrufe, keine Speicherung von Anfragen.
 Gemeinsame Bausteine liegen in `_lib/http.ts` (der Ordner beginnt mit `_` und ist keine Route):
 Body-Grenze, Content-Type, Origin-Prüfung, Kosten und Rate-Limit.
 
@@ -26,6 +27,8 @@ sowie `localhost`, `127.0.0.1` und `[::1]` mit beliebigem Port. Ein fehlender Or
 | `POST /api/mcp` | MCP über Streamable HTTP, derselbe Server wie bei stdio | Namen × Quellenumfang bei `markenfrei_check_name` und `markenfrei_check_names`, sonst 1 |
 | `POST /api/opendata-words` | Wortfeld und regelbasierte Vorschläge für „Keine Idee?“ | 1 |
 | `POST /api/contact` | Kontaktformular: sendet eine Nachricht per E-Mail an den Betreiber | 1 (allgemeines Limit) plus eigenes Limit nur für gesendete Nachrichten |
+| `GET /api/openapi.json` | OpenAPI-3.1-Beschreibung der öffentlichen Routen | keine (kein Rate-Limit, keine Abfragen) |
+| `GET /api/health` | Lebenszeichen für Monitoring | keine |
 
 ```mermaid
 sequenceDiagram
@@ -154,3 +157,41 @@ Eingaben des Besuchers; Name, Adresse und Text werden weder gespeichert noch pro
 | 429 | allgemeines oder strenges Limit erreicht |
 | 502 | Versand fehlgeschlagen oder Zeitbudget überschritten (allgemeine Meldung, keine Details) |
 | 503 | kein Mailserver konfiguriert (`MARKENFREI_SMTP_URL` fehlt oder ist ungültig) |
+
+---
+
+## `GET /api/openapi.json` (`openapi.json/route.ts`, Aufbau in `src/lib/openapi.ts`)
+
+OpenAPI 3.1 für `POST /api/check`, `POST /api/mcp` und `GET /api/health`. `/api/contact` und
+`/api/opendata-words` stehen bewusst nicht darin (interne Routen der Oberfläche). Das Dokument
+entsteht aus dem Code und kann deshalb nicht davon abweichen:
+
+- Endungen (`DOMAIN_TLDS`), Namensräume (`NAMESPACES`), Quellen-IDs (`STATIC_SOURCES`, auch die auf
+  Wunsch), Status und Ampel kommen aus den Konstanten der Engine; die Schemas von `NameReport`,
+  `SourceResult`, `TrademarkPrep` und `ShortlistEntry` werden aus den zod-Schemas in
+  `src/lib/engine/report-schema.ts` erzeugt (`z.toJSONSchema`), dieselben wie beim MCP-`outputSchema`.
+- Die Eingabe von `/api/check` (zod-Schema, Grenzen, feste Fehlermeldungen) liegt in
+  `_lib/check-schema.ts`, weil Route-Dateien in Next nur Handler exportieren dürfen. Route und
+  Dokument lesen von dort.
+- Der Rate-Limit-Standardwert (`DEFAULT_RATE_LIMIT`), die Cache-Dauer, `MAX_NAMES`, `MAX_TLDS` und die
+  Body-Grenze kommen aus ihren Modulen. Ein Betreiber, der `MARKENFREI_RATE_LIMIT` ändert, bekommt
+  weiter den Standardwert im Dokument (es beschreibt den Standard, nicht die Instanz).
+- Die Server-Adresse kommt zur Laufzeit aus `MARKENFREI_PUBLIC_URL` (Standard `https://markenfrei.app`).
+- Antwort: `Content-Type: application/json`, `Cache-Control: public, max-age=3600`.
+- Beschrieben sind nur Statuscodes, die `/api/check` wirklich erzeugt: 400, 403, 413, 415, 429, 500.
+  `502` kommt nur bei `/api/contact` vor und steht deshalb nicht im Dokument.
+
+`tests/openapi.test.ts` prüft Aufbau, dass alle `$ref` auflösen, dass die Aufzählungen den Konstanten
+entsprechen, dass die Beispiele zu den Schemas passen und dass die dokumentierten Fehlermeldungen
+die der Route sind.
+
+---
+
+## `GET /api/health` (`health/route.ts`)
+
+Antwort `{ "status": "ok", "version": "<package.json>" }` mit `Cache-Control: no-store`. Kein Rate-Limit,
+keine Umgebungsvariablen, keine Geheimnisse, keine Abfragen bei Dritten und kein Import der Engine.
+Die Route sagt nur, dass der Serverprozess antwortet, nicht, ob RDAP, Register oder Stores erreichbar
+sind. Sie liest `req.headers`, damit Next sie zur Laufzeit ausführt und nicht beim Build einmalig
+vorrendert (Cache Components). Das Docker-Healthcheck könnte sie später nutzen; `docker-compose.yml`
+ist unverändert.

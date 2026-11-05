@@ -7,6 +7,7 @@ import { NAMESPACE_LABEL, NAMESPACES } from "@/lib/engine/types";
 import { rankReports, STATUS_LABEL } from "@/lib/engine/verdict";
 import { Chevron } from "@/components/chevron";
 import { StatusText, VerdictBadge } from "@/components/status-badge";
+import { NameInsights } from "@/components/name-insights";
 import { TrademarkBlock } from "@/components/trademark-block";
 import { groupNotes, hiddenNoteLead, shortlistSummary, type GroupNotes } from "@/components/verdict-text";
 
@@ -112,6 +113,7 @@ export function ReportEntry({
   waiting,
   rechecking,
   onRecheck,
+  onCheckVariants,
 }: {
   report: NameReport;
   /** Anfangszustand; gilt endgültig, sobald `settled` und der Nutzer den Eintrag nicht selbst bedient hat */
@@ -122,6 +124,8 @@ export function ReportEntry({
   waiting?: { attempt: number; max: number };
   rechecking?: boolean;
   onRecheck?: () => void;
+  /** „Tippfehler-Varianten prüfen“: Original plus gewählte Varianten als Shortlist */
+  onCheckVariants?: (original: string, variants: string[]) => void;
 }) {
   const anchor = reportAnchor(report.name);
   const [open, setOpen] = useState(defaultOpen);
@@ -216,6 +220,7 @@ export function ReportEntry({
         )}
 
         <TrademarkBlock prep={report.trademark} name={report.name} />
+        <NameInsights name={report.name} onCheckVariants={onCheckVariants} />
 
         <p className="text-xs text-muted">
           „Nicht gefunden“ heißt nicht „registrierbar“. Geprüft am{" "}

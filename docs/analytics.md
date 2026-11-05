@@ -19,8 +19,11 @@ mitsenden würde und dort die geprüften Namen stehen. Stattdessen sendet `src/l
 | `e` | `true` bei Ereignissen |
 
 Ereignisse (feste Namen, nie Eingaben): `pruefung`, `ergebnis/green|yellow|red`, `anpassen`,
-`quelle/<id>`, `endung/<tld>`, `export/json`. Do Not Track und Global Privacy Control schalten die
-Zählung ab. Auf `localhost` und privaten Adressen wird nicht gezählt.
+`quelle/<id>`, `endung/<tld>`, `export/json`, `export/csv`, `export/markdown`. Der Export selbst entsteht
+im Browser; gezählt wird nur der Klick. Drucken und Vergleichsansicht werden nicht gezählt.
+`varianten/tippfehler` (Knopf „Tippfehler-Varianten prüfen“ unter „Name im Detail“) und `varianten/muster`
+(Knopf „Alle prüfen“ in der Varianten-Auswahl) zählen nur den Klick, nie die Namen oder gewählten Muster.
+Do Not Track und Global Privacy Control schalten die Zählung ab. Auf `localhost` und privaten Adressen wird nicht gezählt.
 
 ## Betrieb
 

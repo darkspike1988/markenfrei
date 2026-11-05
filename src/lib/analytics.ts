@@ -20,7 +20,11 @@ export type AnalyticsEvent =
   | "ergebnis/red"
   | "anpassen"
   | "export/json"
+  | "export/csv"
+  | "export/markdown"
   | "export/link"
+  | "varianten/tippfehler"
+  | "varianten/muster"
   | `quelle/${string}`
   | `endung/${string}`;
 

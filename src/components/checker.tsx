@@ -7,6 +7,8 @@ import type { NameReport } from "@/lib/engine/check";
 import type { Namespace } from "@/lib/engine/types";
 import { NAMESPACE_LABEL } from "@/lib/engine/types";
 import { rankReports } from "@/lib/engine/verdict";
+import { EXPORT_DISCLAIMER, exportFileName, toCsv, toMarkdown } from "@/lib/export";
+import { buildShortlist, MAX_TYPO_CHECK } from "@/lib/insights";
 import { trackEvent } from "@/lib/analytics";
 import {
   buildQuery,
@@ -22,8 +24,10 @@ import {
 } from "@/components/checker-config";
 import { Chevron } from "@/components/chevron";
 import { CopyButton } from "@/components/copy-button";
+import { MatrixView } from "@/components/matrix-view";
 import { IdeaFinder } from "@/components/idea-finder";
-import { QUIET_BUTTON, ReportEntry, ReportError, ReportSkeleton } from "@/components/report-card";
+import { VariantPicker } from "@/components/variant-picker";
+import { QUIET_BUTTON, reportAnchor, ReportEntry, ReportError, ReportSkeleton } from "@/components/report-card";
 import { VerdictBadge } from "@/components/status-badge";
 import { shortlistCount } from "@/components/verdict-text";
 
@@ -93,6 +97,19 @@ function Chip({
   );
 }
 
+const PRINT_DATE = new Intl.DateTimeFormat("de-DE", { dateStyle: "long", timeStyle: "short" });
+
+/** Lädt Text als Datei herunter (Blob im Browser, nichts geht an den Server). */
+function downloadFile(filename: string, type: string, content: string) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 export function Checker({
   config,
   initial,
@@ -117,6 +134,9 @@ export function Checker({
   const [extra, setExtra] = useState<string[]>(initial.extra);
   const [formError, setFormError] = useState("");
   const [run, setRun] = useState<Run | null>(null);
+  const [view, setView] = useState<"list" | "matrix">("list");
+  /** Anker, zu dem nach dem Wechsel von der Vergleichsansicht zur Liste gesprungen wird */
+  const jumpTo = useRef<string | null>(null);
 
   const runId = useRef(0);
   const abort = useRef<AbortController | null>(null);
@@ -272,6 +292,45 @@ export function Checker({
     }
   }, [currentRunId]);
 
+  // Von der Vergleichsansicht zur Berichtszeile: Die Liste ist erst nach dem Wechsel sichtbar, erst dann
+  // kann der Anker scrollen. Der Eintrag öffnet sich über das hashchange-Ereignis (siehe ReportEntry).
+  useEffect(() => {
+    const anchor = jumpTo.current;
+    if (view !== "list" || !anchor) return;
+    jumpTo.current = null;
+    if (window.location.hash === `#${anchor}`) {
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    }
+    window.location.hash = anchor;
+  }, [view]);
+
+  // Drucken (Strg+P): alle Berichtszeilen aufklappen und danach den alten Zustand wiederherstellen.
+  // CSS allein kann ein geschlossenes <details> nicht in allen Browsern öffnen.
+  useEffect(() => {
+    const opened: HTMLDetailsElement[] = [];
+    const expand = () => {
+      resultsRef.current?.querySelectorAll<HTMLDetailsElement>("details[id^='bericht-']").forEach((d) => {
+        if (!d.open) {
+          d.open = true;
+          opened.push(d);
+        }
+      });
+    };
+    const restore = () => {
+      for (const d of opened.splice(0)) d.open = false;
+    };
+    const media = window.matchMedia?.("print");
+    const onMedia = (e: MediaQueryListEvent) => (e.matches ? expand() : restore());
+    window.addEventListener("beforeprint", expand);
+    window.addEventListener("afterprint", restore);
+    media?.addEventListener("change", onMedia);
+    return () => {
+      window.removeEventListener("beforeprint", expand);
+      window.removeEventListener("afterprint", restore);
+      media?.removeEventListener("change", onMedia);
+    };
+  }, []);
+
   function toggleNs(ns: Namespace) {
     setNamespaces((cur) => (cur.includes(ns) ? cur.filter((x) => x !== ns) : [...cur, ns]));
   }
@@ -292,6 +351,12 @@ export function Checker({
     submitNames(list);
   }
 
+  /** „Tippfehler-Varianten prüfen“ aus einem Bericht: Original zuerst, dann die gewählten Varianten. */
+  function checkTypoVariants(original: string, variants: string[]) {
+    trackEvent("varianten/tippfehler");
+    applyIdeas(buildShortlist(original, variants.slice(0, MAX_TYPO_CHECK), config.maxNames).names);
+  }
+
   function exportJson() {
     if (!run) return;
     trackEvent("export/json");
@@ -307,13 +372,22 @@ export function Checker({
       ranking: rankReports(reports),
       reports,
     };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `markenfrei-${reports.length === 1 ? reports[0].name : "shortlist"}.json`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    downloadFile(exportFileName(reports, "json"), "application/json", JSON.stringify(data, null, 2));
+  }
+
+  function exportCsv() {
+    trackEvent("export/csv");
+    downloadFile(exportFileName(ranked, "csv"), "text/csv;charset=utf-8", toCsv(ranked));
+  }
+
+  function exportMarkdown() {
+    trackEvent("export/markdown");
+    downloadFile(exportFileName(ranked, "md"), "text/markdown;charset=utf-8", toMarkdown(ranked));
+  }
+
+  function openFromMatrix(name: string) {
+    jumpTo.current = reportAnchor(name);
+    setView("list");
   }
 
   // Abgeleitete Ergebnisdaten
@@ -330,6 +404,14 @@ export function Checker({
   const pending = names.filter((n) => run?.items[n]?.state === "loading");
   const failed = names.filter((n) => run?.items[n]?.state === "error");
   const ranking = rankReports(done);
+  /** Fertige Berichte in Rangfolge, für Vergleich und Export */
+  const byName = new Map(done.map((r) => [r.name, r]));
+  const ranked = ranking.flatMap((e) => {
+    const r = byName.get(e.name);
+    return r ? [r] : [];
+  });
+  const showMatrix = view === "matrix" && ranked.length > 1;
+  const latestCheck = done.reduce((latest, r) => (r.checkedAt > latest ? r.checkedAt : latest), "");
   const finished = run !== null && pending.length === 0;
   const domainsOn = namespaces.includes("domains");
   /** Beim Einhängen offen: bei mehreren Namen der erste mit Treffer oder Lücke (Rangfolge), sonst nichts */
@@ -483,16 +565,42 @@ export function Checker({
                 {names.length > 1 && <p className="text-sm text-muted">{shortlistCount(ranking, pending.length)}</p>}
               </div>
               {done.length > 0 && (
-                <div className="flex flex-wrap gap-x-4">
+                <div className="flex flex-wrap gap-x-4 print:hidden">
                   <CopyButton text={() => window.location.href} label="Link kopieren" />
                   <button type="button" onClick={exportJson} className={QUIET_BUTTON}>
                     JSON exportieren
+                  </button>
+                  <button type="button" onClick={exportCsv} className={QUIET_BUTTON}>
+                    Als CSV
+                  </button>
+                  <button type="button" onClick={exportMarkdown} className={QUIET_BUTTON}>
+                    Als Markdown
+                  </button>
+                  <button type="button" onClick={() => window.print()} className={QUIET_BUTTON}>
+                    Drucken
                   </button>
                 </div>
               )}
             </div>
 
-            <div className="divide-y divide-line border-y border-line">
+            {ranked.length > 1 && (
+              <div role="group" aria-label="Ansicht" className="flex gap-1.5 print:hidden">
+                <Chip pressed={!showMatrix} onClick={() => setView("list")}>
+                  Liste
+                </Chip>
+                <Chip pressed={showMatrix} onClick={() => setView("matrix")}>
+                  Vergleich
+                </Chip>
+              </div>
+            )}
+
+            {showMatrix && (
+              <div className="print:hidden">
+                <MatrixView reports={ranked} pending={pending.length + failed.length} onOpen={openFromMatrix} />
+              </div>
+            )}
+
+            <div className={`divide-y divide-line border-y border-line ${showMatrix ? "hidden print:block" : ""}`}>
               {ranking.map((e) => {
                 const key = names.find((n) => {
                   const it = run.items[n];
@@ -509,6 +617,7 @@ export function Checker({
                     waiting={it.waiting}
                     rechecking={it.rechecking}
                     onRecheck={() => recheck(key)}
+                    onCheckVariants={checkTypoVariants}
                   />
                 );
               })}
@@ -529,11 +638,20 @@ export function Checker({
             </div>
 
             <Legend />
+
+            {done.length > 0 && (
+              <p className="print-footer">
+                Geprüft am {PRINT_DATE.format(new Date(latestCheck))} · markenfrei.app · {EXPORT_DISCLAIMER}
+              </p>
+            )}
           </>
         )}
       </div>
 
-      <IdeaFinder max={config.maxNames} onUse={applyIdeas} />
+      <div className="space-y-2 print:hidden">
+        <IdeaFinder max={config.maxNames} onUse={applyIdeas} />
+        <VariantPicker text={text} max={config.maxNames} onUse={applyIdeas} />
+      </div>
     </div>
   );
 }

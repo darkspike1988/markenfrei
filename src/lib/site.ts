@@ -28,6 +28,7 @@ export const SITEMAP_PATHS = [
   "/markenrecherche-vorbereiten",
   "/quellen",
   "/mcp",
+  "/api-docs",
   "/datenschutz",
   "/impressum",
 ] as const;

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CopyButton } from "@/components/copy-button";
+import { CodeBlock as Code } from "@/components/code-block";
 
 export const metadata: Metadata = {
   title: "MCP einrichten",
@@ -41,20 +41,6 @@ const TOOLS: { name: string; input: string; text: string }[] = [
     text: "Regelbasierte Kandidaten aus dem Wortfeld der Stichwörter, ungeprüft, zum Weiterreichen an check_names.",
   },
 ];
-
-function Code({ text, label }: { text: string; label: string }) {
-  return (
-    <div className="overflow-hidden rounded-lg border border-line bg-surface">
-      <div className="flex items-center justify-between gap-3 px-3 pt-2">
-        <span className="text-xs text-muted">{label}</span>
-        <CopyButton text={text} />
-      </div>
-      <pre className="overflow-x-auto px-3 pb-3 pt-1.5 font-mono text-[13px] leading-relaxed text-ink">
-        <code>{text}</code>
-      </pre>
-    </div>
-  );
-}
 
 function H2({ id, children }: { id: string; children: React.ReactNode }) {
   return (
@@ -127,6 +113,13 @@ export default function McpPage() {
             Quellen
           </Link>
           . Die HTTP-Variante lehnt JSON-RPC-Batches ab und ist pro IP begrenzt.
+        </p>
+        <p className="mt-2 text-sm text-muted">
+          Für eigene Skripte ohne MCP gibt es die REST-Schnittstelle:{" "}
+          <Link href="/api-docs" className="underline hover:text-ink">
+            API-Dokumentation
+          </Link>
+          .
         </p>
       </section>
     </div>

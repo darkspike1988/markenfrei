@@ -183,3 +183,85 @@ details[open] > summary .chevron {
     transition: none;
   }
 }
+
+/*
+ * Drucken (Strg+P): schwarz auf weiß, ohne Kopf, Fuß, Formular, Schaltflächen und Optionen.
+ * Die Berichtszeilen klappt checker.tsx vor dem Druck auf (beforeprint). Status steht weiter als Text.
+ * Die Druckzeile .print-footer (Datum, markenfrei.app, Hinweis) ist am Bildschirm unsichtbar.
+ */
+.print-footer {
+  display: none;
+}
+
+@media print {
+  @page {
+    margin: 14mm;
+  }
+
+  :root {
+    color-scheme: light;
+    --canvas: #ffffff;
+    --surface: #ffffff;
+    --wash: #ffffff;
+    --ink: #000000;
+    --soft: #000000;
+    --muted: #333333;
+    --line: #999999;
+    --line-strong: #666666;
+    --ok: #14401a;
+    --ok-bg: #ffffff;
+    --warn: #4d3200;
+    --warn-bg: #ffffff;
+    --bad: #6f1816;
+    --bad-bg: #ffffff;
+    --info: #000000;
+    --info-bg: #ffffff;
+  }
+
+  html,
+  body {
+    background: #ffffff;
+    color: #000000;
+    font-size: 11pt;
+    min-height: 0;
+  }
+
+  header,
+  footer,
+  nav,
+  form,
+  button,
+  .chevron {
+    display: none !important;
+  }
+
+  main {
+    max-width: none;
+    padding: 0 !important;
+  }
+
+  .fade-in,
+  .skeleton {
+    animation: none;
+  }
+
+  details[id^="bericht-"] {
+    break-inside: avoid;
+  }
+
+  /* Begründung in der Kopfzeile ganz zeigen statt abschneiden */
+  details[id^="bericht-"] > summary > span {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  .print-footer {
+    display: block;
+    margin-top: 1.5rem;
+    border-top: 1px solid var(--line-strong);
+    padding-top: 0.5rem;
+    font-size: 9pt;
+    color: #000000;
+  }
+}

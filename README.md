@@ -89,6 +89,13 @@ Gelb, dann Rot, innerhalb davon nach Zahl der Treffer und dann der Lücken.
   `unknown`, bis das Limit zurückgesetzt ist.
 - **„Keine Idee?“** erzeugt Vorschläge regelbasiert aus OpenThesaurus, Datamuse und festen
   Wortbausteinen. Die Vorschläge sind ungeprüft, bis du sie prüfst.
+- **„Name im Detail“ und „Varianten“** arbeiten nur im Browser nach festen Regeln, ohne KI, ohne Netz und ohne
+  Punktwert: Länge, geschätzte Silben, Ziffern, Bindestriche, leicht zu verwechselnde Zeichen, Tippfehler-Varianten
+  und Ähnlichkeit zu bekannten Marken; Muster-Chips (Präfixe, Suffixe, Bindestrich, Plural) bauen eine Shortlist.
+- **Ergebnisse weiterverwenden:** Bei mehreren Namen zeigt „Vergleich“ eine Tabelle (Namen in Rangfolge, je
+  Namensraum ein Text mit Zeichen, Ampel). Export als JSON, CSV (eine Zeile je Name und Quelle, Formeln
+  entschärft) oder Markdown, entsteht im Browser; „Drucken“ (oder Strg+P) liefert einen schlichten
+  schwarz-weißen Bericht mit Prüfdatum und Hinweis.
 - **Keine Rechtsberatung.** Vor Anmeldung oder Nutzung eines Namens gehört eine fachkundige
   Markenrecherche dazu.
 - **Keine Gewährleistung, keine Haftung für die Ergebnisse.** Markenfrei wird wie besehen
@@ -137,6 +144,11 @@ markenfrei.app {
 `POST /api/check` mit `{ "names": ["wachwerk"], "tlds"?: [...], "namespaces"?: [...], "sources"?: [...] }`
 liefert `{ ranking, reports }`. Höchstens 10 Namen, Body höchstens 16 KB, jeder Name zählt
 einzeln fürs Rate-Limit. Details: [src/app/api/README.md](src/app/api/README.md).
+
+- **API-Dokumentation:** Die Seite `/api-docs` beschreibt die Schnittstelle für Entwickler (curl-,
+  JavaScript- und Python-Beispiele, Antwortformat, Grenzen, Fehler). `GET /api/openapi.json` liefert
+  eine OpenAPI-3.1-Beschreibung, die aus denselben Konstanten und Schemas wie der Code entsteht;
+  `GET /api/health` meldet `{ "status": "ok", "version": "…" }` fürs Monitoring.
 
 ## MCP-Server für Agenten
 

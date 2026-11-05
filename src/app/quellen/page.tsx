@@ -188,6 +188,10 @@ export default function QuellenPage() {
         <Link href="/mcp" className="underline hover:text-ink">
           Einrichtung
         </Link>
+        . Für Skripte gibt es die{" "}
+        <Link href="/api-docs" className="underline hover:text-ink">
+          API-Dokumentation
+        </Link>
         .
       </p>
     </div>

@@ -1,6 +1,7 @@
-import { z } from "zod";
+import type { z } from "zod";
 import { checkNames, CheckInputError, MAX_NAMES } from "@/lib/engine/check";
 import type { Namespace } from "@/lib/engine/types";
+import { CHECK_ERRORS, CHECK_MAX_BODY_BYTES, checkBodySchema } from "@/app/api/_lib/check-schema";
 import { checkCost, distinctNameCount, guard, isAllowedBrowserCall, isJsonContentType, jsonError, NO_STORE, readLimited } from "@/app/api/_lib/http";
 
 /**
@@ -12,14 +13,7 @@ import { checkCost, distinctNameCount, guard, isAllowedBrowserCall, isJsonConten
  * Origin wie in _lib/http.ts, Body höchstens 16 KB, Rate-Limit nach Namen und Quellenumfang.
  */
 
-const MAX_BODY_BYTES = 16 * 1024;
-
-const bodySchema = z.object({
-  names: z.array(z.string().max(200)).min(1).max(MAX_NAMES),
-  tlds: z.array(z.string().max(30)).max(50).optional(),
-  namespaces: z.array(z.string().max(30)).max(20).optional(),
-  sources: z.array(z.string().max(60)).max(100).optional(),
-});
+// Schema, Grenzen und feste Meldungen stehen in _lib/check-schema.ts (auch für /api/openapi.json).
 
 function fail(status: number, error: string): Response {
   return jsonError(status, error);
@@ -41,25 +35,25 @@ function describeIssue(issue: z.core.$ZodIssue): string {
 }
 
 export async function POST(req: Request): Promise<Response> {
-  if (!isAllowedBrowserCall(req)) return fail(403, "Aufrufe von fremden Seiten sind nicht erlaubt.");
-  if (!isJsonContentType(req)) return fail(415, "Bitte als JSON senden (Content-Type: application/json).");
+  if (!isAllowedBrowserCall(req)) return fail(403, CHECK_ERRORS.forbidden);
+  if (!isJsonContentType(req)) return fail(415, CHECK_ERRORS.contentType);
 
   let raw: string | null;
   try {
-    raw = await readLimited(req, MAX_BODY_BYTES);
+    raw = await readLimited(req, CHECK_MAX_BODY_BYTES);
   } catch {
-    return fail(400, "Die Anfrage konnte nicht gelesen werden.");
+    return fail(400, CHECK_ERRORS.unreadable);
   }
-  if (raw === null) return fail(413, "Die Anfrage ist zu groß (höchstens 16 KB).");
+  if (raw === null) return fail(413, CHECK_ERRORS.tooLarge);
 
   let json: unknown;
   try {
     json = JSON.parse(raw);
   } catch {
-    return fail(400, "Die Anfrage ist kein gültiges JSON.");
+    return fail(400, CHECK_ERRORS.invalidJson);
   }
 
-  const parsed = bodySchema.safeParse(json);
+  const parsed = checkBodySchema.safeParse(json);
   if (!parsed.success) return fail(400, describeIssue(parsed.error.issues[0]));
   const body = parsed.data;
 
@@ -75,7 +69,7 @@ export async function POST(req: Request): Promise<Response> {
     cost = checkCost(distinctNameCount(body.names), opts);
   } catch (err) {
     if (err instanceof CheckInputError) return fail(400, err.message);
-    return fail(500, "Die Prüfung ist fehlgeschlagen. Bitte später erneut versuchen.");
+    return fail(500, CHECK_ERRORS.failed);
   }
 
   const limited = guard(req, cost);
@@ -86,6 +80,6 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json(result, { headers: NO_STORE });
   } catch (err) {
     if (err instanceof CheckInputError) return fail(400, err.message);
-    return fail(500, "Die Prüfung ist fehlgeschlagen. Bitte später erneut versuchen.");
+    return fail(500, CHECK_ERRORS.failed);
   }
 }
