@@ -71,9 +71,7 @@ Version.
 
 | Status | Idee | Voraussetzung |
 |---|---|---|
-| ⬜ | Weitere Endungen | Eintrag im IANA-Bootstrap oder fester RDAP-Server und ein Test mit bekanntem und freiem Namen |
 | ⬜ | Rate-Limit über mehrere Instanzen (gemeinsamer Speicher) | Betrieb mit mehr als einer Instanz; Optionen und Entscheidung: [docs/design.md](docs/design.md) |
-| ⬜ | Einbettbare Ampel für eigene Seiten | stabiles Schema (`NameReport`, `schemaVersion: 2`) ✅ |
 
 ---
 
@@ -84,6 +82,12 @@ Version.
 - **Keine Konten, kein Tracking, keine Speicherung von Suchanfragen.**
 - **Keine Umgehung von Bot-Abwehr** und keine automatisierten Abfragen bei Diensten, die das
   nicht anbieten (zum Beispiel TMDB, Instagram, TikTok).
+- **Keine einbettbare Ampel (Badge, iframe, Widget) für fremde Seiten.** Jeder Seitenaufruf
+  auf der fremden Seite würde eine Prüfung bei den Zieldiensten auslösen, die kein Nutzer
+  von Markenfrei angestoßen hat. Das widerspricht dem Grundsatz „nur Einzelabfragen, die ein
+  Nutzer auslöst“, treibt die Last gegen die Budgets der Zieldienste und verlangt
+  zwangsläufig Zwischenspeicherung je Name. Wer das Ergebnis einbetten will, ruft die API
+  selbst auf und zeigt das Berichtsschema an.
 - **Keine Rechtsberatung.**
 
 ---
