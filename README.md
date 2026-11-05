@@ -265,6 +265,7 @@ Aufbau und Beitragsregeln: [CONTRIBUTING.md](CONTRIBUTING.md). Weitere Dokumenta
 - [`src/lib/README.md`](src/lib/README.md): Engine, Quellen und Hilfsmodule
 - [`src/app/api/README.md`](src/app/api/README.md): HTTP-Routen
 - [`docs/v2-spec.md`](docs/v2-spec.md): verbindliche Spezifikation
+- [`docs/design.md`](docs/design.md): Entscheidungsvorlage zum Betrieb mit mehreren Prozessen
 - [`ROADMAP.md`](ROADMAP.md): Stand und offene Punkte
 
 Tech-Stack: Next.js 16 (App Router, Turbopack), React 19, TypeScript, Tailwind CSS 4,

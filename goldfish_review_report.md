@@ -1,68 +1,112 @@
-Status: resolved
+Status: Schleife nach Runde 3 beendet, nicht konvergiert (siehe Abschnitt „Runde 3 und Abbruch“)
 
-# Goldfish Annotated Review Report, Runde 2
+# Goldfish Annotated Review Report: Review-Schleife
 
-**Target:** `docs/design.md` (full file). Findings aus den Stufen 5 bis 9 der zweiten Runde: `zoom_out_report.md`, `comprehension_report.md`, `critic_report.md`, `intermediate_zoom_out_report.md`, `implementation_readiness_report.md`. Bericht der ersten Runde: `review-round-1/goldfish_review_report.md`.
+**Target:** `docs/design.md` (full file). Reviewer: `egm-design`, `egm-structural` (Standard: feature-spec), `egm-style`. Abbruch: zwei saubere Runden hintereinander oder 5 Runden. Findings sind nach Ursache zusammengefasst; die frühere Fassung dieses Berichts (zweite EGM-Review) steht in der Git-Historie (`git show HEAD:goldfish_review_report.md`).
 
-**Vorgehen:** Die Behebung folgt der Zielgestalt aus Stufe 8 und wurde vom Nutzer freigegeben („Ja, beheben“). Das entspricht „auto accept“: Alle `PROPOSE FIX` wurden angewendet, `CONTEST` und `DECLINE` übersprungen, `ESCALATE` gab es nicht. Die rund 60 Findings sind nach Ursache zusammengefasst. Das Dokument ist von 260 auf 159 Zeilen gekürzt: Der Umsetzungsplan für D und die Festlegungen zu B sind entfallen, es gibt eine Optionstabelle statt dreien, und die Tabelle „Entscheidungen“ ist weg.
+**Vorgehen:** Auf Wunsch des Nutzers („baue es zu ende“) wende ich die berechtigten Fixes nach jeder Runde selbst an (entspricht „auto accept“). `CONTEST` und `DECLINE` werden begründet und übersprungen, `ESCALATE` gab es nicht.
 
-**Zählung:** PROPOSE FIX 14, CONTEST 6, DECLINE 3, aufgehoben für den späteren Plan 1. Die Review wurde nach dieser Überarbeitung nicht erneut ausgeführt.
+## Runde 1
 
-## PROPOSE FIX (angewendet)
+Ergebnis der Reviewer: Design 0 Blocker, 7 Major, 6 Nits; Struktur 0 Blocker, 4 Major, 5 Nits; Stil 0 Blocker, 10 Major, 23 Nits. Die Runde ist **nicht sauber** (Major vorhanden).
 
-| Nr. | Ursache | Findings | Wo im neuen Dokument |
+### PROPOSE FIX (angewendet)
+
+| Nr. | Ursache | Findings | Wo im Dokument |
 |---|---|---|---|
-| 1 | Plan trotz unbelegtem Bedarf, Status von D widerspricht sich („wird gebaut“ gegen „nicht begonnen“) | Stufe 5 #1; Stufe 7 M8; Stufe 8 #1, #5; Stufe 6 #3 | Plan gestrichen, Abschnitt „Folgeschritt“; D „skizziert, nicht beschlossen“ |
-| 2 | Billigere Alternative fehlt: A plus Dokumentation | Stufe 5 #3; Stufe 7 M6; Stufe 8 | Optionstabelle, Zeile A+ |
-| 3 | „einzige Lücke“ widerspricht der Tabelle (Slots) | Stufe 5 #7; Stufe 6 #1; Stufe 7 M1 | „schwerwiegendste Lücke“ mit Begründung (dokumentiertes Limit eines Dienstes) |
-| 4 | Neustart: Anlass passt nicht zu D, Garantie gilt nicht über Neustarts | Stufe 5 #2; Stufe 7 M2 | „Bedarf“ (letzter Absatz), „Was die Regel zusichert“, „Restrisiken“ |
-| 5 | crates.io: Folge verharmlost, Richtlinie überschritten ohne Entscheider | Stufe 5 #6; Stufe 7 M3 (Teil 1, Entscheidung) | „Folgen“ (zweite Anfrage ab N = 2), Frage 2 |
-| 6 | „unter max“ ungenau, Bedingung zuerst, Verschnitt | Stufe 5 #11; Stufe 7 M10 (Teil „höchstens“, Überschrift) | „Was die Regel zusichert“ |
-| 7 | „Wer schützt heute“ nennt Empfehlungen als Bestand; Proxy zählt Anfragen, Systemlimit Einheiten | Stufe 7 M5; Stufe 6 Nit | Spalte „Was der Betreiber setzen kann“, Hinweis in Zeile Client-Limit, `GLOBAL_RATE_LIMIT` auf 600 / N |
-| 8 | Eskalation zu B legt Details fest | Stufe 5 #4; Stufe 8 #2 | „Eskalation zu B“ auf zwei Auslöser und eine Zeile Randbedingungen gekürzt |
-| 9 | Optionen in drei Tabellen, Tabelle „Entscheidungen“ wiederholt Bestand | Stufe 5 #8, #9; Stufe 8 #3 | Eine Optionstabelle; Zusage „Zähler im Arbeitsspeicher“ als Satz |
-| 10 | Option C zu stark („hebt“) und ohne Inhalt | Stufe 5 #10; Stufe 7 M4 (zweite Hälfte) | Optionstabelle, Zeile C; „Restrisiken“ (C × D) |
-| 11 | Ziele nicht messbar oder nur für B gültig | Stufe 5 #16; Stufe 7 M9 (Ziel 1, Ziel 3) | Ziel 1 mit Bezug auf `HOST_BUDGETS` und Ausnahme `max < N`; Ziel 3 entfallen; Prozessvermerk im Kopf entfernt |
-| 12 | Belege und Zitate: Apple-Wert ist Budget, keine Simulation; ROADMAP-Wortlaut; Datenschutzbeleg | Stufe 7 M13; Stufe 6 #7 | „Bedarf“ (Simulation nur für Durchsatz; Apple-Wert aus `HOST_BUDGETS`; ROADMAP „mit der Voraussetzung“); Datenschutzerklärung nicht mehr zitiert |
-| 13 | Begriffe uneinheitlich; `budget`, Einheit nicht erklärt; Tabelle ohne Pfade und Standardwerte | Stufe 6 #2 (Definition), #4, #5, #9; Stufe 7 M13, Nits | `budget` in „Folgen“ definiert, „Einheit“ vor den Tabellen, Pfade mit `src/lib/`, „Die Werte sind Standardwerte“, Variablennamen in der ersten Tabelle, „Instanzen“ (Variable) und „Prozess“ durch einen Satz verbunden, „ausgehende IP-Adresse“ statt „Server-IP“ |
-| 14 | Hugging Face mit Token fehlt; stdio-Bündel und Variable; Slots als Restrisiko statt Ziel | Stufe 5 #12, #13; Stufe 7 M11 (als Satz) | Tabellenzeile Hugging Face; Satz zu stdio unter „Regel“; Nicht-Ziele |
+| 1 | Entscheidungsstatus unklar, Entscheidungsanfrage steht am Ende, „angenommen“ ohne Entscheider | Struktur 1; Stil M1 | Kopf: Status, Entscheider, Empfehlung, Verweis auf offene Fragen; Abschnitt „Optionen und Empfehlung“ |
+| 2 | „D reicht voraussichtlich“ unbelegt, widerspricht der crates.io-Einschränkung; Frage 2 hatte nur zwei Wege | Design M1; Stil M2, M6 | Tabellenzeile B und D; Frage 2 mit drei Wegen (Richtlinie hinnehmen, Wartegrenze anheben, abschalten) |
+| 3 | crates.io-Mangel besteht schon bei N = 1 für Shortlists; Kapazität für neue Namen wird von Apple begrenzt, nicht vom Prozess | Design M2; Stil M6 | „Bedarf“ (dritter Punkt), „Folgen“ (crates.io) |
+| 4 | Eskalationskriterien nicht messbar; es gibt keine Zähler im Webserver | Design M3; Stil M7 | „Eskalation zu B“: ehrliche Aussage, dass heute keine Messung existiert, Auslöser stützen sich auf Meldungen |
+| 5 | Alternativen: Egress-Proxy fehlt, Ablehnungsgründe und Aufwand nicht ausgewiesen; „Proxy kann nicht zählen“ gilt nur für den Reverse-Proxy; mehrere IPs ohne Begründung | Design M4; Struktur 2 | Spalte „Aufwand“, Zeile E, Nicht-Ziele (mehrere IPs begründet), Satz zum Reverse-Proxy |
+| 6 | A+ widerspricht der vorhandenen Dokumentation, die Stellen sind nicht benannt; Serverless | Design M5, N4 | Absatz „A+ ändert diese Stellen“, Hinweis zu serverlosen Plattformen, v2-spec-Lücke |
+| 7 | „dokumentiertes Limit“ überzogen (GLEIF nicht bestätigt, Apple ungefähr), Superlativ „schwerwiegendste“, Slots als Argument aus Abwesenheit | Design M6; Stil N8, N9 | Absatz unter „Folge bei N Prozessen“ |
+| 8 | Wechselwirkung D × Cache, Neustart gilt auch für A, Fehlkonfiguration von N | Design M7, N1, N3 | „Folgen“, „Restrisiken“ |
+| 9 | Risiken verstreut und doppelt | Struktur 3; Stil M9 | „Restrisiken“ verweist auf die Tabelle und führt nur Neues |
+| 10 | Ziele gelten nur für D; Randbedingung „Arbeitsspeicher“ im falschen Abschnitt; H3 statt Fließtext-Labels | Struktur 4, 5, 8 | „Ziele“ (Ziel 1 für A+, Ziel 4 Randbedingung), H3 „Ziele“ und „Nicht-Ziele“ |
+| 11 | Begriffe und Definitionen: N, Prozess und Instanz, Anfrage und Abfrage, `budget`, Einheit, verwaister Satz | Struktur 6, 7; Stil M5, M10, N5, N11 | Absatz „Begriffe“ im Kopf, `budget` mit Fundstelle (`types.ts`), Einheit vor der Tabelle |
+| 12 | „Instanz reicht“ ohne Vorbehalt, „diese Grenzen“ unklar | Stil M3, M4 | „Bedarf“: „Laut Simulation“, „Limits der Zieldienste“ |
+| 13 | B und „nichts auf der Platte“ widersprechen sich, „Speicher“ unklar | Stil M8 | Randbedingung gilt für alle Optionen, „gemeinsamer Speicher“ |
+| 14 | stdio-Bündel liest die Variable | Design N2; Stil N18 | Nicht-Ziele |
+| 15 | Systemlimit zählt nur ausgehende Anfragen; HF-Fußnote; Wortwahl (Cache-Treffer, erhält, (N − 1) × 60, „Geht max nicht durch N auf“, kein „läuft in budget“) | Design N6; Struktur 8; Stil N7, N14, N16, N20, N21 | Tabellen, Fußnote unter der Budgettabelle, Formulierungen |
+| 16 | Dokument ist nicht verlinkt | Struktur 9 | README-Liste „Weitere Dokumentation“ und ROADMAP-Zeile verlinken `docs/design.md` |
 
-## CONTEST
+### CONTEST
 
 | Nr. | Finding | Begründung |
 |---|---|---|
-| 15 | Stufe 7 M12 und Struktur 1, 2: eigene Abschnitte „Risiken und Mitigationen“ und „Lösungsentwurf“ je Option | Das Dokument ist eine Entscheidungsvorlage. Die Risiken stehen gebündelt unter „Restrisiken“, die Folgen unter „Folgen“. Ein Abschnitt je Option für eine nicht beschlossene Funktion ist Aufwand ohne Entscheidungswert (Stufe 8, Tabelle „Nicht berechtigt“). |
-| 16 | Stufe 7 M6 (Teil): zusätzliche Alternativen zu B (Node-`cluster`, `SharedArrayBuffer`, Sidecar), Aufwand von B beziffern | Spekulative Varianten einer zurückgestellten Option. Die einzige fehlende Alternative von Gewicht, A plus Dokumentation, steht jetzt drin (Stufe 8). |
-| 17 | Stufe 7 M7: messbare Eskalationskriterien und Messinstrument | Verlangt Instrumentierung für ein zurückgestelltes Feature. Die Auslöser bleiben qualitativ; das Dokument sagt, was belegt sein muss (Stufe 8). |
-| 18 | Stufe 7 M3 (Teil 2): Quantifizierung nach Namen und N, Wiederholungen der Oberfläche, Matrix | Ein ehrlicher Satz und Frage 2 genügen. Die Aussage zur Oberfläche (bis zu 6 Wiederholungen) habe ich nicht gegengeprüft und nicht übernommen. |
-| 19 | Stufe 7 M10 (Teil) und Stufe 9 R1, R2: stderr-Warnung, Obergrenze, `floor`-Abwägung, Validierung von `instances` | Details von D, die in den späteren Plan gehören (siehe unten). Der Verschnitt bei krummen Teilern steht als Zahl im Dokument. |
-| 20 | Stufe 6 #8, #13, #14; Stufe 7 Nits: Glossar, `opendata-words`, „Betreiber“, wie Prozesse gestartet werden, Cache-Schätzung nur als „Schätzung“ | Die Begriffe außerhalb des Vorschlags erklärt `v2-spec.md`; die Frage, wie Prozesse gestartet werden, ist vor Frage 1 nicht beantwortbar. Die Cache-Schätzung steht als „Schätzung“ in der Tabelle. |
+| 17 | Struktur 2: eine H3 je Option, gleiche Tiefe, D als Anhang | Das Dokument ist eine Entscheidungsvorlage; die Optionstabelle hat jetzt einheitliche Spalten, und nur D hat Inhalt, der über die Tabelle hinausgeht. Ein Unterabschnitt je Option für nicht beschlossene Optionen verlängert das Dokument ohne Entscheidungswert (siehe `review-round-1` und zweite EGM-Review, Stufe 8). |
 
-## DECLINE
+### DECLINE
 
 | Nr. | Finding | Grund |
 |---|---|---|
-| 21 | Reihenfolge der Optionen A, A+, D, B, C erklären; Fettdruck, Umgangssprache („fangen ab“), „wir“ | Kosmetik. Wo es der Umschreibung folgte, ist es übernommen (kein „wir“, kein „fangen ab“). |
-| 22 | Eigenschaftstest auf Ganzzahlform, `parseInstances`-Grammatik und -Obergrenze, `export`, `max <= 0` | Betrifft nur den entfallenen Plan; im Plan-Entwurf berücksichtigen (siehe unten). |
-| 23 | Querverweise als Links für „Frage 1“, „Schritt 1“ | Es gibt keine „Schritte“ mehr. Verlinkt sind README-Punkte 4 und 8 und die ROADMAP. |
+| 18 | Worker-Threads als Alternative; Dateiname `design.md` ändern | Threads lösen kein Prozessproblem (Zähler sind Modulzustand je Thread); Umbenennen bräche die Pfade in den committeten Berichten. Verlinkung statt Umbenennung (Nr. 16). |
+| 19 | Reihenfolge der Optionen erklären; `Anfrage` in jedem Satz exakt; restliche Stil-Nits (Fettdruck, einzelne Wortwahl) | Kosmetik. Die Reihenfolge folgt dem Status von der Empfehlung zur Eskalation; die Begriffe sind im Kopf geklärt. |
 
-## Für den späteren Plan aufheben
+## Runde 2
 
-Diese Punkte stammen aus Stufe 9 und gelten, sobald ein Umsetzungsplan für D entsteht (nach einem „Ja“ zu Frage 1). Das Dokument enthält sie nicht mehr.
+Ergebnis der Reviewer: Design 0 Blocker, 6 Major, 5 Nits; Struktur 0 Blocker, 5 Major, 6 Nits; Stil 0 Blocker, 13 Major, 12 Nits. Design und Stil mussten wegen eines Netzwerkfehlers (`ENOTFOUND`) einmal wiederholt werden; die Wiederholung lief durch, kein Reviewer gilt als „nicht gelaufen“. Die Runde ist **nicht sauber**. Mehrere Majors betreffen Sätze, die ich in Runde 1 eingefügt habe („rät zum Mehrinstanzbetrieb“, „nur die Anwendung kann teilen“, „D löst keinen davon“, „höchstens gelb“, „Neustart: alle Optionen“, Präsens für Ungebautes): Diese Fixes haben das Problem teils selbst erzeugt und werden hier nachgebessert.
 
-- **Option `instances` validieren:** `instances: 0` ergibt `floor(max / 0) = Infinity` und hebt das Budget auf; `NaN`, negative und nicht ganze Werte verhalten sich undefiniert. `shareBudget` muss wie `parseInstances` auf 1 zurückfallen. Testfälle `0`, `-1`, `NaN`, `2.5`.
-- **`parseInstances`:** Algorithmus festlegen (zum Beispiel `/^[1-9]\d*$/` plus `Number.isSafeInteger`), Obergrenze, Fälle `" 3 "`, `"1e1"`, `"3abc"`, `"+2"`, `"99999999999999999999"`; beide Funktionen exportieren.
-- **Eigenschaftstest in Ganzzahlen:** `share.max × N × b.windowMs ≤ b.max × share.windowMs` statt Gleitkomma-Raten (Rundung bei Gleichheit).
-- **Lesepfad der Variable testen:** Die Option `instances` überdeckt `INSTANCES`; der Weg `process.env → parseInstances → INSTANCES` braucht einen Kindprozess oder eine eigene Testdatei mit gesetzter Variable vor dem Import. Bestehende Tests brechen, wenn die Variable im Testlauf gesetzt ist (`tests/engine-budget.test.ts:45–48`); die Testumgebung muss sie löschen oder die Tests `instances: 1` übergeben.
-- **Fall `max < N` und mehrere Fenster testen:** `{ max: 1, windowMs: 1000 }`, `instances: 2`, injiziertes `now` (+1,5 s ergibt `budget`, +2,001 s geht durch); Zweifenster-Test für `max: 4`, N = 2; vier verschiedene URLs (gleiche Anfragen bündelt `inflight`), eindeutige Hostnamen, `beforeEach(resetHostBudgets)`.
-- **Importzeile:** Neue Tests brauchen `parseInstances` und `shareBudget`; entweder die Importzeile in `tests/engine-budget.test.ts` erweitern oder eine neue Testdatei anlegen.
-- **Dokumentationsschritte mit Wortlaut:** README Punkt 8 (ersetzen, nicht ergänzen; Punkt 4 enthält keinen Satz zu Budgets), `MARKENFREI_GLOBAL_RATE_LIMIT` hat keine Zeile in der README-Tabelle, weitere Fundstellen README Z. 202 und Punkt 6, `.env.example` Z. 36–38, `src/app/api/README.md` Z. 9, `mcp/README.md`, Kommentar zu `HOST_BUDGETS` (`http.ts` Z. 23), `src/lib/README.md:36` (erwähnt Budgets bisher nicht), ROADMAP-Zeile (Spalte, Status, Wortlaut). Feste Textmuster in `tests/docs-consistency.test.ts` beachten.
-- **stdio-Bündel:** Die Variable wird auch im Bündel gelesen; entscheiden, ob `instances: 1` erzwungen oder die Wirkung dokumentiert wird.
-- **Typcheck und Abnahme:** `npm test` (über `tsx`) prüft keine Typen; `npx tsc --noEmit` oder `npm run build` in die Prüfzeilen. Zeilennummern durch Ankertext ersetzen.
+### PROPOSE FIX (angewendet)
 
-## Offen
+| Nr. | Ursache | Findings | Wo im Dokument |
+|---|---|---|---|
+| 20 | Die empfohlene Option A+ hat keinen Abschnitt, die Änderungsliste ist Semikolon-Prosa; Prämisse „Dokumentation rät“ überzogen, Fundstellen unvollständig | Struktur 1, 5; Design 7; Stil M1 | Eigener Abschnitt „Empfehlung A+“ mit Tabelle (Datei, Stelle, Änderung) und Liste der unveränderten Stellen; Formulierung „behandeln als möglich“, Widerspruch Punkt 4 gegen Punkt 8 benannt |
+| 21 | Die Annahme von A+ ist keine Frage; Fragen uneinheitlich; kein Folgeschritt für A+ | Struktur 2; Design 1; Stil M9 | Offene Fragen: Frage 1 „A+ annehmen“, Frage 2 Mehrprozessbetrieb, Frage 3 crates.io (bedingt, mit Empfehlung); „Nächste Schritte“ mit A+ |
+| 22 | Risiken verstreut, ohne Gegenmaßnahme, für A+ keine Risikobetrachtung | Struktur 3; Design 3; Stil M4 | Abschnitt „Risiken und Gegenmaßnahmen“ als Tabelle (Risiko, betrifft, Gegenmaßnahme oder Hinnahme); „Neustart“ nur für A, A+, D |
+| 23 | Optionslabels vor Definition, Kopf als Absatz, Status und Begründung in einer Spalte, zwei parallele Zählertabellen | Struktur 4, 6, 7, 8; Stil N11 | Kopf als Liste, Empfehlung mit Namen statt Labels, Spalten „Status“ und „Grund“, eine zusammengeführte Zählertabelle |
+| 24 | Folge einer Überschreitung unbelegt; Verfügbarkeit nicht behandelt | Design 2, 4 | „Problem und Bedarf“ (Folge unbelegt), Nicht-Ziel Hochverfügbarkeit, A+-Tabelle (kurze Überlappung beim Neustart), Frage 2 (wie würden Prozesse gestartet) |
+| 25 | crates.io-Mangel besteht schon bei N = 1 und ist unabhängig von D; Unterschied zwischen Weboberfläche und API/MCP; „höchstens gelb“ falsch; Beleg fehlt | Design 6; Stil M5, M13 | Eigener Unterabschnitt „crates.io: ein Mangel schon bei einem Prozess“ („nie grün“, Rechnung aus `run()` und `takeBudget`, kein Test), Gründe für `retryable`, Fundstelle `checker.tsx`; Frage 3 und „Nächste Schritte“ |
+| 26 | Widersprüche in meinen Sätzen: „nur die Anwendung kann teilen“ gegen Option E; „D löst keinen davon“ gegen Systemlimit; „Neustart: alle Optionen“ gegen B | Stil M2, M3, M4 | „Der Reverse-Proxy zählt keine ausgehenden Abfragen; teilen können … die Anwendung (D) oder ein ausgehender Proxy (E)“; Risikotabelle (Systemlimit über 600 / N, Neustart nur A, A+, D) |
+| 27 | Apple-Limit und Apple-Budget vermischt; D-Zusage an drei Stellen unterschiedlich bedingt; Präsens für Ungebautes; Eskalationskriterium nicht messbar | Stil M6, M7, M8, M11 | „Apple nennt etwa 20, das Budget ist 18“; Tabelle und Ziel 2 verweisen auf „Was die Regel garantiert“; stdio-Satz im Konjunktiv mit Lösungsrichtung; Eskalation mit Schwelle (Vorschlag, vom Betreiber zu bestätigen) |
+| 28 | E ohne konkreten Grund, C unklar; Serverless-Satz am falschen Ort; Nicht-Ziel „mehrere IPs“ | Design 5; Stil M10, M12; Struktur 9 | Zeile E mit Grund, Zeile C „Maßnahme des Betreibers, ergänzend zu D“, Nicht-Ziele (serverlos und Autoscaling, mehrere IPs), offene Aufgabe aus den Nicht-Zielen nach „Nächste Schritte“ |
+| 29 | Überschriften und Kleinigkeiten | Struktur 11; Stil N5, N6, N7 | „Risiken und Gegenmaßnahmen“, „Nächste Schritte“; „faktisch“ gestrichen; Zeilenverweise im Kommentar durch Beschreibung ersetzt; „mindert“ statt „hebt auf“ |
 
-- **Frage 1 (Betreiber):** Soll es einen Betrieb mit mehr als einem Prozess geben? Ohne Ja bleibt es bei A und A+.
-- **Frage 2 (Betreiber):** crates.io ab N = 2.
-- **Nicht geändert:** Code, README, ROADMAP und `.env.example`. A+ (der ausdrückliche Satz in README und Kommentar) ist beschrieben, aber nicht ausgeführt.
-- **Nicht erneut geprüft:** Das überarbeitete Dokument hat noch keine dritte Review-Runde gesehen.
+### CONTEST
+
+| Nr. | Finding | Begründung |
+|---|---|---|
+| 30 | Design 5, Stil: weitere Alternativen (Node-`cluster`, Leader-Prozess, Skalierungsfaktor statt Prozesszahl) | Bereits in Runde 1 abgelehnt (Nr. 18) und in der zweiten EGM-Review (Stufe 8) als Umfangsausweitung bewertet. Ein Skalierungsfaktor ist D mit anderem Namen. Als beigelegt geführt (settled). |
+| 31 | Struktur 10: Quellcode-Dateien als Links statt Code-Spans | Die Dateien liegen außerhalb von `docs/`; Links auf Quelldateien veralten genauso wie Zeilenangaben. Code-Spans bleiben. |
+
+### DECLINE
+
+| Nr. | Finding | Grund |
+|---|---|---|
+| 32 | Stil N1: „Client-Anfrage“ und „Quellenabfrage“ statt Anfrage und Abfrage; Wortwahl-Nits (Fettdruck, „Mehrinstanzbetrieb“ erklären) | Kosmetik; die Begriffe sind im Kopf definiert. |
+| 33 | Design 9: Teilung im Server-Einstieg statt im Engine-Modul als Entwurfsentscheidung festschreiben | Als Lösungsrichtung übernommen (Satz zum stdio-Paket), nicht als Entscheidung: Das gehört in den Umsetzungsplan. |
+
+## Runde 3 und Abbruch
+
+Ergebnis der Reviewer: Design 0 Blocker, 7 Major, 7 Nits; Struktur 0 Blocker, 8 Major, 10 Nits; Stil 0 Blocker, 16 Major, 11 Nits. Die Runde ist **nicht sauber**.
+
+**Verlauf der Major-Findings:** Runde 1: 21, Runde 2: 24, Runde 3: 31. Es gab nie eine saubere Runde, und die Zahl steigt trotz Behebung. Frische Reviewer finden jedes Mal neue Lücken, und das Dokument wächst mit jeder Behebung. Mehrere Findings der Runden 2 und 3 betreffen Sätze, die frühere Fixes eingefügt haben (Churn). Ich habe die Schleife deshalb nach Runde 3 beendet, statt Runde 4 und 5 zu starten. Das ist eine Abweichung vom Standardlauf (Abbruch erst nach 5 Runden oder zwei sauberen Runden) und eine Entscheidung zugunsten eines überprüfbaren Pull Requests.
+
+### Angewendet (nur Sachfehler in eigenen Sätzen)
+
+| Nr. | Finding | Änderung |
+|---|---|---|
+| 34 | Stil M4: Variable `MARKENFREI_INSTANCES` als bestehend dargestellt | „die vorgeschlagene Variable hieße …“ |
+| 35 | Stil M1: D und B beide „zurückgestellt“, C und E fehlen im Kopf | Kopf nennt D „skizziert, nicht beschlossen“, B „zurückgestellt“ und verweist auf C und E |
+| 36 | Design 1, Stil M5: Ablehnung von E widerspricht den Nachteilen von D | E-Zeile: teilt ohne statisches N, nichts verfällt, kostet einen Dienst |
+| 37 | Stil M6: „nur Anwendung oder Egress-Proxy“ lässt B aus | B ergänzt |
+| 38 | Stil M7: „unabhängig von D“ | „besteht auch ohne D und verschärft sich durch D“ |
+| 39 | Stil M9: Neustart widersprüchlich | „erlaubt bis zu doppelt so viele Abfragen … höchstens eine Fensterlänge“ |
+| 40 | Stil M8: Einleitungssatz zur A+-Tabelle falsch | „behandeln den Betrieb mit mehreren Prozessen als unterstützt“ |
+| 41 | Struktur 7: Liste der unveränderten Stellen unscharf | konkrete Stellen genannt; die Behauptung des Reviewers, `src/app/api/README.md` sage nicht „pro Prozess“, ist falsch (der Satz läuft über einen Zeilenumbruch: „… ein Limit pro / Prozess …“) |
+| 42 | Design 2, Stil M15: Begründung für Option (b) trägt nicht | Rechnung (Frist 8 Sekunden begrenzt auf etwa vier Namen), „behebt den Mangel nicht vollständig“ |
+| 43 | Design 6: „verhindert“ zu stark, Frage 2 ohne Empfehlung | „erschwert“, Empfehlung „Nein, solange kein Bedarf belegt ist“ |
+| 44 | Design 3: Grundannahme „ein Prozess = ein Satz Zähler“ nicht belegt | als ausdrückliche Annahme im Dokument |
+
+### Offen (nicht behoben)
+
+Diese Findings der Runde 3 bleiben offen; sie würden das Dokument weiter verlängern oder verlangen eine Entscheidung des Betreibers.
+
+- **Struktur:** Entscheidungen verstreut statt nur in „Offene Fragen“ (10-%-Schwelle, Kopplung der beiden Variablen); Alternativen auf mehrere Orte verteilt und ungleich behandelt; Ziele stehen nach der Empfehlung; Risikotabelle auf D zugeschnitten; Belege zu Drittdiensten ohne Link; uneinheitliches Schema der Fragen.
+- **Design:** Der crates.io-Mangel bei N = 1 ist ein Produktfehler und verdient eine eigene Entscheidung mit Alternativen (Sparse-Index, Begrenzung der Zahl der Prüfungen); Eskalationskriterien zu B ohne Messung; Ziel 4 („nichts auf der Platte“) ohne Herleitung; Hosts ohne Budget (RDAP, Wikidata) nicht eingeschätzt; Test-Beleg für die crates-Rechnung fehlt.
+- **Stil:** Vokabular „Anfrage“ und „Abfrage“ weicht vom Sprachgebrauch der anderen Dokumente ab; „Limit“, „Budget“, „Dienst“, „Host“, „Quelle“ nicht streng getrennt; Zellen mit mehreren Sätzen; wiederholte Aussagen (ungleiche Last, Slots, Neustart); Ziel 2 und „garantiert“ passen nicht zur Ausnahme `max < N`; „Hingenommen“ ohne benannten Entscheider.
+
+### Prüfung des Repositories (nach der Überarbeitung)
+
+`npm test` (342 Tests, 0 Fehler), `npm run lint`, `npm run build:mcp`, `npm run test:mcp-package` und `npm run build` sind grün. Geändert wurden nur `docs/design.md`, `README.md` (ein Listenpunkt), `ROADMAP.md` (ein Verweis) und die Berichte.
