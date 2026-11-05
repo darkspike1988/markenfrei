@@ -55,7 +55,7 @@ Code, Tests, Sicherheits- und Code-Review sind abgeschlossen; offen ist nur der 
 | ✅ | Betreiberangaben | in `.env` auf dem Server gesetzt; `/impressum` und `/datenschutz` zeigen sie. |
 | ✅ | Deployment und TLS | Container hinter Caddy auf `markenfrei.app`, Zertifikat von Let's Encrypt. Auf dem Server hat Docker keinen freien Adressbereich mehr für neue Netzwerke; dort steuert eine lokale `docker-compose.override.yml` (`network_mode: bridge`), der Host-Port kommt aus `MARKENFREI_HOST_PORT`. |
 | ✅ | `MARKENFREI_CONTACT` | gesetzt. |
-| ⬜ | `www.markenfrei.app` | DNS-Eintrag `www` zeigt noch auf den alten Server; auf `markenfrei.app.` (CNAME) umstellen, danach Weiterleitung in Caddy ergänzen. |
+| ✅ | `www.markenfrei.app` | DNS zeigt auf den Server, Caddy leitet per 301 auf `markenfrei.app` weiter (Zertifikat von Let's Encrypt). |
 | ⬜ | `GITHUB_TOKEN` | Token ohne Berechtigungen in `.env`; sonst gilt für GitHub 60 Anfragen pro Stunde für alle Nutzer zusammen. |
 | ⬜ | Proxy-Limits | Je-IP-Limit, Body-Größe und Timeouts zusätzlich am Reverse-Proxy. |
 | 🟡 | Name „Markenfrei“ | Eigene Markenrecherche (DPMA, EUIPO) vor öffentlichem Start; `markenfrei.com` und `markenfrei.de` sind registriert (Inhaber nicht geprüft). |
