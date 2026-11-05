@@ -107,3 +107,16 @@ test("ROADMAP legt ein Versionsschema fest", () => {
   assert.ok(version, "MCP_SERVER_VERSION nicht gefunden");
   assert.match(roadmap, new RegExp(`Produktversion\\*\\*, derzeit ${version.replace(/\./g, "\\.")}`));
 });
+
+test("Produkt-, Paket- und Registry-Version stimmen überein", () => {
+  const server = /MCP_SERVER_VERSION = "([\d.]+)"/.exec(read("src/mcp/server.ts"))?.[1];
+  assert.ok(server, "MCP_SERVER_VERSION nicht gefunden");
+  const pkg = (path: string) => JSON.parse(read(path)) as { version: string; packages?: { version: string }[] };
+  assert.equal(pkg("package.json").version, server, "package.json");
+  assert.equal(pkg("mcp/package.json").version, server, "mcp/package.json");
+  const registry = pkg("mcp/server.json");
+  assert.equal(registry.version, server, "mcp/server.json version");
+  assert.equal(registry.packages?.[0]?.version, server, "mcp/server.json packages[0].version");
+  const userAgent = /Markenfrei\/(\d+\.\d+)/.exec(read("src/lib/engine/http.ts"))?.[1];
+  assert.equal(userAgent, server.split(".").slice(0, 2).join("."), "User-Agent Haupt.Neben");
+});

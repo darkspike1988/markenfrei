@@ -34,6 +34,13 @@
           "isRequired": false,
           "isSecret": true,
           "format": "string"
+        },
+        {
+          "name": "HF_TOKEN",
+          "description": "Optionales Hugging-Face-Lesetoken (nur für die optionale Quelle Hugging Face, hebt das Limit der API-Abfragen)",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
         }
       ]
     }
