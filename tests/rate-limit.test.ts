@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { clientKey, createGuard, createRateLimiter } from "@/lib/rate-limit";
+import { clientKey, createGuard, createRateLimiter, rateLimitKey } from "@/lib/rate-limit";
 
 function clock(start = 1_000_000) {
   let t = start;
@@ -46,6 +46,22 @@ test("clientKey liest x-forwarded-for von rechts, gef채lschte Eintr채ge links z�
   assert.equal(clientKey(req("6.6.6.6"), 0), "local");
   assert.equal(clientKey(new Request("http://x"), 1), "local");
   assert.equal(clientKey(new Request("http://x", { headers: { "x-real-ip": "5.5.5.5" } }), 1), "5.5.5.5");
+});
+
+test("IPv6 z채hlt je /64-Netz, IPv4 und IPv4-mapped je Adresse", () => {
+  const req = (xff: string) => new Request("http://x", { headers: { "x-forwarded-for": xff } });
+  // Zwei Adressen im selben /64 teilen sich einen Z채hler, ein anderes Netz nicht
+  assert.equal(clientKey(req("2001:db8:1:2:aaaa::1"), 1), clientKey(req("2001:DB8:1:2:0:0:0:ffff"), 1));
+  assert.equal(clientKey(req("2001:db8:1:2::1"), 1), "2001:db8:1:2::/64");
+  assert.notEqual(clientKey(req("2001:db8:1:3::1"), 1), clientKey(req("2001:db8:1:2::1"), 1));
+  assert.equal(rateLimitKey("::1"), "0:0:0:0::/64");
+  assert.equal(rateLimitKey("[2001:db8::1]"), "2001:db8:0:0::/64");
+  assert.equal(rateLimitKey("fe80::1%en0"), "fe80:0:0:0::/64");
+  assert.equal(rateLimitKey("::ffff:1.2.3.4"), "1.2.3.4");
+  assert.equal(rateLimitKey("1.2.3.4"), "1.2.3.4");
+  // Unlesbares bleibt unver채ndert und wird nicht zusammengefasst
+  assert.equal(rateLimitKey("1:2:3:4:5:6:7:8:9"), "1:2:3:4:5:6:7:8:9");
+  assert.equal(rateLimitKey("zz::1"), "zz::1");
 });
 
 test("die Map bleibt auch bei sehr vielen Schl체sseln begrenzt", () => {

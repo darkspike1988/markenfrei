@@ -65,14 +65,36 @@ export const TRUSTED_PROXIES =
  * Einträge links davon setzt der Client selbst und werden ignoriert.
  * Ohne vertraute Proxys (0) zählen alle Anfragen gemeinsam als "local".
  */
+/**
+ * IPv6-Adressen zählen als Netz (/64), weil ein Anschluss meist ein ganzes /64 bekommt und sonst
+ * jede Anfrage von einer neuen Adresse käme. IPv4 und IPv4-mapped IPv6 bleiben unverändert (IPv4).
+ * Nicht lesbare Werte bleiben wie sie sind.
+ */
+export function rateLimitKey(address: string): string {
+  const a = address.replace(/^\[|\]$/g, "").split("%")[0].toLowerCase();
+  if (!a.includes(":")) return a;
+  const mapped = /^(?:0{0,4}:){2,5}ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(a);
+  if (mapped) return mapped[1];
+  const halves = a.split("::");
+  if (halves.length > 2) return a;
+  const head = halves[0] ? halves[0].split(":") : [];
+  const tail = halves.length === 2 && halves[1] ? halves[1].split(":") : [];
+  const missing = 8 - head.length - tail.length;
+  if ((halves.length === 1 && missing !== 0) || missing < 0) return a;
+  const groups = [...head, ...Array<string>(halves.length === 2 ? missing : 0).fill("0"), ...tail];
+  if (groups.length !== 8 || !groups.every((g) => /^[0-9a-f]{1,4}$/.test(g))) return a;
+  return `${groups.slice(0, 4).map((g) => parseInt(g, 16).toString(16)).join(":")}::/64`;
+}
+
 export function clientKey(req: Request, trustedProxies = TRUSTED_PROXIES): string {
   if (trustedProxies <= 0) return "local";
   const list = (req.headers.get("x-forwarded-for") ?? "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  if (list.length > 0) return list[Math.max(0, list.length - trustedProxies)];
-  return req.headers.get("x-real-ip")?.trim() || "local";
+  if (list.length > 0) return rateLimitKey(list[Math.max(0, list.length - trustedProxies)]);
+  const real = req.headers.get("x-real-ip")?.trim();
+  return real ? rateLimitKey(real) : "local";
 }
 
 export function limitedResponse(retryAfterSec: number): Response {
