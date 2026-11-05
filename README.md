@@ -90,9 +90,6 @@ Gelb, dann Rot, innerhalb davon nach Zahl der Treffer und dann der Lücken.
 
 Voraussetzung: Node.js 20.9 oder neuer.
 
-Hinweis: Solange das GitHub-Repository nicht öffentlich ist, funktionieren `git clone`, das
-CI-Badge und die Repository-Links im npm-Paket nur mit Zugriff auf das Repository.
-
 ```bash
 git clone https://github.com/darkspike1988/markenfrei.git
 cd markenfrei

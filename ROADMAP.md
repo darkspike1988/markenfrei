@@ -41,7 +41,6 @@ keine Rechtsberatung.
 | Status | Thema | Frage |
 |---|---|---|
 | 🟡 | Veröffentlichung des MCP-Pakets | `markenfrei-mcp` ist gebaut und getestet, aber nicht auf npm. Der Registry-Name `app.markenfrei/mcp` setzt eine Domain-Verifizierung für markenfrei.app voraus. Die Versionen sind nach dem Schema unten angeglichen. |
-| 🟡 | Öffentliches Repository | `github.com/darkspike1988/markenfrei` ist öffentlich nicht erreichbar. Anleitung (`git clone`), CI-Badge und die Links in `mcp/package.json` und `server.json` führen erst nach der Freigabe zum Ziel. Vor der Veröffentlichung des Pakets das Repository öffentlich machen. |
 | 🟡 | Name und Anspruch | „Markenfrei“ verspricht mehr als die Vorprüfung leistet. Soll der Name bleiben? |
 | 🟡 | Echte Registerabfrage | EUIPO (Registrierung, Sandbox) und USPTO (API-Schlüssel) wären die einzigen Wege. Möglich als optionale Quelle mit eigenem Schlüssel des Betreibers, nach Prüfung der Nutzungsbedingungen. |
 | 🟡 | GitHub-Token | Ein Token beim Betreiber hebt das Limit von 60 auf 5.000 Anfragen pro Stunde, ist aber ein Geheimnis in der Server-Umgebung. |

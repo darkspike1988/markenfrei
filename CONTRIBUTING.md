@@ -13,8 +13,6 @@ ohne Schlüssel, ehrliche Texte („nicht gefunden“ statt „frei“, Marke im
 
 Voraussetzung: Node.js 20.9 oder neuer.
 
-Solange das GitHub-Repository nicht öffentlich ist, braucht `git clone` Zugriff darauf.
-
 ```bash
 git clone https://github.com/darkspike1988/markenfrei.git
 cd markenfrei
