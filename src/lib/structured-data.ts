@@ -19,3 +19,24 @@ export function webApplicationJsonLd(base: URL = publicUrl()): string {
   // "<" maskieren, damit der Inhalt nie ein </script> beenden kann.
   return JSON.stringify(data).replace(/</g, "\\u003c");
 }
+
+export type FaqItem = { q: string; a: string };
+
+/**
+ * schema.org-FAQPage für eine Anleitung. Die Fragen und Antworten müssen auf der Seite
+ * sichtbar im selben Wortlaut stehen (die Seite rendert dieselben Daten).
+ */
+export function faqPageJsonLd(items: readonly FaqItem[]): string {
+  const data = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    inLanguage: "de",
+    mainEntity: items.map((i) => ({
+      "@type": "Question",
+      name: i.q,
+      acceptedAnswer: { "@type": "Answer", text: i.a },
+    })),
+  };
+  // "<" maskieren, damit der Inhalt nie ein </script> beenden kann.
+  return JSON.stringify(data).replace(/</g, "\\u003c");
+}

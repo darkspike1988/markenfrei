@@ -53,6 +53,8 @@ gewünschten Zusatzquellen. Alle IDs stehen auf der Seite `/quellen`.
 
 Alle 33 Endungen und alle Quellen mit Endpunkt stehen auf der Seite `/quellen`.
 
+Anleitungen mit eingebettetem Prüfer: `/domain-pruefen`, `/paketname-pruefen`, `/app-name-pruefen` und `/markenrecherche-vorbereiten`.
+
 ### Status und Ampel
 
 | Status | Bedeutung |

@@ -1,39 +1,16 @@
+import Link from "next/link";
 import { Suspense } from "react";
-import { DEFAULT_NAMESPACES, MAX_NAMES, MAX_TLDS, STATIC_SOURCES } from "@/lib/engine/check";
-import { DEFAULT_DOMAIN_TLDS, DOMAIN_TLDS } from "@/lib/engine/sources/domains";
-import { NAMESPACE_LABEL, NAMESPACES } from "@/lib/engine/types";
-import type { CheckerConfig } from "@/components/checker-config";
 import { CheckerFallback, CheckerFromUrl } from "@/components/checker";
+import { buildCheckerConfig } from "@/lib/checker-setup";
+import { GUIDES } from "@/lib/guides";
 import { webApplicationJsonLd } from "@/lib/structured-data";
 
 /**
  * Startseite. Die Quellenliste wird hier (Server, Buildzeit) zu reinen Daten gemacht,
  * damit der Engine-Code nicht im Client-Bundle landet.
  */
-function buildConfig(): CheckerConfig {
-  const withDefaults = new Set(STATIC_SOURCES.filter((s) => s.defaultEnabled).map((s) => s.namespace));
-  return {
-    namespaces: NAMESPACES.filter((ns) => ns === "domains" || withDefaults.has(ns)).map((id) => ({
-      id,
-      label: NAMESPACE_LABEL[id],
-    })),
-    defaultNamespaces: [...DEFAULT_NAMESPACES],
-    tlds: [...DOMAIN_TLDS],
-    defaultTlds: [...DEFAULT_DOMAIN_TLDS],
-    maxTlds: MAX_TLDS,
-    maxNames: MAX_NAMES,
-    sources: STATIC_SOURCES.map((s) => ({
-      id: s.id,
-      label: s.label,
-      namespace: s.namespace,
-      description: s.description,
-      defaultEnabled: s.defaultEnabled,
-    })),
-  };
-}
-
 export default function Home() {
-  const config = buildConfig();
+  const config = buildCheckerConfig();
   return (
     <div className="pt-8 sm:pt-14">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: webApplicationJsonLd() }} />
@@ -48,6 +25,17 @@ export default function Home() {
       <Suspense fallback={<CheckerFallback config={config} />}>
         <CheckerFromUrl config={config} />
       </Suspense>
+      <nav aria-label="Anleitungen" className="mt-10 text-sm text-muted">
+        Anleitungen:{" "}
+        {GUIDES.map((g, i) => (
+          <span key={g.href}>
+            {i > 0 && " · "}
+            <Link href={g.href} className="whitespace-nowrap underline hover:text-ink">
+              {g.nav}
+            </Link>
+          </span>
+        ))}
+      </nav>
     </div>
   );
 }

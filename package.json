@@ -10,7 +10,8 @@
     "mcp": "tsx src/mcp/cli.ts",
     "build:mcp": "node mcp/build.mjs",
     "test": "tsx --test tests/*.test.ts",
-    "test:mcp-package": "node mcp/test-package.mjs"
+    "test:mcp-package": "node mcp/test-package.mjs",
+    "indexnow": "node scripts/indexnow.mjs"
   },
   "bin": {
     "markenfrei-mcp": "./bin/markenfrei-mcp.mjs"

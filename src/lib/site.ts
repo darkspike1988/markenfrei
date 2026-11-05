@@ -20,4 +20,14 @@ export const SITE_DESCRIPTION =
   "Wo ist der Name schon vergeben? Domains, Pakete, App Stores und bekannte Namen in einem Durchgang prüfen, mit Link zu jeder Quelle. Marken werden nicht geprüft, die Recherche wird vorbereitet. Keine Rechtsberatung, keine Speicherung von Suchanfragen.";
 
 /** Seiten, die in die Sitemap gehören. Impressum und Datenschutz sind enthalten, damit sie auffindbar sind. */
-export const SITEMAP_PATHS = ["/", "/quellen", "/mcp", "/datenschutz", "/impressum"] as const;
+export const SITEMAP_PATHS = [
+  "/",
+  "/domain-pruefen",
+  "/paketname-pruefen",
+  "/app-name-pruefen",
+  "/markenrecherche-vorbereiten",
+  "/quellen",
+  "/mcp",
+  "/datenschutz",
+  "/impressum",
+] as const;
