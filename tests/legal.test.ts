@@ -49,3 +49,32 @@ test("ohne zweiten Kontaktweg gibt es eine Empfehlung, die den Livegang nicht bl
   const withPhone = operatorFromEnv({ ...full, MARKENFREI_OPERATOR_PHONE: "+49 123 456" });
   assert.deepEqual(withPhone.recommendations, []);
 });
+
+test("ein eingerichtetes Kontaktformular erfüllt die Empfehlung zum zweiten Kontaktweg", () => {
+  const withForm = operatorFromEnv({ ...full, MARKENFREI_SMTP_URL: "smtps://form%40example.org:pw@mail.example.org:465" });
+  assert.equal(withForm.complete, true);
+  assert.deepEqual(withForm.recommendations, []);
+  // eigener Empfänger statt Betreiber-Adresse genügt ebenfalls
+  const own = operatorFromEnv({
+    ...full,
+    MARKENFREI_OPERATOR_EMAIL: "",
+    MARKENFREI_SMTP_URL: "smtps://u:pw@mail.example.org:465",
+    MARKENFREI_CONTACT_TO: "anfragen@example.org",
+  });
+  assert.deepEqual(own.recommendations, []);
+});
+
+test("ein unbrauchbares Kontaktformular (unverschlüsseltes smtp, ungültiger Empfänger) erfüllt die Empfehlung nicht", () => {
+  for (const env of [
+    { MARKENFREI_SMTP_URL: "smtp://u:pw@mail.example.org:25" },
+    { MARKENFREI_SMTP_URL: "smtps://u:pw@mail.example.org:465", MARKENFREI_CONTACT_TO: "kein-mail" },
+    { MARKENFREI_SMTP_URL: "" },
+  ]) {
+    const r = operatorFromEnv({ ...full, ...env });
+    assert.equal(r.recommendations.length, 1, JSON.stringify(env));
+  }
+});
+
+test("die Empfehlung nennt das Kontaktformular als Möglichkeit", () => {
+  assert.match(operatorFromEnv(full).recommendations[0], /MARKENFREI_SMTP_URL/);
+});

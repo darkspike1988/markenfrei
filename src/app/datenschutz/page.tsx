@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { MissingOperatorNotice, WithOperator } from "@/components/operator-notice";
+import { mailConfigFromEnv } from "@/lib/mail";
 
 export const metadata: Metadata = {
   title: "Datenschutz",
@@ -36,9 +37,11 @@ export default function DatenschutzPage() {
 
                 <H2 id="kurz">Kurz gesagt</H2>
                 <p>
-                  Markenfrei setzt keine Cookies, nutzt keinen Browser-Speicher, bindet keine Analyse- oder
-                  Werbedienste ein und lädt keine Schriften oder Skripte von fremden Servern. Die Anwendung
-                  protokolliert keine eingegebenen Namen.
+                  Markenfrei setzt keine Cookies, nutzt keinen Browser-Speicher und lädt keine Schriften oder
+                  Skripte von fremden Servern. Die Anwendung protokolliert keine eingegebenen Namen. Zur
+                  Verbesserung der Seite gibt es eine einfache Reichweitenmessung auf dem eigenen Server, ohne
+                  Cookies und ohne die eingegebenen Namen (siehe{" "}
+                  <a href="#reichweite" className="underline hover:text-ink">Reichweitenmessung</a>).
                 </p>
 
                 <H2 id="namen">Eingegebene Namen</H2>
@@ -69,6 +72,65 @@ export default function DatenschutzPage() {
                   (Art. 6 Abs. 1 lit. f DSGVO).
                 </p>
 
+                <H2 id="reichweite">Reichweitenmessung</H2>
+                <p>
+                  Um zu sehen, welche Seiten und Funktionen genutzt werden und wo die Seite verbessert werden
+                  muss, zählt der Betreiber Seitenaufrufe mit GoatCounter, einer Open-Source-Software, die auf
+                  demselben Server wie Markenfrei läuft. Es gibt keine Cookies, keinen Zugriff auf den
+                  Speicher deines Browsers und keine Weitergabe an Dritte.
+                </p>
+                <p>
+                  Pro Seitenaufruf werden der Pfad der Seite ohne Query-Teil, der Seitentitel, die Adresse einer
+                  externen Herkunftsseite (nur der Domainname), die Bildschirmbreite, Browser und Betriebssystem,
+                  die Sprache und das Land gespeichert. Das Land bestimmt der Server aus deiner IP-Adresse mit
+                  einer lokalen Datenbank; die IP-Adresse selbst wird nicht gespeichert. Zur Zählung von
+                  Besuchern dient eine anonyme, regelmäßig wechselnde Kennung, aus der sich keine Person ableiten
+                  lässt. Außerdem werden einzelne Aktionen gezählt, ohne Inhalte: Prüfung gestartet, Ampelfarbe
+                  des Ergebnisses, aktivierte zusätzliche Quellen und Endungen, JSON-Export.
+                </p>
+                <p>
+                  Nie übertragen werden die eingegebenen Namen, die Adresszeile mit deiner Auswahl und die
+                  Texte deiner Nachrichten. Wenn dein Browser „Do Not Track“ oder „Global Privacy Control“
+                  sendet, findet keine Zählung statt. Die Auswertung sieht nur der Betreiber. Die Daten werden
+                  nach zwölf Monaten gelöscht. Rechtsgrundlage ist das berechtigte Interesse an einer
+                  bedarfsgerechten, stabilen Seite (Art. 6 Abs. 1 lit. f DSGVO); du kannst der Verarbeitung
+                  jederzeit widersprechen, siehe Deine Rechte.
+                </p>
+
+                {mailConfigFromEnv().configured ? (
+                  <>
+                    <H2 id="kontakt">Kontaktformular</H2>
+                    <p>
+                      Wenn du das <Link href="/kontakt" className="underline hover:text-ink">Kontaktformular</Link>{" "}
+                      nutzt, verarbeiten wir deinen Namen (freiwillig), deine E-Mail-Adresse und den Text deiner
+                      Nachricht. Mit dem Häkchen bestätigst du, dass du diese Datenschutzerklärung gelesen hast; den
+                      Zeitpunkt dieser Bestätigung speichern wir nicht. Zur Abwehr von Spam trägt das Formular eine
+                      signierte Zeitangabe vom Laden der Seite; auch sie wird nicht gespeichert.
+                    </p>
+                    <p>
+                      Zweck ist, deine Anfrage zu beantworten. Rechtsgrundlage ist Art. 6 Abs. 1 lit. b DSGVO, wenn
+                      deine Anfrage einen Vertrag oder vorvertragliche Maßnahmen betrifft, sonst unser berechtigtes
+                      Interesse an der Beantwortung von Anfragen (Art. 6 Abs. 1 lit. f DSGVO).
+                    </p>
+                    <p>
+                      Die Nachricht wird per E-Mail über den E-Mail-Server des Betreibers zugestellt; für das Formular
+                      ist kein Dienst Dritter eingebunden. Die Anwendung selbst speichert Name, Adresse und Nachricht
+                      nicht und schreibt sie in kein Protokoll. Sie liegen nur im Arbeitsspeicher, bis der Versand
+                      abgeschlossen ist. Danach besteht eine Kopie als E-Mail im Postfach des Betreibers.
+                    </p>
+                    <p>
+                      Um Missbrauch zu begrenzen, zählt der Server die gesendeten Nachrichten je IP-Adresse (höchstens
+                      drei pro Stunde) im Arbeitsspeicher. Die IP-Adresse steht nicht in der E-Mail, der Zähler wird
+                      nicht gespeichert und verfällt nach der Stunde. Rechtsgrundlage ist das berechtigte Interesse an
+                      einem stabilen Betrieb (Art. 6 Abs. 1 lit. f DSGVO).
+                    </p>
+                    <p>
+                      Speicherdauer: Die Kopie im Postfach wird gelöscht, sobald die Angelegenheit erledigt ist und
+                      keine gesetzlichen Aufbewahrungspflichten entgegenstehen. Deine Rechte stehen weiter unten.
+                    </p>
+                  </>
+                ) : null}
+
                 <H2 id="hosting">Hosting</H2>
                 <p>
                   Die Seite wird bei {operator.hosting || "—"} betrieben. Beim Aufruf verarbeitet der Hosting-Anbieter
@@ -89,8 +151,9 @@ export default function DatenschutzPage() {
                 <p>
                   Du hast das Recht auf Auskunft, Berichtigung, Löschung, Einschränkung der Verarbeitung,
                   Datenübertragbarkeit und Widerspruch. Du kannst dich bei einer Datenschutz-Aufsichtsbehörde
-                  beschweren. Da Markenfrei keine Konten führt und Anfragen nicht speichert, kann es sein, dass wir
-                  zu einer Anfrage keine Daten haben. Schreib uns an{" "}
+                  beschweren. Da Markenfrei keine Konten führt und Suchanfragen nicht speichert, kann es sein, dass
+                  wir zu einer Anfrage keine Daten haben (Nachrichten über das Kontaktformular liegen als E-Mail im
+                  Postfach des Betreibers). Schreib uns an{" "}
                   {operator.email ? (
                     <a className="underline hover:text-ink" href={`mailto:${operator.email}`}>
                       {operator.email}

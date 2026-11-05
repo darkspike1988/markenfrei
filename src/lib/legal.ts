@@ -5,6 +5,8 @@
  * Betreibers. Fehlen Pflichtangaben, zeigen die Seiten das sichtbar an, statt etwas zu erfinden.
  */
 
+import { mailConfigFromEnv } from "@/lib/mail";
+
 export type Operator = {
   name: string;
   /** Mehrzeilig, Zeilen durch \n getrennt */
@@ -41,9 +43,10 @@ export function operatorFromEnv(env: Record<string, string | undefined> = proces
   if (!/^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(operator.email)) missing.push("MARKENFREI_OPERATOR_EMAIL");
   if (!operator.hosting) missing.push("MARKENFREI_HOSTING_PROVIDER");
   const recommendations: string[] = [];
-  if (!operator.phone) {
+  // Ein eingerichtetes Kontaktformular (siehe src/lib/mail.ts) ist der zweite schnelle Kontaktweg.
+  if (!operator.phone && !mailConfigFromEnv(env).configured) {
     recommendations.push(
-      "Neben der E-Mail-Adresse einen zweiten schnellen Kontaktweg angeben, etwa eine Telefonnummer (MARKENFREI_OPERATOR_PHONE) oder ein Kontaktformular. Die Rechtsprechung des EuGH (Rs. C-298/07) verlangt zur Anbieterkennzeichnung eine schnelle und unmittelbare Kommunikation.",
+      "Neben der E-Mail-Adresse einen zweiten schnellen Kontaktweg angeben: eine Telefonnummer (MARKENFREI_OPERATOR_PHONE) oder das Kontaktformular (MARKENFREI_SMTP_URL, siehe README). Die Rechtsprechung des EuGH (Rs. C-298/07) verlangt zur Anbieterkennzeichnung eine schnelle und unmittelbare Kommunikation.",
     );
   }
   return { operator, missing, complete: missing.length === 0, recommendations };

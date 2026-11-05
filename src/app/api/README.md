@@ -1,6 +1,6 @@
 # `src/app/api/`: HTTP-Routen
 
-Drei Route Handler, alle nur `POST`. Keine LLM-Aufrufe, keine Speicherung von Anfragen.
+Vier Route Handler, alle nur `POST`. Keine LLM-Aufrufe, keine Speicherung von Anfragen.
 Gemeinsame Bausteine liegen in `_lib/http.ts` (der Ordner beginnt mit `_` und ist keine Route):
 Body-Grenze, Content-Type, Origin-Prüfung, Kosten und Rate-Limit.
 
@@ -25,6 +25,7 @@ sowie `localhost`, `127.0.0.1` und `[::1]` mit beliebigem Port. Ein fehlender Or
 | `POST /api/check` | Prüfung eines Namens oder einer Shortlist für die Oberfläche | Namen × Quellenumfang |
 | `POST /api/mcp` | MCP über Streamable HTTP, derselbe Server wie bei stdio | Namen × Quellenumfang bei `markenfrei_check_name` und `markenfrei_check_names`, sonst 1 |
 | `POST /api/opendata-words` | Wortfeld und regelbasierte Vorschläge für „Keine Idee?“ | 1 |
+| `POST /api/contact` | Kontaktformular: sendet eine Nachricht per E-Mail an den Betreiber | 1 (allgemeines Limit) plus eigenes Limit nur für gesendete Nachrichten |
 
 ```mermaid
 sequenceDiagram
@@ -117,3 +118,39 @@ Fehler kommen als `{ "error": "<deutsche Meldung>" }` mit 400, 403, 413, 415, 42
 mit internen Meldungen. Alle Antworten tragen `Cache-Control: no-store`. Ausgabe ist das
 `OpenDataWordField` aus `src/lib/opendata.ts`, darin `synthesizedCandidates`. Die Vorschläge
 sind regelbasiert und ungeprüft; die Oberfläche prüft sie erst auf Klick über `/api/check`.
+
+---
+
+## `POST /api/contact` (`contact/route.ts`, Logik in `_lib/contact.ts`)
+
+Eingabe (mit zod geprüft, Body höchstens 8 KB, nur `application/json`, Origin wie bei
+`/api/check`): `{ "name"?: string (bis 100), "email": string (gültig, bis 200), "message": string
+(10 bis 2000 Zeichen), "consent": true, "website": "", "t": string }`. Steuerzeichen (insbesondere
+CR und LF) in Name und E-Mail werden abgelehnt (Header-Injection). Antworten enthalten nie
+Eingaben des Besuchers; Name, Adresse und Text werden weder gespeichert noch protokolliert.
+
+- `website` ist die Honigfalle: Ist sie befüllt, antwortet die Route `200 { "ok": true }` und sendet
+  nichts.
+- `t` ist die vom Server beim Rendern von `/kontakt` ausgestellte, mit HMAC-SHA-256 signierte
+  Zeitmarke (`src/lib/contact-token.ts`). Frühestens 3 Sekunden und höchstens 2 Stunden nach dem
+  Rendern, sonst `400`. Grenzen: Das Geheimnis ist pro Prozess zufällig (nach einem Neustart oder
+  bei mehreren Instanzen ist das Formular neu zu laden); die Marke ist innerhalb der zwei Stunden
+  mehrfach verwendbar und hält nur einfache Bots ab.
+- Eigenes Limit, getrennt vom allgemeinen: höchstens 3 gesendete Nachrichten pro Stunde und
+  Client-IP und 30 pro Stunde und Prozess (`429` mit deutscher Meldung und `Retry-After`). Fehleingaben
+  und die Honigfalle verbrauchen es nicht. Der Zähler liegt im Arbeitsspeicher.
+- Versand: `src/lib/mail.ts` (nodemailer). Absender ist der konfigurierte, nie der Besucher; seine
+  Adresse steht in `Reply-To`. Betreff fest, Text enthält Name, E-Mail, Nachricht und die Zeile
+  „Gesendet über das Kontaktformular von markenfrei.app“. Zeitgrenzen: Verbindung 5 s, Begrüßung
+  5 s, Socket 10 s, insgesamt 15 s. Ohne Wiederholung und ohne Zwischenspeicherung.
+
+| Status | Fall |
+|---|---|
+| 200 | gesendet (oder Honigfalle) |
+| 400 | kaputtes JSON, ungültiges Feld (Antwort nennt `field`), Zeitmarke ungültig, zu schnell oder abgelaufen |
+| 403 | fremder Origin |
+| 413 | Body größer als 8 KB |
+| 415 | Content-Type ist nicht `application/json` |
+| 429 | allgemeines oder strenges Limit erreicht |
+| 502 | Versand fehlgeschlagen oder Zeitbudget überschritten (allgemeine Meldung, keine Details) |
+| 503 | kein Mailserver konfiguriert (`MARKENFREI_SMTP_URL` fehlt oder ist ungültig) |

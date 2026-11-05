@@ -18,7 +18,7 @@ die Kandidaten, Markenfrei prüft sie deterministisch (`check_names`).
 
 ## Grundsätze (unverändert)
 
-Kein LLM im Produkt, keine Konten, kein Tracking, keine Speicherung von Suchanfragen, nur
+Kein LLM im Produkt, keine Konten, kein Personen-Tracking (nur anonyme Seitenzählung ohne Cookies, ohne Namen), keine Speicherung von Suchanfragen, nur
 offene Quellen ohne Schlüssel, keine Umgehung von Bot-Abwehr, robots.txt und
 Nutzungsbedingungen respektieren, nur Einzelabfragen, die ein Nutzer auslöst.
 

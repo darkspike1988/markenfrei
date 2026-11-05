@@ -4,7 +4,7 @@ Danke für dein Interesse. Markenfrei ist Open Source (MIT-Lizenz). Fehlerberich
 Quellen und Korrekturen sind willkommen. Wir erwarten einen respektvollen, sachlichen Umgang.
 
 Verbindlich für Verhalten und Texte ist [docs/v2-spec.md](docs/v2-spec.md). Kurz: kein LLM im
-Produkt, keine Konten, kein Tracking, keine Speicherung von Suchanfragen, nur offene Quellen
+Produkt, keine Konten, kein Personen-Tracking (nur anonyme Seitenzählung ohne Cookies, ohne Namen), keine Speicherung von Suchanfragen, nur offene Quellen
 ohne Schlüssel, ehrliche Texte („nicht gefunden“ statt „frei“, Marke immer „nicht geprüft“).
 
 ---

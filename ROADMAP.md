@@ -4,7 +4,7 @@ Stand: 4. November 2026, Version 2. Grundlage ist [docs/v2-spec.md](docs/v2-spec
 dem [Review und der Konkurrenzanalyse](docs/review-and-competition-2026-11.md) entstanden ist.
 
 Markenfrei beantwortet eine Frage: „Kann ich diesen Namen in den gängigen Namensräumen nutzen,
-und wo muss ich für Marken selbst nachsehen?“ Ohne LLM, ohne Konto, ohne Tracking. Agenten nutzen Markenfrei
+und wo muss ich für Marken selbst nachsehen?“ Ohne LLM, ohne Konto, ohne Personen-Tracking. Agenten nutzen Markenfrei
 über den [MCP-Server](README.md#mcp-server-für-agenten).
 
 **Legende:** ✅ gebaut und mit Tests abgedeckt · 🔗 nur Link, keine Abfrage ·
@@ -25,6 +25,7 @@ und wo muss ich für Marken selbst nachsehen?“ Ohne LLM, ohne Konto, ohne Trac
 | **Marke** | 🔗 immer „nicht geprüft“. Recherche-Vorbereitung mit Registerlinks (Prüfdatum 4. November 2026), DPMA-Expertensuchstring, Varianten, Klassenvorschlag, Checkliste. |
 | Last | ✅ Semaphor pro Host, Bündelung gleicher Anfragen, 5 s pro Anfrage, 8 s pro Prüfung, begrenzte Antwortgrößen, Cache für eindeutige Ergebnisse (10 Minuten, nur im Arbeitsspeicher), GitHub-Sperre nach Rate-Limit. |
 | Oberfläche | ✅ Ein Feld für einen Namen oder bis zu 10, Chips für Namensräume und Endungen, Zustand im Link, Rangliste für Shortlists, JSON-Export, „Keine Idee?“ mit regelbasierten Vorschlägen. Seiten `/quellen` und `/mcp`. Dark Mode über `prefers-color-scheme`. |
+| Kontakt | ✅ Kontaktformular `/kontakt` und `POST /api/contact` (zod-Prüfung, 8 KB, Honigfalle, signierte Zeitmarke, 3 Nachrichten pro Stunde und IP, 30 pro Stunde und Prozess). Versand per SMTP über den Mailserver des Betreibers (`MARKENFREI_SMTP_URL`), ohne Speicherung und ohne Dienste Dritter. |
 | HTTP | ✅ `POST /api/check` (zod-Prüfung, 16 KB, Rate-Limit je Name), `POST /api/mcp` (Origin-Prüfung, 64 KB, keine Batches, Rate-Limit je Name). |
 | MCP | ✅ Vier Tools mit `outputSchema` und `annotations`, Server-`instructions`. Eigenes Paket `markenfrei-mcp` in `mcp/`, mit esbuild zu einer Datei gebündelt, `npm pack` und Start aus fremdem Verzeichnis in der CI getestet. |
 | Entfernt | Score /100, Preisvergleich, Bundle-ID-Modus, REA-Route, Phonetik-Codes in der Oberfläche, Zufallsbeispiele, Go-Proxy, DuckDuckGo, alte MCP-Tools. |
@@ -92,7 +93,7 @@ Version.
 
 - **Kein LLM im Produkt.** Urteil und Vorschläge entstehen aus festen Regeln und offenen
   Daten. LLMs nutzen Markenfrei von außen über MCP.
-- **Keine Konten, kein Tracking, keine Speicherung von Suchanfragen.**
+- **Keine Konten, kein Personen-Tracking, keine Speicherung von Suchanfragen.** Gezählt werden nur anonyme Seitenaufrufe und feste Aktionen auf dem eigenen Server (GoatCounter, ohne Cookies, ohne Namen, 12 Monate).
 - **Keine Umgehung von Bot-Abwehr** und keine automatisierten Abfragen bei Diensten, die das
   nicht anbieten (zum Beispiel TMDB, Instagram, TikTok).
 - **Keine einbettbare Ampel (Badge, iframe, Widget) für fremde Seiten.** Jeder Seitenaufruf

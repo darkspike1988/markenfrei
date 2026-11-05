@@ -18,6 +18,9 @@ export function SiteFooter() {
           <Link href="/datenschutz" className="inline-flex min-h-6 items-center underline hover:text-ink">
             Datenschutz
           </Link>
+          <Link href="/kontakt" className="inline-flex min-h-6 items-center underline hover:text-ink">
+            Kontakt
+          </Link>
           <Link href="/impressum" className="inline-flex min-h-6 items-center underline hover:text-ink">
             Impressum
           </Link>

@@ -7,6 +7,7 @@ import type { NameReport } from "@/lib/engine/check";
 import type { Namespace } from "@/lib/engine/types";
 import { NAMESPACE_LABEL } from "@/lib/engine/types";
 import { rankReports } from "@/lib/engine/verdict";
+import { trackEvent } from "@/lib/analytics";
 import {
   buildQuery,
   buildRequestBody,
@@ -156,6 +157,7 @@ export function Checker({
           retryTimers.current.add(t);
         } else {
           retryAttempts.current.delete(name);
+          trackEvent(`ergebnis/${json.reports[0].verdict}`);
         }
       }
     } catch {
@@ -173,6 +175,7 @@ export function Checker({
     abort.current = ac;
     const id = ++runId.current;
     revealFor.current = reveal ? id : null;
+    if (reveal) trackEvent("pruefung");
     setRun({ id, sel, items: Object.fromEntries(sel.names.map((n) => [n, { state: "loading" } as Item])) });
 
     const qs = buildQuery(sel, config);
@@ -273,11 +276,13 @@ export function Checker({
     setNamespaces((cur) => (cur.includes(ns) ? cur.filter((x) => x !== ns) : [...cur, ns]));
   }
   function toggleTld(t: string) {
+    if (!tlds.includes(t)) trackEvent(`endung/${t}`);
     setTlds((cur) =>
       cur.includes(t) ? cur.filter((x) => x !== t) : cur.length >= config.maxTlds ? cur : [...cur, t],
     );
   }
   function toggleExtra(id: string) {
+    if (!extra.includes(id)) trackEvent(`quelle/${id}`);
     setExtra((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
   }
 
@@ -289,6 +294,7 @@ export function Checker({
 
   function exportJson() {
     if (!run) return;
+    trackEvent("export/json");
     const reports = run.sel.names
       .map((n) => run.items[n])
       .filter((i): i is Extract<Item, { state: "done" }> => i?.state === "done")

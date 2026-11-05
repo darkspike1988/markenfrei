@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Suspense } from "react";
 import { MissingOperatorNotice, WithOperator } from "@/components/operator-notice";
+import { mailConfigFromEnv } from "@/lib/mail";
 
 export const metadata: Metadata = {
   title: "Impressum",
@@ -35,6 +37,13 @@ export default function ImpressumPage() {
                     )}
                   </p>
                   {operator.phone ? <p>Telefon: {operator.phone}</p> : null}
+                  {mailConfigFromEnv().configured ? (
+                    <p>
+                      <Link href="/kontakt" className="underline hover:text-ink">
+                        Kontaktformular
+                      </Link>
+                    </p>
+                  ) : null}
                 </section>
                 <section aria-labelledby="haftung">
                   <h2 id="haftung" className="mb-1 font-medium text-ink">Hinweis zum Angebot</h2>
