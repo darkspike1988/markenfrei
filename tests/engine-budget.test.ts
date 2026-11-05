@@ -1,6 +1,6 @@
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { HOST_BUDGETS, createHttpClient, huggingfaceBudget, resetHostBudgets, takeBudget } from "@/lib/engine/http";
+import { HOST_BUDGETS, createHttpClient, githubBudget, huggingfaceBudget, resetHostBudgets, takeBudget } from "@/lib/engine/http";
 import { STORE_SOURCES } from "@/lib/engine/sources/stores-social";
 
 beforeEach(() => resetHostBudgets());
@@ -57,6 +57,56 @@ test("kurze Wartezeit: die Anfrage wartet auf das nächste freie Budget und läu
   assert.equal(b.status, 404, "zweite Anfrage wartete und ging dann durch");
   assert.ok(Date.now() - t0 >= 250, "es wurde gewartet");
   assert.equal(urls.length, 2);
+});
+
+test("takeBudget: erschöpftes Budget reserviert künftige Zeitpunkte, Wartende reihen sich hintereinander ein", () => {
+  const b = { max: 1, windowMs: 1000 };
+  assert.equal(takeBudget("q.test", b, 0, 1500), 0);
+  assert.equal(takeBudget("q.test", b, 0, 1500), 1000, "zweiter bekommt den Platz bei 1000");
+  assert.equal(takeBudget("q.test", b, 0, 1500), 2000, "dritter läge bei 2000, über der erlaubten Wartezeit: nichts reserviert");
+  assert.equal(takeBudget("q.test", b, 0, 2500), 2000, "mit mehr erlaubter Wartezeit wird der Platz bei 2000 reserviert");
+  assert.equal(takeBudget("q.test", b, 500, 1500), 2500, "nächster Platz wäre 3000, jetzt 500: zu weit, nichts reserviert");
+});
+
+test("crates.io-Form (1 je Fenster): gleichzeitige Anfragen stehen an, solange die Gesamtwartezeit reicht, keine Wettlaufverluste", async () => {
+  const { urls, fetchImpl } = counting();
+  const http = createHttpClient({ deadlineAt: far(), userAgent: "t", fetchImpl, hostBudgets: { "crates2.test": { max: 1, windowMs: 100 } } });
+  const r = await alive(() => Promise.all(Array.from({ length: 10 }, (_, i) => http.request(`https://crates2.test/${i}`))));
+  assert.deepEqual(r.map((x) => x.error ?? x.status), Array(10).fill(404), "Wartezeit bis 900 ms liegt unter dem Limit, alle laufen");
+  assert.equal(urls.length, 10);
+});
+
+test("crates.io-Form: Anfragen jenseits der erlaubten Wartezeit bekommen budget, ohne Budget zu verbrauchen", async () => {
+  const { urls, fetchImpl } = counting();
+  // Genug Slots, damit alle Anfragen gleichzeitig ihren Platz reservieren (sonst vergeht beim Warten auf Slots Zeit)
+  const http = createHttpClient({ deadlineAt: far(), userAgent: "t", fetchImpl, perHostLimit: 10, perOwnerLimit: 10, hostBudgets: { "crates3.test": { max: 1, windowMs: 500 } } });
+  const r = await alive(() => Promise.all(Array.from({ length: 10 }, (_, i) => http.request(`https://crates3.test/${i}`))));
+  // Plätze bei 0, 500, 1000 und 1500 (Wartezeit höchstens 1500 ms), die übrigen scheitern sofort
+  assert.deepEqual(r.slice(0, 4).map((x) => x.error ?? x.status), [404, 404, 404, 404]);
+  assert.deepEqual(r.slice(4).map((x) => x.error), Array(6).fill("budget"));
+  assert.equal(urls.length, 4);
+});
+
+test("Slot-Wartezeit an der Deadline verbraucht kein Budget", async () => {
+  const { fetchImpl } = counting();
+  const hostBudgets = { "slotbudget.test": { max: 1, windowMs: 60_000 } };
+  // Ein Besitzer füllt alle Slots, der Wartende läuft in die Deadline und darf kein Budget nehmen
+  const owner = {};
+  const blockers = createHttpClient({
+    deadlineAt: far(),
+    userAgent: "t",
+    perHostLimit: 1,
+    hostBudgets: {},
+    owner,
+    fetchImpl: (() => new Promise<Response>((r) => setTimeout(() => r(new Response(null, { status: 404 })), 300))) as unknown as typeof fetch,
+  });
+  const hold = blockers.request("https://slotbudget.test/hold");
+  const late = createHttpClient({ deadlineAt: Date.now() + 100, userAgent: "t", perHostLimit: 1, hostBudgets, fetchImpl });
+  const lateRes = await alive(() => late.request("https://slotbudget.test/late"));
+  assert.equal(lateRes.error, "deadline");
+  await alive(() => hold);
+  const ok = createHttpClient({ deadlineAt: far(), userAgent: "t", hostBudgets, fetchImpl });
+  assert.equal((await ok.request("https://slotbudget.test/ok")).status, 404, "das einzige Budget war noch frei");
 });
 
 test("zu lange Wartezeit oder knappe Deadline: sofort budget, kein Warten", async () => {
@@ -119,4 +169,13 @@ test("GLEIF: erschöpftes Budget ist unknown mit Hinweis, nie not_found", async 
   assert.equal(second.status, "unknown");
   assert.match(second.note ?? "", /Abfragelimit/);
   assert.match(second.evidence ?? "", /^budget/);
+});
+
+test("GitHub: Budget liegt unter 60 je Stunde ohne Token und unter 5.000 mit Token", () => {
+  const anon = githubBudget(undefined);
+  assert.ok(anon.max < 60 && anon.windowMs === 3_600_000);
+  assert.deepEqual(githubBudget("  "), anon, "leerer Token zählt als keiner");
+  const withToken = githubBudget("ghp_x");
+  assert.ok(withToken.max < 5000 && withToken.max > anon.max && withToken.windowMs === 3_600_000);
+  assert.ok(HOST_BUDGETS["api.github.com"].max === anon.max || HOST_BUDGETS["api.github.com"].max === withToken.max);
 });

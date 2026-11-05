@@ -32,6 +32,10 @@ const PER_HOST_LIMIT = 4;
  *   Stand September 2025, ändert sich laut Seite). Wir nehmen 450 bzw. 900 (mit HF_TOKEN).
  * - api.gleif.org: 60 Anfragen pro Minute. Diese Zahl stammt aus der Anleitung eines Drittanbieter-Pakets
  *   und ist nicht offiziell bestätigt; wir bleiben mit 50 darunter.
+ * - api.github.com: ohne Token 60 Anfragen pro Stunde und IP, mit Token 5.000 (GitHub-Dokumentation,
+ *   REST API rate limits). Wir nehmen 50 bzw. 4.500 je Stunde.
+ * - query.wikidata.org: Wikimedia begrenzt die Rechenzeit je Client, nicht die Zahl der Anfragen. Unsere
+ *   Abfragen sind klein; 30 pro Minute ist eine vorsichtige eigene Grenze, keine Angabe des Dienstes.
  */
 export type HostBudget = { max: number; windowMs: number };
 
@@ -40,8 +44,15 @@ export function huggingfaceBudget(token: string | undefined): HostBudget {
   return { max: token && token.trim() ? 900 : 450, windowMs: 300_000 };
 }
 
+/** GitHub: 1-Stunden-Fenster, mit Token das Limit für authentifizierte Anfragen, sonst das anonyme. */
+export function githubBudget(token: string | undefined): HostBudget {
+  return { max: token && token.trim() ? 4500 : 50, windowMs: 3_600_000 };
+}
+
 export const HOST_BUDGETS: Record<string, HostBudget> = {
   "huggingface.co": huggingfaceBudget(process.env.HF_TOKEN),
+  "api.github.com": githubBudget(process.env.GITHUB_TOKEN),
+  "query.wikidata.org": { max: 30, windowMs: 60_000 },
   "api.gleif.org": { max: 50, windowMs: 60_000 },
   "itunes.apple.com": { max: 18, windowMs: 60_000 },
   "crates.io": { max: 1, windowMs: 1_000 },
@@ -54,19 +65,25 @@ const MAX_BUDGET_WAIT_MS = 1500;
 const budgetLog = new Map<string, number[]>();
 
 /**
- * Verbraucht ein Budget, wenn eines frei ist (Rückgabe 0). Sonst Millisekunden bis zum nächsten
- * freien Platz, ohne etwas zu verbrauchen.
+ * Reserviert ein Budget und gibt die Wartezeit bis dahin zurück (0 = sofort frei).
+ * Ist das Budget erschöpft und der nächste freie Platz höchstens `maxWaitMs` entfernt, wird dieser
+ * künftige Zeitpunkt reserviert und die Wartezeit zurückgegeben: Mehrere Wartende reihen sich so
+ * hintereinander ein, statt alle zum selben Zeitpunkt aufzuwachen und um einen Platz zu konkurrieren.
+ * Liegt der Platz weiter weg (Rückgabe > maxWaitMs), wird nichts verbraucht.
  */
-export function takeBudget(host: string, budget: HostBudget, nowMs: number): number {
+export function takeBudget(host: string, budget: HostBudget, nowMs: number, maxWaitMs = 0): number {
   const log = budgetLog.get(host) ?? [];
+  // Reservierte Zeitpunkte liegen ggf. in der Zukunft; sie bleiben, bis ihr Fenster vorbei ist
   const recent = log.filter((t) => nowMs - t < budget.windowMs);
-  if (recent.length < budget.max) {
-    recent.push(nowMs);
-    budgetLog.set(host, recent);
-    return 0;
+  const freeAt =
+    recent.length < budget.max ? nowMs : Math.max(nowMs + 1, recent[recent.length - budget.max] + budget.windowMs);
+  const wait = freeAt - nowMs;
+  if (wait <= maxWaitMs) {
+    recent.push(freeAt);
+    recent.sort((a, b) => a - b);
   }
   budgetLog.set(host, recent);
-  return Math.max(1, recent[0] + budget.windowMs - nowMs);
+  return wait;
 }
 
 /** Nur für Tests */
@@ -262,18 +279,6 @@ export function createHttpClient(opts: {
     }
 
     const budget = (opts.hostBudgets ?? HOST_BUDGETS)[host];
-    if (budget) {
-      let wait = takeBudget(host, budget, now());
-      if (wait > 0) {
-        // Warten nur, wenn es sich lohnt: kurz genug und mit Luft bis zur Deadline
-        if (wait > Math.min(MAX_BUDGET_WAIT_MS, opts.deadlineAt - now() - 1000)) {
-          return { status: 0, headers: empty, error: "budget" };
-        }
-        await new Promise((r) => setTimeout(r, wait));
-        wait = takeBudget(host, budget, now());
-        if (wait > 0) return { status: 0, headers: empty, error: "budget" };
-      }
-    }
 
     const release = await acquireSlot(host, owner, {
       deadlineAt: opts.deadlineAt,
@@ -283,6 +288,15 @@ export function createHttpClient(opts: {
     });
     if (!release) return { status: 0, headers: empty, error: "deadline" };
     try {
+      if (budget) {
+        // Das Budget wird erst mit gehaltenem Slot genommen: Wer vorher an der Deadline scheitert,
+        // verbraucht keins. Ist es erschöpft, wird der nächste freie Zeitpunkt reserviert (siehe takeBudget);
+        // Warten nur, wenn es sich lohnt: kurz genug und mit Luft bis zur Deadline.
+        const maxWait = Math.min(MAX_BUDGET_WAIT_MS, opts.deadlineAt - now() - 1000);
+        const wait = takeBudget(host, budget, now(), maxWait);
+        if (wait > maxWait) return { status: 0, headers: empty, error: "budget" };
+        if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+      }
       const left = opts.deadlineAt - now();
       if (left <= 0) return { status: 0, headers: empty, error: "deadline" };
       const timeout = Math.min(req.timeoutMs ?? DEFAULT_TIMEOUT_MS, left);
