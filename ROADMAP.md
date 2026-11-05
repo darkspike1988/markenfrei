@@ -47,6 +47,18 @@ keine Rechtsberatung.
 | 🟡 | GitHub-Token | Ein Token beim Betreiber hebt das Limit von 60 auf 5.000 Anfragen pro Stunde, ist aber ein Geheimnis in der Server-Umgebung. |
 | 🟡 | Origin-Prüfung für `/api/mcp` | Der Abgleich mit dem eigenen Host schützt nicht vor DNS-Rebinding. Für eine strengere Prüfung `MARKENFREI_ALLOWED_ORIGINS` setzen und den Host-Abgleich entfernen. |
 
+### Vor dem Livegang (Stand 5. November 2026)
+
+Code, Tests, Sicherheits- und Code-Review sind abgeschlossen; offen ist nur der Betrieb:
+
+| Status | Schritt | Detail |
+|---|---|---|
+| ⬜ | Betreiberangaben setzen | `MARKENFREI_OPERATOR_NAME`, `_ADDRESS`, `_EMAIL`, `MARKENFREI_HOSTING_PROVIDER` in `.env` neben `docker-compose.yml`. Ohne sie zeigen `/impressum` und `/datenschutz` den Hinweis „darf so nicht öffentlich laufen“. |
+| ⬜ | Deployment und TLS | `docker compose up -d --build` auf dem Server, Reverse-Proxy mit Host `markenfrei.app` auf `127.0.0.1:3000`, der `x-forwarded-for` setzt (Beispiel: README). Bei zwei Proxys davor `MARKENFREI_TRUSTED_PROXIES=2`. |
+| ⬜ | `GITHUB_TOKEN` und `MARKENFREI_CONTACT` | Token ohne Berechtigungen in `.env`; sonst gilt für GitHub 60 Anfragen pro Stunde für alle Nutzer zusammen. |
+| ⬜ | Proxy-Limits | Je-IP-Limit, Body-Größe und Timeouts zusätzlich am Reverse-Proxy. |
+| 🟡 | Name „Markenfrei“ | Eigene Markenrecherche (DPMA, EUIPO) vor öffentlichem Start; `markenfrei.com` und `markenfrei.de` sind registriert (Inhaber nicht geprüft). |
+
 ### Versionsschema
 
 Maßgeblich ist die **Produktversion**, derzeit 2.0.0. Die Hauptversion folgt der
