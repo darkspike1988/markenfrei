@@ -529,16 +529,17 @@ test("rubygems: Suche nur mit Präfix-Treffern => not_found", async () => {
   assert.match(r.note ?? "", /auch nicht in anderer Schreibweise/);
 });
 
-test("rubygems: Suche nicht verwertbar => not_found mit Hinweis auf exakte Kleinschreibung", async () => {
+test("rubygems: Suche nicht verwertbar => unknown, nie not_found", async () => {
   for (const reply of [
     { status: 429 },
     { status: 200, error: "too_large" as const },
     { status: 200, json: { error: "x" } },
+    { status: 0, error: "timeout" as const },
   ]) {
     const { ctx } = ctxWith({ [RG]: { status: 404 }, [RGS]: reply });
     const r = await src("rubygems").check("redcloth", ctx);
-    assert.equal(r.status, "not_found", JSON.stringify(reply));
-    assert.match(r.note ?? "", /nur exakte Kleinschreibung geprüft/);
+    assert.equal(r.status, "unknown", JSON.stringify(reply));
+    assert.match(r.note ?? "", /Schreibweisen konnten nicht geprüft werden/);
     assert.match(r.evidence ?? "", /^HTTP 404, Suche /);
   }
 });

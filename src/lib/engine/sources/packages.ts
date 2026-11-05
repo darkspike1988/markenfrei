@@ -485,12 +485,7 @@ const rubygems: Source = {
       });
       const evidence = `HTTP 404, Suche ${evidenceOf(search)}`;
       if (search.error || search.status !== 200 || !Array.isArray(search.json)) {
-        return {
-          ...b,
-          status: "not_found",
-          note: "nur exakte Kleinschreibung geprüft (Suche nicht verwertbar); ein Gem in anderer Schreibweise ist möglich",
-          evidence,
-        };
+        return { ...unknownResult(b, search, "Schreibweisen konnten nicht geprüft werden"), evidence };
       }
       const hit = (search.json as Array<{ name?: unknown }>)
         .map((g) => g?.name)

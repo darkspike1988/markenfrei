@@ -32,7 +32,7 @@ Standardmäßig aktiv (Web und MCP gleich):
 | Domains | RDAP für die gewählten Endungen (Standard `.de`, `.com`, `.dev`, `.app`, `.io`, höchstens 8 je Prüfung). Der RDAP-Server kommt aus dem IANA-Bootstrap, für `.de`, `.io`, `.ch` und `.li` aus festen Einträgen. `.at` und `.eu` laufen nur über DNS und können deshalb nie „nicht gefunden“ ergeben. DNS über HTTPS bestätigt nur „vergeben“. |
 | Pakete | npm, PyPI, GitHub (Nutzer oder Organisation), crates.io, Homebrew (Formula und Cask) |
 | App Stores | Apple App Store Deutschland (Suche, vergeben nur bei exakt gleichem Haupttitel), Google Play (nur die Bundle-IDs `com.<name>.app` und `de.<name>.app`) |
-| Bekannte Namen | Liste bekannter Tech-Marken (Heuristik ohne Netz: identisch, klanggleich nach Kölner Phonetik, enthalten), Wikidata (exaktes Label mit Typ Unternehmen, Marke, Software, Website, App oder Produkt), GLEIF (aktive Rechtsträger mit LEI, Namensstamm ohne Rechtsform) |
+| Bekannte Namen | Liste bekannter Tech-Marken (Heuristik ohne Netz: identisch, klanggleich nach Kölner Phonetik, enthalten), Wikidata (exaktes Label mit Typ Unternehmen, Marke, Software oder App), GLEIF (aktive Rechtsträger mit LEI, Namensstamm ohne Rechtsform) |
 
 Auf Wunsch („Weitere Quellen“ in der Oberfläche, `sources` in API und MCP): NuGet,
 RubyGems, Maven Central, Packagist, pub.dev, JSR, Hex.pm, CRAN, Open VSX, Hugging Face

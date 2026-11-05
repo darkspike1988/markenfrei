@@ -201,12 +201,18 @@ export async function checkNames(
 ): Promise<{ ranking: ShortlistEntry[]; reports: NameReport[] }> {
   if (!Array.isArray(inputs) || inputs.length === 0) throw new CheckInputError("Bitte mindestens einen Namen angeben.");
   if (inputs.length > MAX_NAMES) throw new CheckInputError(`Höchstens ${MAX_NAMES} Namen pro Anfrage.`);
-  const unique = [...new Set(inputs.map((i) => String(i ?? "")))];
   // Erst alles prüfen, dann abfragen: Ein ungültiger Name darf keine Anfragen an Dritte
-  // auslösen, deren Ergebnis niemand mehr bekommt.
-  for (const i of unique) {
+  // auslösen, deren Ergebnis niemand mehr bekommt. Doppelte gelten nach der Normalisierung
+  // ("Foo" und "foo", "Müller" und "mueller"); die erste Eingabe bleibt.
+  const unique: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of inputs) {
+    const i = String(raw ?? "");
     const n = normalizeName(i);
     if (!n.ok) throw new CheckInputError(n.error);
+    if (seen.has(n.name)) continue;
+    seen.add(n.name);
+    unique.push(i);
   }
   resolveSources(opts);
   const shared: CheckOptions = { ...opts, httpOwner: opts.httpOwner ?? {} };

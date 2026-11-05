@@ -92,6 +92,21 @@ test("Shortlist: frei zuerst, dann wenige Treffer; Grenzen werden geprüft", asy
   await assert.rejects(checkNames(Array.from({ length: 11 }, (_, i) => `n${i}x`), { registry: reg }), CheckInputError);
 });
 
+test("Shortlist: Doppelte nach der Normalisierung zählen einmal, die erste Eingabe bleibt", async () => {
+  const p = fake("p", "not_found");
+  for (const [inputs, kept] of [
+    [["Foo", "foo", "bar"], ["foo", "bar"]],
+    [["Müller", "mueller"], ["mueller"]],
+    [["foo.com", "FOO"], ["foo"]],
+  ] as const) {
+    clearResultCache();
+    const { ranking, reports } = await checkNames([...inputs], { registry: [p] });
+    assert.deepEqual(reports.map((r) => r.name), kept);
+    assert.deepEqual(ranking.map((r) => r.name).sort(), [...kept].sort());
+    assert.equal(reports[0].input, inputs[0], "die erste Schreibweise bleibt als Eingabe erhalten");
+  }
+});
+
 test("Shortlist: unzulässig zählt nicht als vergeben, rangiert aber hinter sauberen Namen", () => {
   const r = (label: string, status: Status) => ({ sourceId: label, namespace: "packages" as const, label, target: "n", status });
   const ranking = rankReports([

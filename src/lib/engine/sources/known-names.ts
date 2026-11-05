@@ -172,14 +172,16 @@ const knownBrands: Source = {
 
 const WIKIDATA_ENDPOINT = "https://query.wikidata.org/sparql";
 
-/** Erlaubte Typen (P31/P279*) mit deutschem Namen für den Hinweis. */
+/**
+ * Erlaubte Typen (P31/P279*) mit deutschem Namen für den Hinweis. Bewusst eng: "Website" (Q35127)
+ * und "Produkt" (Q2424752) hängen an Büchern, Waren und Gattungsbegriffen, sodass Wörter wie
+ * "wasser" oder "kaffee" fälschlich als vergeben gälten.
+ */
 export const WIKIDATA_TYPES: Record<string, string> = {
   Q4830453: "Unternehmen",
   Q431289: "Marke",
   Q7397: "Software",
-  Q35127: "Website",
   Q620615: "Mobile App",
-  Q2424752: "Produkt",
 };
 
 function sparqlString(s: string): string {
@@ -264,7 +266,7 @@ const wikidata: Source = {
   label: "Wikidata",
   defaultEnabled: true,
   description:
-    "Wikidata (SPARQL): exaktes Label in Deutsch, Englisch oder sprachübergreifend (mul) mit Typ Unternehmen, Marke, Software, Website, Mobile App oder Produkt. Kein Markenregister.",
+    "Wikidata (SPARQL): exaktes Label in Deutsch, Englisch oder sprachübergreifend (mul) mit Typ Unternehmen, Marke, Software oder Mobile App. Kein Markenregister.",
   endpoint: `${WIKIDATA_ENDPOINT}?query={SPARQL}`,
   async check(name, ctx: CheckContext) {
     const base: Base = { sourceId: "wikidata", label: "Wikidata", target: name };

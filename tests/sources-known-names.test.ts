@@ -127,8 +127,12 @@ test("wikidata: Abfrage enthält Label-Vergleich, Sprachen und alle Typen", () =
   // ohne Leer- und Satzzeichen: Label "Trade Republic" passt auf "traderepublic"
   assert.match(q, /REPLACE\(LCASE\(STR\(\?label\)\), "\[\^a-z0-9\]", ""\) = "traderepublic"/);
   assert.match(q, /\?item wdt:P31\/wdt:P279\* \?type/);
-  for (const t of ["Q4830453", "Q431289", "Q7397", "Q35127", "Q620615", "Q2424752"]) {
+  for (const t of ["Q4830453", "Q431289", "Q7397", "Q620615"]) {
     assert.ok(q.includes(`wd:${t}`), t);
+  }
+  // zu weit gefasst: Bücher, Waren und Gattungsbegriffe ("wasser", "kaffee") würden als vergeben gelten
+  for (const t of ["Q35127", "Q2424752"]) {
+    assert.ok(!q.includes(`wd:${t}`), `${t} darf nicht in der Typliste stehen`);
   }
   assert.ok(wdUrl.startsWith("https://query.wikidata.org/sparql?query="));
   assert.equal(decodeURIComponent(wdUrl.split("?query=")[1]), buildWikidataQuery("spotify"));
