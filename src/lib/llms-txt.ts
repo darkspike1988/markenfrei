@@ -13,7 +13,7 @@ export function buildLlmsTxt(origin: string): string {
   return [
     "# Markenfrei",
     "",
-    "> Vorprüfung für Namen: Domains (RDAP), Paketregister, App Stores und bekannte Namen in einem Durchgang, mit Ampel und Link zu jeder Quelle. Deterministisch, ohne LLM, ohne Konto, ohne Schlüssel. Keine Markenprüfung und keine Rechtsberatung.",
+    "> Vorprüfung für Namen: Domains (RDAP), Paketregister, App Stores und bekannte Namen in einem Durchgang, mit Ampel und Link zur Quelle, wo es einen gibt. Deterministisch, ohne LLM, ohne Konto, ohne Schlüssel. Keine Markenprüfung und keine Rechtsberatung.",
     "",
     "Wichtig für die Auswertung: Grün heißt nur, dass in den gewählten Quellen nichts gefunden wurde. Es heißt nicht „als Marke frei“ und nicht „registrierbar“. `unknown` ist nie frei. Die Marke steht immer auf „nicht geprüft“; die Antwort enthält die Vorbereitung für DPMA, EUIPO und WIPO.",
     "",
