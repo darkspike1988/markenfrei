@@ -425,3 +425,12 @@ test("keine Quelle wirft, auch wenn der HttpClient wirft", async () => {
     assert.ok(r.status === "unknown" || s.id === "known_brands", s.id);
   }
 });
+
+test("known_brands: matches mit Art (identisch -> gleich), note unverändert", async () => {
+  const same = await source("known_brands").check("github", fakeCtx({}).ctx);
+  assert.deepEqual(same.matches?.[0], { label: "github", kind: "gleich" });
+  assert.match(same.note ?? "", /Identisch mit der bekannten Marke/);
+  const sound = await source("known_brands").check("clarna", fakeCtx({}).ctx);
+  assert.equal(sound.matches?.[0].kind, "klanggleich");
+  assert.ok((sound.matches?.length ?? 0) <= 5);
+});

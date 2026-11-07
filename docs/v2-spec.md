@@ -32,6 +32,11 @@ Nutzungsbedingungen respektieren, nur Einzelabfragen, die ein Nutzer auslöst (e
   - `invalid`: Der Name ist in diesem Namensraum syntaktisch nicht zulässig
   - `unknown`: keine verwertbare Antwort (Timeout, 429, 5xx, unerwartetes Format,
     Quelle deaktiviert). **Nie** als frei werten
+- Optional und additiv (`schemaVersion` bleibt 2): `SourceResult.matches` listet bis zu 5
+  Vergleichstreffer einer Ähnlichkeitsquelle (`wikidata_brands`, `known_brands`) als
+  `{ label, kind, id? }` mit `kind` = `gleich`, `klanggleich`, `schreibaehnlich` oder `enthalten`.
+  Nur ein Hinweis, kein Rechtsbefund; kein Punktwert, keine Prozentzahl. `note` und `evidence` bleiben
+  unverändert. Fehlt das Feld, gibt es keine Treffer zum Anzeigen; das ist keine Freigabe.
 - Namensräume (`Namespace`): `domains`, `packages`, `stores`, `social`, `known_names`.
 - **Marke** ist kein Namensraum mit Ampel. Sie ist immer „nicht geprüft“ und wird durch
   die Recherche-Vorbereitung ersetzt.

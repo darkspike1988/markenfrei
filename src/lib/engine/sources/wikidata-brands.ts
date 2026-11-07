@@ -1,6 +1,6 @@
 import snapshotFile from "./wikidata-brands.json";
 import { buildBrandIndex, compareWithBrands, type BrandEntry, type BrandIndex } from "@/lib/brand-similarity";
-import type { Source, SourceResult } from "@/lib/engine/types";
+import { MAX_MATCHES, type Source, type SourceMatch, type SourceResult } from "@/lib/engine/types";
 import { containsCompanies, serializeSnapshot, validateSnapshotText, type Snapshot } from "./wikidata-brands-format";
 
 /**
@@ -124,6 +124,9 @@ export function createWikidataBrandsSource(opts: WikidataBrandsOptions = {}): So
           url: r.url ?? tmviewUrl(r.hits[0].label),
           note: (r.note ?? "Ähnlicher Eintrag in Wikidata") + hint,
           evidence: r.evidence,
+          matches: r.hits.slice(0, MAX_MATCHES).map(
+            (h): SourceMatch => ({ label: h.label, kind: h.kind, ...(h.id ? { id: h.id } : {}) }),
+          ),
         });
       } catch {
         return res("unknown", { note: UNAVAILABLE });
