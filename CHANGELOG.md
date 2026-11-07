@@ -6,6 +6,7 @@ Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 
 ### Hinzugefügt
 
+- Die wöchentliche Live-Probe schreibt mit `--json` eine `probe-status.json` (je Quelle nur ok/Warnung/Fehler, ohne Notizen und Namen) und lädt sie als Artefakt hoch.
 - Erinnerung als .ics: Ein Klick lädt einen ganztägigen Kalendertermin „Name erneut prüfen“ in 30 Tagen herunter, erzeugt nur im Browser.
 - Mehr Endungen über RDAP: Alle Endungen mit RDAP-Server im IANA-Bootstrap sind wählbar (Schnappschuss `src/lib/engine/sources/rdap-tlds.json`, von Hand erneuert mit `scripts/update-rdap-tlds.ts`, nicht im Build, nicht in CI). Die Oberfläche zeigt weiter die 33 bisherigen Endungen als Chips; weitere findet man über ein Suchfeld, höchstens 8 je Prüfung.
 - Nur die bisherigen 33 Endungen sind einzeln geprüft. Bei allen anderen ergibt RDAP-404 nie „nicht gefunden“, sondern „unbekannt“ mit dem Hinweis, beim Registrar zu bestätigen; RDAP-200 gilt weiter als „vergeben“.
