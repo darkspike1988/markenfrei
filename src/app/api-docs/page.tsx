@@ -42,6 +42,7 @@ const FIELDS: [string, string][] = [
   ["reports[].counts", "Anzahl der Quellen je Status."],
   ["reports[].incomplete", "Namen der Quellen ohne verwertbare Antwort. Dort heißt „nichts gefunden“ nicht „frei“."],
   ["reports[].results[]", "Eine Zeile je Quelle: sourceId, namespace, label, target, status und, wo vorhanden, url zum Nachprüfen, note, evidence, weak (schwaches Signal, höchstens Gelb) und retryable (bei unknown: später erneut versuchen lohnt sich)."],
+  ["reports[].results[].matches", "Optional und additiv: bis zu 5 Vergleichstreffer einer Ähnlichkeitsquelle als { label, kind, id? }, kind ist gleich, klanggleich, schreibaehnlich oder enthalten. Nur ein Hinweis, kein Rechtsbefund; kein Treffer ist keine Freigabe."],
   ["reports[].trademark", "Vorbereitung der Markenrecherche: Registerlinks, DPMA-Expertensuchstring, Schreibvarianten, Klassenvorschlag, Checkliste. status ist immer not_checked: Marken werden nicht abgefragt."],
   ["reports[].manualLinks", "Links zum Nachsehen von Hand (Instagram, TikTok, X, YouTube, Chrome Web Store). Hier wird nichts abgefragt."],
 ];

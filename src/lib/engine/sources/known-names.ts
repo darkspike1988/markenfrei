@@ -1,4 +1,12 @@
-import type { CheckContext, HttpResponse, Source, SourceResult, Status } from "@/lib/engine/types";
+import {
+  MAX_MATCHES,
+  type CheckContext,
+  type HttpResponse,
+  type Source,
+  type SourceMatch,
+  type SourceResult,
+  type Status,
+} from "@/lib/engine/types";
 import { foldToAscii } from "@/lib/name";
 import { containsAtBoundary, matchKnownBrands, type BrandMatch } from "@/lib/brand-match";
 import { PROTECTED_TECH_BRANDS } from "@/lib/phonetics";
@@ -114,6 +122,9 @@ const knownBrands: Source = {
           .slice(0, 4)
           .map((m) => m.detail)
           .join("; ") + (matches.length > 4 ? `; ${matches.length - 4} weitere` : ""),
+        matches: matches.slice(0, MAX_MATCHES).map(
+          (m): SourceMatch => ({ label: m.brand, kind: m.kind === "identisch" ? "gleich" : m.kind }),
+        ),
       });
     } catch {
       return unexpected(base, "interner Fehler");

@@ -22,6 +22,16 @@ export const NAMESPACE_LABEL: Record<Namespace, string> = {
   known_names: "Bekannte Namen",
 };
 
+/** Art eines Vergleichstreffers (Ähnlichkeitsquellen). Nur ein Hinweis, kein Rechtsbefund. */
+export type MatchKind = "gleich" | "klanggleich" | "schreibaehnlich" | "enthalten";
+
+export const MATCH_KINDS = ["gleich", "klanggleich", "schreibaehnlich", "enthalten"] as const satisfies readonly MatchKind[];
+
+/** Ein Vergleichstreffer einer Ähnlichkeitsquelle (höchstens MAX_MATCHES je Quelle). */
+export type SourceMatch = { label: string; kind: MatchKind; id?: string };
+
+export const MAX_MATCHES = 5;
+
 export type SourceResult = {
   /** Stabile ID der Quelle, z. B. "npm" oder "rdap:de" */
   sourceId: string;
@@ -45,6 +55,11 @@ export type SourceResult = {
    * dem Zwischenspeicher, es werden nur diese offenen Quellen neu abgefragt.
    */
   retryable?: boolean;
+  /**
+   * Optional und additiv: die Vergleichstreffer hinter einem "similar"/"taken" einer Ähnlichkeitsquelle
+   * (höchstens 5). Nur ein Hinweis, kein Rechtsbefund; ein fehlender Treffer ist keine Freigabe.
+   */
+  matches?: SourceMatch[];
 };
 
 export type HttpRequest = {

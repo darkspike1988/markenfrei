@@ -160,3 +160,19 @@ test("defaultEnabled ist false, Registrierung vorhanden, Standardliste unveränd
   assert.deepEqual(defaults.sort(), ["gleif", "known_brands", "wikidata"]);
   assert.ok((DEFAULT_NAMESPACES as readonly string[]).includes("known_names"));
 });
+
+test("matches: höchstens 5, Art und Label, note/evidence bleiben, kein Treffer ohne matches", async () => {
+  const s = withMini();
+  const r = await run(s, "aquorinn");
+  assert.equal(r.status, "similar");
+  assert.ok(r.matches && r.matches.length >= 1 && r.matches.length <= 5);
+  for (const m of r.matches!) {
+    assert.ok(["gleich", "klanggleich", "schreibaehnlich", "enthalten"].includes(m.kind));
+    assert.ok(m.label.length > 0);
+    if ("id" in m) assert.match(m.id!, /^Q\d+$/);
+  }
+  assert.ok(r.evidence && r.note);
+  const none = await run(s, "zzzzqq");
+  assert.equal(none.status, "not_found");
+  assert.equal(none.matches, undefined);
+});
