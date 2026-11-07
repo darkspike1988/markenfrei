@@ -1,0 +1,23 @@
+{
+"quelle": "https://query.wikidata.org/sparql",
+"lizenz": "CC0 1.0, Wikidata",
+"abgerufen": "2026-11-07",
+"abfrage_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+"filter": "Fixture mit ausgedachten Marken",
+"anzahl": 14,
+"marken": [
+["aurelion","Aurelion",["Q9000001"]],
+["brausoelwerke","Brausöl Werke",["Q9000010"]],
+["brausol","Brausol",["Q9000002","Q9000011"]],
+["cafedelmar","Café del Mar",["Q9000012"]],
+["calvento","Calvento",["Q9000003"]],
+["dornfeld","Dornfeld",["Q9000004"]],
+["fendrix","Fendrix",["Q9000005","Q9000006","Q9000007"]],
+["glimmo","Glimmo",["Q9000008"]],
+["hexabrau","Hexabrau",["Q9000009"]],
+["kolibrio","Kolibrio",["Q9000013"]],
+["lunabar","Lunabar",["Q9000014"]],
+["mondrix","Mondrix",["Q9000015"]],
+["tomorin","Tomorin",["Q9000016"]],
+["zephyrix","Zephyrix",["Q9000017"]]
+]}
