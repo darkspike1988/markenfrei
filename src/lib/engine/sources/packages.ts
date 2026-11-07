@@ -395,6 +395,11 @@ export function cratesIndexPath(name: string): string {
   return `${n.slice(0, 2)}/${n.slice(2, 4)}/${n}`;
 }
 
+/** Vorübergehend gescheitert (gleiche Regel wie isTransient in check.ts, dort nicht importierbar: Zyklus). */
+function transientReply(r: HttpResponse): boolean {
+  return r.error === "timeout" || r.error === "budget" || r.error === "deadline" || r.status === 429;
+}
+
 /** Höchstens so viele Trennzeichen, damit alle Schreibweisen (2^k) einzeln abgefragt werden. */
 const CRATES_MAX_SEPARATORS = 2;
 
@@ -416,13 +421,16 @@ export function cratesVariants(name: string): string[] | null {
 }
 
 /**
- * crates.io über den Sparse-Index (index.crates.io, CDN): Die Crawler-Richtlinie von crates.io sieht
- * dafür keine Rate-Limit vor, die API (1 Anfrage pro Sekunde) wäre für Shortlists zu knapp. Hat der
- * Name zu viele Trennzeichen für alle Schreibweisen, fragt die Quelle die API ab.
+ * crates.io über den Sparse-Index (index.crates.io). Beleg: crates.io Data Access Policy
+ * (https://crates.io/data-access, Stand 7. November 2026): "No rate limits are required to use data from
+ * the sparse crate index." Die API dagegen: höchstens 1 Anfrage pro Sekunde und ein User-Agent, der die
+ * Anwendung identifiziert; das wäre für Shortlists zu knapp. Hat der Name zu viele Trennzeichen für alle
+ * Schreibweisen, fragt die Quelle die API ab. Weiterleitungen (3xx) werden nicht verfolgt und ergeben unknown.
  */
 const crates: Source = {
   ...cratesApi,
-  endpoint: "https://index.crates.io/{ab}/{cd}/{name}",
+  endpoint:
+    "https://index.crates.io/{Pfad}/{name} (Pfad: 1/, 2/, 3/{erstes Zeichen}/ oder {ab}/{cd}/; - und _ einzeln; bei mehr als zwei Bindestrichen https://crates.io/api/v1/crates/{name})",
   description: "crates.io (Rust): existiert ein Crate mit diesem Namen (Sparse-Index, - und _ gleich)?",
   async check(name: string, ctx: CheckContext): Promise<SourceResult> {
     const b = base("crates", "crates.io", name, `https://crates.io/crates/${enc(name)}`);
@@ -432,7 +440,7 @@ const crates: Source = {
       const variants = cratesVariants(name);
       if (!variants) return cratesApi.check(name, ctx);
       const replies = await Promise.all(
-        variants.map((v) => ctx.http.request(`https://index.crates.io/${cratesIndexPath(v)}`, { method: "GET", read: "none" })),
+        variants.map((v) => ctx.http.request(`https://index.crates.io/${cratesIndexPath(v)}`, { method: "GET", read: "none", redirect: "manual" })),
       );
       const hit = replies.findIndex((r) => r.status === 200 && !r.error);
       if (hit >= 0) {
@@ -448,7 +456,10 @@ const crates: Source = {
       if (replies.every((r) => r.status === 404 && !r.error)) {
         return { ...b, status: "not_found", note: CRATES_NOT_FOUND, evidence: "Index HTTP 404" };
       }
-      const bad = replies.find((r) => r.error || r.status !== 404) ?? replies[0];
+      // Unter den fehlerhaften Antworten eine vorübergehende bevorzugen, damit retryable gesetzt wird
+      const bads = replies.filter((r) => r.error || r.status !== 404);
+      const bad =
+        bads.find(transientReply) ?? bads.find((r) => r.status >= 500) ?? bads[0] ?? replies[0];
       return unknownResult(b, bad);
     } catch (err) {
       return crashResult(b, err);

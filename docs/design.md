@@ -44,7 +44,7 @@ Der Reverse-Proxy zählt keine ausgehenden Abfragen; teilen können das Abfrageb
 
 ### crates.io: Mangel bei Shortlists (behoben)
 
-Die Namen einer Shortlist liefen parallel gegen das Budget `{ 1, 1000 ms }` der crates.io-API, und die Engine wartet höchstens 1,5 Sekunden auf ein Budget (`MAX_BUDGET_WAIT_MS`). Gemessen mit gestubbten Antworten: Von 6 Namen erhielten nur 2 ein crates-Ergebnis, die anderen endeten mit `budget`. Behoben: Die Quelle `crates` fragt den Sparse-Index (`index.crates.io`, CDN) ab, für den die Crawler-Richtlinie kein Limit nennt, und prüft dabei alle Schreibweisen mit - und _ (bis zu zwei Bindestriche; darüber die API mit Budget). `tests/shortlist-crates.test.ts` sichert das ab. Für die Optionen unten bleibt relevant, dass nur noch die API-Rückfalloption (Namen mit mehr als zwei Bindestrichen) am Budget hängt.
+Die Namen einer Shortlist liefen parallel gegen das Budget `{ 1, 1000 ms }` der crates.io-API, und die Engine wartet höchstens 1,5 Sekunden auf ein Budget (`MAX_BUDGET_WAIT_MS`). Gemessen mit gestubbten Antworten: Von 6 Namen erhielten nur 2 ein crates-Ergebnis, die anderen endeten mit `budget`. Behoben: Die Quelle `crates` fragt den Sparse-Index (`index.crates.io`) ab, für den die Data Access Policy von crates.io (https://crates.io/data-access, Stand 7. November 2026) sagt: „No rate limits are required to use data from the sparse crate index“, und prüft dabei alle Schreibweisen mit - und _ (bis zu zwei Bindestriche; darüber die API mit Budget). `tests/shortlist-crates.test.ts` sichert das ab. Für die Optionen unten bleibt relevant, dass nur noch die API-Rückfalloption (Namen mit mehr als zwei Bindestrichen) am Budget hängt.
 
 ### Bedarf
 

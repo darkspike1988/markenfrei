@@ -25,9 +25,11 @@ const PER_HOST_LIMIT = 4;
  * Belege (Stand 4. November 2026):
  * - itunes.apple.com: Apple nennt "approximately 20 calls per minute" (iTunes Search API) und empfiehlt
  *   Caching. Wir nehmen 18 pro Minute.
- * - crates.io (API): Crawler-Richtlinie, höchstens 1 Anfrage pro Sekunde. Die Quelle "crates" nutzt
- *   stattdessen den Sparse-Index (index.crates.io, CDN ohne dieses Limit) und braucht die API nur
- *   für Namen mit mehr als zwei Bindestrichen.
+ * - crates.io (API): Data Access Policy (https://crates.io/data-access, Stand 7. November 2026): höchstens
+ *   1 Anfrage pro Sekunde und ein User-Agent, der die Anwendung identifiziert. Für den Sparse-Index nennt
+ *   dieselbe Seite: "No rate limits are required to use data from the sparse crate index." Die Quelle
+ *   "crates" nutzt deshalb den Sparse-Index (index.crates.io) und braucht die API nur für Namen mit mehr
+ *   als zwei Bindestrichen.
  * - hex.pm: 100 Anfragen pro Minute ohne Anmeldung. Wir nehmen 90.
  * - mastodon.social: 300 Anfragen je 5 Minuten und IP. Wir nehmen 250.
  * - huggingface.co: API-Abfragen je 5 Minuten anonym 500, mit Free-Konto 1.000 (offizielle Tabelle,
@@ -319,7 +321,7 @@ export function createHttpClient(opts: {
         res = await fetchImpl(url, {
           method: req.method ?? "GET",
           headers: { "User-Agent": opts.userAgent, ...req.headers },
-          redirect: "follow",
+          redirect: req.redirect ?? "follow",
           signal: AbortSignal.timeout(timeout),
         });
       } catch (err) {
@@ -371,7 +373,7 @@ export function createHttpClient(opts: {
 
   return {
     request(url, req = {}) {
-      const key = `${req.method ?? "GET"} ${req.read ?? "none"} ${JSON.stringify(req.headers ?? {})} ${url}`;
+      const key = `${req.method ?? "GET"} ${req.read ?? "none"} ${req.redirect ?? "follow"}${JSON.stringify(req.headers ?? {})} ${url}`;
       const existing = inflight.get(key);
       if (existing) return existing;
       const p = runWithRetry(url, req).finally(() => inflight.delete(key));
