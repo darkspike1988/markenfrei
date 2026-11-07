@@ -118,6 +118,24 @@ test.describe("Prüfer", () => {
     }
   });
 
+  test("langsames JavaScript: ein vor der Hydrierung getippter Name geht nicht verloren", async ({ page }) => {
+    test.setTimeout(30_000);
+    const calls = await stubCheckApi(page);
+    // Skripte verzögern: Die Seite ist sichtbar, aber noch nicht hydriert (Regression: Hydrierung leerte das Feld)
+    await page.route("**/_next/static/**/*.js", async (route) => {
+      await new Promise((r) => setTimeout(r, 2000));
+      await route.continue();
+    });
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    const box = page.getByRole("textbox").first();
+    await box.fill("wachwerk"); // wartet, bis das Feld bedienbar ist
+    await expect(page.getByRole("button", { name: "Prüfen", exact: true })).toBeEnabled({ timeout: 15_000 });
+    await expect(box).toHaveValue("wachwerk");
+    await page.getByRole("button", { name: "Prüfen", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Ergebnis" })).toBeVisible();
+    expect(calls).toContain("wachwerk");
+  });
+
   test("leere und zu lange Eingaben zeigen eine Fehlermeldung statt einer Anfrage", async ({ page }) => {
     const calls = await stubCheckApi(page);
     await page.goto("/");
