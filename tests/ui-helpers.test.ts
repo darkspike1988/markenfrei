@@ -24,6 +24,7 @@ test("?q=foo%20bar ergibt einen Namen mit Leerzeichen (Browser-Suche)", () => {
     defaultNamespaces: ["domains" as const],
     tlds: ["de", "com"],
     defaultTlds: ["de"],
+    featuredTlds: ["de", "com"],
     maxTlds: 10,
     maxNames: 50,
     sources: [],
