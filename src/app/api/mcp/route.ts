@@ -1,5 +1,7 @@
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { guardDetailed, isAllowedMcpOrigin, mcpRequestCost, readLimited } from "@/app/api/_lib/http";
+import { CHECK_ERRORS } from "@/app/api/_lib/check-schema";
+import { CLIENT_RATE_LIMIT } from "@/lib/rate-limit";
 import { createMarkenfreiMcpServer } from "@/mcp/server";
 
 /**
@@ -44,11 +46,13 @@ export async function POST(req: Request) {
   }
 
   const { cost, outbound } = mcpRequestCost(parsed);
+  // Mehr als das Limit pro Fenster geht nie durch: 400 statt eines 429, das nie endet.
+  if (cost > CLIENT_RATE_LIMIT) return rpcError(400, -32600, CHECK_ERRORS.exceedsLimit(CLIENT_RATE_LIMIT));
   const limited = guardDetailed(req, cost, outbound);
   if (limited.response) return limited.response;
 
   if (Array.isArray(parsed)) {
-    return rpcError(400, -32600, "Batch-Anfragen werden nicht unterstützt.");
+    return rpcError(400, -32600, "Batch-Anfragen werden nicht unterstützt.", limited.headers);
   }
 
   // Die Spezifikation verlangt beide Typen im Accept-Header. Wir antworten immer als

@@ -35,4 +35,7 @@ export const CHECK_ERRORS = {
   tooLarge: `Die Anfrage ist zu groß (höchstens ${CHECK_MAX_BODY_BYTES / 1024} KB).`,
   invalidJson: "Die Anfrage ist kein gültiges JSON.",
   failed: "Die Prüfung ist fehlgeschlagen. Bitte später erneut versuchen.",
+  /** Kosten der Anfrage übersteigen das Limit pro Fenster: Wiederholen hilft nie. */
+  exceedsLimit: (limit: number) =>
+    `Die Anfrage ist größer als das Limit von ${limit} Einheiten; wähle weniger Namen oder Quellen.`,
 } as const;

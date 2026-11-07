@@ -205,9 +205,10 @@ export default function ApiDocsPage() {
           <li>
             Rate-Limit pro IP: standardmäßig {DEFAULT_RATE_LIMIT} Einheiten pro {RATE_LIMIT_WINDOW_MS / 1000} Sekunden.
             Jeder verschiedene Name zählt eine Einheit; eine größere Quellenauswahl kostet ein Vielfaches. Danach
-            antwortet der Server mit 429 und <Mono>Retry-After</Mono>. Jede Antwort von <Mono>/api/check</Mono> und{" "}
-            <Mono>/api/mcp</Mono> nennt den Stand in <Mono>RateLimit-Limit</Mono>, <Mono>RateLimit-Remaining</Mono> und{" "}
-            <Mono>RateLimit-Reset</Mono> (Sekunden bis zum Ende des Fensters), so kann ein Client sein Tempo selbst anpassen. Betreiber einer eigenen Instanz können den Wert
+            antwortet der Server mit 429 und <Mono>Retry-After</Mono>. Antworten von <Mono>/api/check</Mono> und{" "}
+            <Mono>/api/mcp</Mono>, die das Client-Limit betreffen, nennen den Stand in <Mono>RateLimit-Limit</Mono>, <Mono>RateLimit-Remaining</Mono> und{" "}
+            <Mono>RateLimit-Reset</Mono> (Sekunden bis zum Ende des Fensters), so kann ein Client sein Tempo selbst anpassen.
+            Beim Limit pro Serverprozess und bei einem gemeinsamen Zähler für alle Nutzer fehlen sie. Betreiber einer eigenen Instanz können den Wert
             ändern. Zusätzlich gibt es ein Limit pro Serverprozess, das die abgefragten Dienste schützt.
           </li>
           <li>
