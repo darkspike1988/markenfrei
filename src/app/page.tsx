@@ -19,7 +19,7 @@ export default function Home() {
           Wo ist der Name schon vergeben?
         </h1>
         <p className="mt-4 text-base text-soft sm:text-lg">
-          Domains, Pakete, App Stores und bekannte Namen in einem Durchgang, mit Link zu jeder Quelle.
+          Domains, Pakete, App Stores und bekannte Namen in einem Durchgang, mit Link zur Quelle, wo es einen gibt.
         </p>
       </div>
       <Suspense fallback={<CheckerFallback config={config} />}>

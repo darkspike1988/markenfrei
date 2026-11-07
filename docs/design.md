@@ -2,7 +2,7 @@
 
 - **Status:** Entscheidungsvorlage, Stand 5. November 2026, beschreibt Version 2.0.0
 - **Entscheider:** Betreiber
-- **Empfehlung:** Option A (ein Prozess) gilt heute. Option A+ (A plus ausdrücklicher Hinweis in der Dokumentation) wird nach Annahme umgesetzt. Option D (Abfragebudgets teilen) ist skizziert, aber nicht beschlossen; Option B (gemeinsamer Zähler) ist zurückgestellt. Option C und E stehen in der Tabelle.
+- **Empfehlung:** Option A (ein Prozess) gilt heute. Option A+ (A plus ausdrücklicher Hinweis in der Dokumentation) ist umgesetzt (README, Kommentare, ROADMAP). Option D (Abfragebudgets teilen) ist skizziert, aber nicht beschlossen; Option B (gemeinsamer Zähler) ist zurückgestellt. Option C und E stehen in der Tabelle.
 - **Zu entscheiden:** die [offenen Fragen](#offene-fragen)
 - **Verbindlich** für die Prüfung bleibt [v2-spec.md](v2-spec.md); den Datenfluss beschreibt [src/lib/README.md](../src/lib/README.md).
 
@@ -42,9 +42,9 @@ Ist das Abfragebudget eines Dienstes ausgeschöpft, wird keine Abfrage gesendet:
 
 Der Reverse-Proxy zählt keine ausgehenden Abfragen; teilen können das Abfragebudget die Anwendung (D), ein gemeinsamer Zähler (B) oder ein ausgehender Proxy (E). Der Kommentar zu `HOST_BUDGETS` belegt Limits für Apple („ungefähr 20 pro Minute“; das Budget ist mit 18 bewusst darunter), crates.io (Crawler-Richtlinie), Hex, Mastodon, Hugging Face, Repology (1 pro Sekunde), ecosyste.ms (5.000 pro Stunde ohne E-Mail-Adresse im User-Agent) und das AUR (4000 pro Tag); für GLEIF ist die Zahl nicht offiziell bestätigt. Auch GitHub hat ein belegtes Limit (60 Abfragen pro Stunde ohne Token), das D nicht löst. Welche Folge eine Überschreitung hat (Sperre der IP, HTTP 429, Dauer), ist für die meisten Dienste nicht belegt. Für Slots belegt das Repository kein Limit eines Dienstes; ob Dienste wie Wikidata eigene Drosselung anwenden, ist nicht geprüft.
 
-### crates.io: ein Mangel schon bei einem Prozess
+### crates.io: Mangel bei Shortlists (behoben)
 
-Die Namen einer Shortlist laufen parallel gegen dasselbe Budget `{ 1, 1000 ms }` von crates.io, und die Engine wartet höchstens 1,5 Sekunden auf ein Budget (`MAX_BUDGET_WAIT_MS`). Rechnerisch aus `run()` und `takeBudget` (ein Test dafür existiert nicht) folgt: Schon bei N = 1 erhalten nur die ersten beiden Namen einer Shortlist ein crates-Ergebnis. Für weitere Namen endet die Abfrage mit `budget`, diese Namen werden nie grün. Die Weboberfläche mildert das durch automatische Wiederholung; über API und MCP bleibt es bestehen. Der Mangel besteht auch ohne D und verschärft sich durch D (siehe „Folgen“ bei Option D).
+Die Namen einer Shortlist liefen parallel gegen das Budget `{ 1, 1000 ms }` der crates.io-API, und die Engine wartet höchstens 1,5 Sekunden auf ein Budget (`MAX_BUDGET_WAIT_MS`). Gemessen mit gestubbten Antworten: Von 6 Namen erhielten nur 2 ein crates-Ergebnis, die anderen endeten mit `budget`. Behoben: Die Quelle `crates` fragt den Sparse-Index (`index.crates.io`) ab, für den die Data Access Policy von crates.io (https://crates.io/data-access, Stand 7. November 2026) sagt: „No rate limits are required to use data from the sparse crate index“, und prüft dabei alle Schreibweisen mit - und _ (bis zu zwei Bindestriche; darüber die API mit Budget). `tests/shortlist-crates.test.ts` sichert das ab. Für die Optionen unten bleibt relevant, dass nur noch die API-Rückfalloption (Namen mit mehr als zwei Bindestrichen) am Budget hängt.
 
 ### Bedarf
 

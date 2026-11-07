@@ -21,7 +21,7 @@ Du bekommst je Name:
 Coding-Agenten nutzen dieselbe Prüfung über den [MCP-Server](#mcp-server-für-agenten).
 
 Grundsätze: kein LLM im Produkt, keine Konten, kein Personen-Tracking (nur anonyme Seitenzählung ohne Cookies, ohne Namen), keine Speicherung von
-Suchanfragen, nur offene Quellen ohne Schlüssel, nur Einzelabfragen, die ein Nutzer auslöst.
+Suchanfragen, nur offene Quellen ohne Schlüssel, nur Einzelabfragen, die ein Nutzer auslöst (einzige Ausnahme: die wöchentliche Funktionsprobe `live-probe.yml` mit je einem bekannten und einem Zufallsnamen pro Quelle, ohne Nutzerdaten).
 
 ## Was geprüft wird
 
@@ -65,8 +65,9 @@ Anleitungen mit eingebettetem Prüfer: `/domain-pruefen`, `/paketname-pruefen`, 
 | `invalid` | der Name ist dort syntaktisch nicht zulässig |
 | `unknown` | keine verwertbare Antwort (Timeout, Rate-Limit, Fehler); nie als frei gewertet |
 
-- **Rot** („Vergeben“), sobald eine Quelle `taken` oder `invalid` meldet. Treffer bei
-  schwachen Signalen ergeben höchstens Gelb.
+- **Rot** („Vergeben“), sobald eine Quelle `taken` meldet. `invalid` ist bewusst nicht rot,
+  weil der Name dort nur unzulässig, aber nicht vergeben ist. Treffer bei schwachen Signalen
+  ergeben höchstens Gelb.
 - **Grün** („Keine Treffer“) nur, wenn alle angefragten Quellen `not_found` melden.
 - **Gelb** („Treffer oder Lücken prüfen“) in allen anderen Fällen.
 
@@ -148,7 +149,10 @@ einzeln fürs Rate-Limit. Details: [src/app/api/README.md](src/app/api/README.md
 - **API-Dokumentation:** Die Seite `/api-docs` beschreibt die Schnittstelle für Entwickler (curl-,
   JavaScript- und Python-Beispiele, Antwortformat, Grenzen, Fehler). `GET /api/openapi.json` liefert
   eine OpenAPI-3.1-Beschreibung, die aus denselben Konstanten und Schemas wie der Code entsteht;
-  `GET /api/health` meldet `{ "status": "ok", "version": "…" }` fürs Monitoring.
+  `GET /api/sources` listet alle Quellen-IDs, Namensräume und Endungen als JSON (die gültigen Werte
+  für `sources`, `namespaces` und `tlds`, mit Kennzeichnung der Standardauswahl). `GET /llms.txt` fasst
+  Schnittstellen und Grenzen für Sprachmodelle zusammen. `GET /api/health` meldet
+  `{ "status": "ok", "version": "…" }` fürs Monitoring.
 
 ## MCP-Server für Agenten
 
@@ -213,12 +217,14 @@ Markenfrei braucht keine API-Schlüssel. Außer den Betreiberangaben (siehe unte
 | `MARKENFREI_OPERATOR_NAME`, `MARKENFREI_OPERATOR_ADDRESS`, `MARKENFREI_OPERATOR_EMAIL`, `MARKENFREI_HOSTING_PROVIDER` | **Pflicht für den Livegang.** Betreiberangaben für Impressum (§ 5 DDG) und Datenschutzerklärung. `…_ADDRESS` mehrzeilig mit `\n`. Ohne sie zeigen `/impressum` und `/datenschutz` einen sichtbaren Hinweis. Optional: `MARKENFREI_OPERATOR_PHONE`. |
 | `MARKENFREI_SMTP_URL`, `MARKENFREI_CONTACT_TO`, `MARKENFREI_CONTACT_FROM` | **Kontaktformular** (`/kontakt`, `POST /api/contact`), der zweite schnelle Kontaktweg neben der E-Mail-Adresse im Impressum. Ohne `MARKENFREI_SMTP_URL` zeigt `/kontakt` „Das Kontaktformular ist gerade nicht verfügbar“ mit der E-Mail-Adresse des Betreibers. Format: `smtps://Benutzer:Passwort@mail.example.org:465` (TLS von Anfang an) oder `smtp://Benutzer:Passwort@mail.example.org:587` (STARTTLS Pflicht); Sonderzeichen URL-kodieren (`@` als `%40`). Unverschlüsseltes `smtp://` ist nur zu `localhost`, `127.0.0.1` und `[::1]` erlaubt, zu anderen Hosts nur auf Port 587. Das Passwort gehört zu einem **eigens dafür angelegten Postfach** (nur Versand), nicht zum Hauptpostfach. `MARKENFREI_CONTACT_TO`: Empfänger, Standard `MARKENFREI_OPERATOR_EMAIL`. `MARKENFREI_CONTACT_FROM`: Absender, Standard der SMTP-Benutzer (wenn er eine Adresse ist), sonst der Empfänger. Absender ist nie die Adresse des Besuchers (sie steht in `Reply-To`), sonst scheitern SPF und DMARC. Name, Adresse und Text werden weder gespeichert noch protokolliert (bei einem Versandfehler erscheint nur ein Fehlercode wie `EAUTH` im Log); höchstens 3 Nachrichten pro Stunde und IP, 30 pro Stunde und Prozess. Mit eingerichtetem Formular entfällt die Empfehlung „zweiter Kontaktweg“ im Impressum. |
 | `MARKENFREI_CONTACT` | Kontakt im User-Agent, z. B. `mailto:ops@example.org`. Der User-Agent lautet dann `Markenfrei/2.0 (+https://markenfrei.app; mailto:ops@example.org)`. Packagist wird nur mit einer E-Mail-Adresse abgefragt (mit oder ohne `mailto:`), sonst meldet die Quelle `unknown`. |
-| `MARKENFREI_ALLOWED_ORIGINS` | Kommagetrennte Liste zusätzlicher Origins (z. B. `https://example.org`), die `/api/mcp` aufrufen dürfen. Ohne `Origin`-Header ist der Aufruf immer erlaubt; mit Header sind sonst nur der eigene Host, `localhost` und `127.0.0.1` erlaubt. |
+| `MARKENFREI_ALLOWED_ORIGINS` | Kommagetrennte Liste zusätzlicher Origins (z. B. `https://example.org`), die `/api/mcp` aufrufen dürfen. Ohne `Origin`-Header ist der Aufruf immer erlaubt; mit Header sind sonst nur die konfigurierte öffentliche Adresse (`MARKENFREI_PUBLIC_URL`, Standard `https://markenfrei.app`), `localhost` und `127.0.0.1` erlaubt. Der `Host`-Header des Aufrufs zählt nie, denn er ist bei DNS-Rebinding immer passend. |
 | `HF_TOKEN` | Optionales Lese-Token für Hugging Face (nur für die optionale Quelle „Hugging Face“). Hebt das Limit von 500 auf 1.000 API-Abfragen je 5 Minuten (Free-Konto, Stand September 2025). Geht nur an huggingface.co. |
 | `GITHUB_TOKEN` | Token für die GitHub-Abfrage (Nutzer und Organisationen). Ohne Token gilt das Limit von 60 Anfragen pro Stunde und IP. Das Token braucht keine Berechtigungen. |
 | `MARKENFREI_TRUSTED_PROXIES` | Anzahl vertrauenswürdiger Proxys vor der App (Standard 1). `x-forwarded-for` wird von rechts gelesen, damit Clients ihre Adresse nicht fälschen können. `0` ignoriert den Header. |
-| `MARKENFREI_RATE_LIMIT` | Anfragen pro Minute und IP für alle öffentlichen Routen (Standard 60). Bei `/api/check` und `markenfrei_check_names` zählt jeder Name einzeln. Der Zähler gilt pro Serverprozess; bei mehreren Instanzen zusätzlich am Reverse-Proxy begrenzen. |
+| `MARKENFREI_RATE_LIMIT` | Anfragen pro Minute und IP für alle öffentlichen Routen (Standard 60). Bei `/api/check` und `markenfrei_check_names` zählt jeder Name einzeln. Der Zähler gilt pro Serverprozess; mehrere Prozesse hinter einer ausgehenden IP werden nicht unterstützt (siehe „Vor dem Livegang“, Punkt 4). |
 | `MARKENFREI_CACHE_TTL_SEC` | Lebensdauer des Zwischenspeichers für eindeutige Quellenantworten im Arbeitsspeicher, Standard 600 Sekunden, `0` schaltet ihn aus. `unknown` wird nie zwischengespeichert, nichts wird auf die Platte geschrieben. |
+
+`/.well-known/security.txt` (RFC 9116) wird nur ausgeliefert, wenn `MARKENFREI_OPERATOR_EMAIL` gesetzt und gültig ist; sonst antwortet die Route mit 404. Sicherheitsmeldungen gehen an die Adresse aus dem Impressum. Das Ablaufdatum wird bei jedem Abruf auf 180 Tage ab dann gesetzt.
 
 ## Vor dem Livegang
 
@@ -235,11 +241,14 @@ der Code allein reicht nicht:
    `Referrer-Policy`, `Permissions-Policy`, HSTS). HSTS wirkt nur über HTTPS.
 3. **Kontakt und Token.** `MARKENFREI_CONTACT` setzen (Wikidata verlangt Kontakt im User-Agent, Packagist
    auch) und möglichst `GITHUB_TOKEN`.
-4. **Mehrere Instanzen:** Rate-Limit und Cache gelten pro Prozess. Bei mehr als einer Instanz zusätzlich am
-   Proxy begrenzen.
-5. **Node 22 oder neuer** (CI testet mit 22).
+4. **Ein Prozess.** Rate-Limit, Cache und Abfragebudgets gelten pro Prozess. Mehrere Prozesse auf derselben
+   ausgehenden IP-Adresse werden nicht unterstützt: Sie teilen sich die Grenzen der Zieldienste und überschreiten
+   sie eher. Bei einem Neustart mit kurzer Überlappung können bis zu doppelt so viele Abfragen eintreffen, solange
+   der Zieldienst die des alten Prozesses noch zählt (höchstens eine Fensterlänge). Begründung und Optionen:
+   [docs/design.md](docs/design.md).
+5. **Node.js 20.9 oder neuer** (`engines` in `package.json`; die CI testet 20 und 22, das Docker-Image nutzt 22).
 6. **Nutzungsbedingungen der Quellen.** Die App fragt Dienste Dritter ab. Eingehalten bzw. geprüft:
-   Rate-Limits mit Abfragebudget je Dienst (Apple etwa 20 pro Minute, crates.io 1 pro Sekunde, Hex,
+   Rate-Limits mit Abfragebudget je Dienst (Apple etwa 20 pro Minute, crates.io-API 1 pro Sekunde, Hex,
    Mastodon, Repology 1 pro Sekunde, ecosyste.ms, AUR; `HOST_BUDGETS` in `src/lib/engine/http.ts`),
    identifizierbarer User-Agent (für Repology der geforderte mit Link zum Quellcode), Pfade nicht
    durch `robots.txt` gesperrt. Die Quellen docker, conda und clojars fragen den
@@ -266,8 +275,7 @@ der Code allein reicht nicht:
      **GitHub ohne Token 60 neue Namen pro Stunde** je Server-IP (mit Token 5.000). Wiederholte Namen kommen aus dem
      Zwischenspeicher (10 Minuten) und zählen nicht. Setze `GITHUB_TOKEN`, sonst ist die GitHub-Zeile nach 60 neuen
      Namen pro Stunde für alle Nutzer „unbekannt“.
-   - Mehr Instanzen auf derselben IP erhöhen diese Grenzen nicht, sie teilen sie sich und überschreiten sie
-     eher (Budgets gelten pro Prozess).
+   - Mehr Prozesse auf derselben IP erhöhen diese Grenzen nicht (Betriebsgrenze, siehe Punkt 4).
 9. **Optional:** npm-Paket veröffentlichen (`cd mcp && npm publish`), damit `npx -y markenfrei-mcp` geht.
 
 ## Entwicklung
@@ -278,6 +286,8 @@ npm run lint           # ESLint
 npm run build          # Next.js-Build
 npm run build:mcp      # MCP-Bündel nach mcp/dist/
 npm run test:mcp-package  # npm pack und Start aus dem entpackten Paket
+npm run e2e            # Playwright-Tests der Oberfläche inkl. axe (nach npm run build)
+npm run probe:live     # Live-Probe der Quellen mit echtem Netz
 ```
 
 Aufbau und Beitragsregeln: [CONTRIBUTING.md](CONTRIBUTING.md). Weitere Dokumentation:

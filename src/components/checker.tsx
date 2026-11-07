@@ -1,54 +1,21 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import Link from "next/link";
-import type { NameReport } from "@/lib/engine/check";
 import type { Namespace } from "@/lib/engine/types";
-import { NAMESPACE_LABEL } from "@/lib/engine/types";
-import { rankReports } from "@/lib/engine/verdict";
-import { EXPORT_DISCLAIMER, exportFileName, toCsv, toMarkdown } from "@/lib/export";
+import { exportFileName, toCsv, toMarkdown } from "@/lib/export";
 import { buildShortlist, MAX_TYPO_CHECK } from "@/lib/insights";
 import { trackEvent } from "@/lib/analytics";
-import {
-  buildQuery,
-  buildRequestBody,
-  groupOptional,
-  hasAnySource,
-  parseSelection,
-  selectionSummary,
-  splitNames,
-  type CheckerConfig,
-  type Selection,
-  type SourceInfo,
-} from "@/components/checker-config";
-import { Chevron } from "@/components/chevron";
-import { CopyButton } from "@/components/copy-button";
-import { MatrixView } from "@/components/matrix-view";
+import { hasAnySource, parseSelection, splitNames, type CheckerConfig, type Selection } from "@/components/checker-config";
+import { buildJsonExport, deriveRun } from "@/components/check-run";
+import { CheckerForm } from "@/components/check-form";
+import { CheckResults } from "@/components/check-results";
+import { downloadFile } from "@/components/download";
 import { IdeaFinder } from "@/components/idea-finder";
+import { reportAnchor } from "@/components/report-card";
+import { useCheckRun } from "@/components/use-check-run";
+import { usePrintExpand } from "@/components/use-print-expand";
 import { VariantPicker } from "@/components/variant-picker";
-import { QUIET_BUTTON, reportAnchor, ReportEntry, ReportError, ReportSkeleton } from "@/components/report-card";
-import { VerdictBadge } from "@/components/status-badge";
-import { shortlistCount } from "@/components/verdict-text";
-
-const CONCURRENCY = 3;
-
-/**
- * Quellen mit vorübergehendem "unknown" (Abfragelimit, Zeitüberschreitung) werden automatisch erneut
- * geprüft. Eindeutige Quellen kommen dabei aus dem Zwischenspeicher des Servers, es werden nur die
- * offenen neu abgefragt. Abstand wächst, damit ein Dienst mit Limit Luft bekommt.
- */
-const MAX_AUTO_RETRIES = 6;
-const retryDelayMs = (attempt: number) => 4000 + attempt * 2500 + Math.random() * 1500;
-
-type Waiting = { attempt: number; max: number };
-
-type Item =
-  | { state: "loading" }
-  | { state: "done"; report: NameReport; waiting?: Waiting; rechecking?: boolean }
-  | { state: "error"; message: string };
-
-type Run = { id: number; sel: Selection; items: Record<string, Item> };
 
 /** Liest den Zustand aus dem Link. Muss in einer Suspense-Grenze stehen. */
 export function CheckerFromUrl({ config }: { config: CheckerConfig }) {
@@ -62,54 +29,10 @@ export function CheckerFallback({ config }: { config: CheckerConfig }) {
   return <Checker config={config} initial={parseSelection(new URLSearchParams(), config)} inert />;
 }
 
-function Chip({
-  pressed,
-  onClick,
-  disabled,
-  children,
-  mono,
-  title,
-}: {
-  pressed: boolean;
-  onClick: () => void;
-  disabled?: boolean;
-  children: React.ReactNode;
-  mono?: boolean;
-  title?: string;
-}) {
-  return (
-    <button
-      type="button"
-      title={title}
-      aria-pressed={pressed}
-      onClick={onClick}
-      disabled={disabled}
-      className={`inline-flex min-h-8 items-center rounded-md border px-2.5 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
-        mono ? "font-mono" : ""
-      } ${
-        pressed
-          ? "border-button bg-button text-button-ink hover:bg-button-hover"
-          : "border-line-strong bg-surface text-soft hover:border-muted hover:text-ink"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-const PRINT_DATE = new Intl.DateTimeFormat("de-DE", { dateStyle: "long", timeStyle: "short" });
-
-/** Lädt Text als Datei herunter (Blob im Browser, nichts geht an den Server). */
-function downloadFile(filename: string, type: string, content: string) {
-  const blob = new Blob([content], { type });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
+/**
+ * Der Prüfer: hält die Eingaben (Text, Namensräume, Endungen, Zusatzquellen) und die Ansicht und
+ * verbindet Formular (CheckerForm), Prüflauf (useCheckRun) und Ergebnisse (CheckResults).
+ */
 export function Checker({
   config,
   initial,
@@ -119,9 +42,6 @@ export function Checker({
   initial: Selection;
   inert?: boolean;
 }) {
-  const fieldId = useId();
-  const hintId = useId();
-  const errorId = useId();
   const fieldRef = useRef<HTMLTextAreaElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -133,101 +53,19 @@ export function Checker({
   const [tlds, setTlds] = useState<string[]>(initial.tlds);
   const [extra, setExtra] = useState<string[]>(initial.extra);
   const [formError, setFormError] = useState("");
-  const [run, setRun] = useState<Run | null>(null);
-  const [view, setView] = useState<"list" | "matrix">("list");
+  const [mode, setMode] = useState<"list" | "matrix">("list");
   /** Anker, zu dem nach dem Wechsel von der Vergleichsansicht zur Liste gesprungen wird */
   const jumpTo = useRef<string | null>(null);
 
-  const runId = useRef(0);
-  const abort = useRef<AbortController | null>(null);
-  const retryAttempts = useRef(new Map<string, number>());
-  const retryTimers = useRef(new Set<ReturnType<typeof setTimeout>>());
+  const { run, start, recheck, retry } = useCheckRun(config);
+  usePrintExpand(resultsRef);
+  const view = deriveRun(run);
 
-  function clearRetries() {
-    retryTimers.current.forEach(clearTimeout);
-    retryTimers.current.clear();
-    retryAttempts.current.clear();
-  }
-
-  const optionalGroups = useMemo(() => groupOptional(config.sources), [config.sources]);
-
-  async function checkOne(name: string, sel: Selection, signal: AbortSignal, id: number) {
-    let item: Item;
-    try {
-      const res = await fetch("/api/check", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildRequestBody(name, sel, config)),
-        signal,
-      });
-      const json = (await res.json().catch(() => null)) as { error?: string; reports?: NameReport[] } | null;
-      if (!res.ok || !json?.reports?.[0]) {
-        item = { state: "error", message: json?.error ?? `Die Prüfung ist fehlgeschlagen (HTTP ${res.status}).` };
-      } else {
-        item = { state: "done", report: json.reports[0] };
-        const retryable = json.reports[0].results.some((r) => r.retryable);
-        const attempt = (retryAttempts.current.get(name) ?? 0) + 1;
-        if (retryable && attempt <= MAX_AUTO_RETRIES) {
-          retryAttempts.current.set(name, attempt);
-          item = { ...item, waiting: { attempt, max: MAX_AUTO_RETRIES } };
-          const t = setTimeout(() => {
-            retryTimers.current.delete(t);
-            if (runId.current === id && !signal.aborted) void checkOne(name, sel, signal, id);
-          }, retryDelayMs(attempt));
-          retryTimers.current.add(t);
-        } else {
-          retryAttempts.current.delete(name);
-          trackEvent(`ergebnis/${json.reports[0].verdict}`);
-        }
-      }
-    } catch {
-      if (signal.aborted) return;
-      item = { state: "error", message: "Keine Verbindung zum Server. Bitte erneut versuchen." };
-    }
-    if (runId.current !== id) return;
-    setRun((r) => (r && r.id === id ? { ...r, items: { ...r.items, [name]: item } } : r));
-  }
-
-  function start(sel: Selection, reveal = false) {
-    abort.current?.abort();
-    clearRetries();
-    const ac = new AbortController();
-    abort.current = ac;
-    const id = ++runId.current;
+  /** Startet einen Lauf; mit reveal wandern danach Fokus und Ansicht zu den Ergebnissen. */
+  function startRun(sel: Selection, reveal = false) {
+    const id = start(sel);
     revealFor.current = reveal ? id : null;
     if (reveal) trackEvent("pruefung");
-    setRun({ id, sel, items: Object.fromEntries(sel.names.map((n) => [n, { state: "loading" } as Item])) });
-
-    const qs = buildQuery(sel, config);
-    window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
-
-    const queue = [...sel.names];
-    const worker = async () => {
-      for (let n = queue.shift(); n !== undefined; n = queue.shift()) {
-        await checkOne(n, sel, ac.signal, id);
-      }
-    };
-    void Promise.all(Array.from({ length: Math.min(CONCURRENCY, queue.length) }, worker));
-  }
-
-  /** Offene Quellen eines fertigen Berichts von Hand erneut prüfen (nach den automatischen Versuchen). */
-  function recheck(name: string) {
-    if (!run || !abort.current) return;
-    const { id, sel } = run;
-    retryAttempts.current.delete(name);
-    setRun((r) => {
-      const cur = r?.items[name];
-      if (!r || r.id !== id || !cur || cur.state !== "done") return r;
-      return { ...r, items: { ...r.items, [name]: { ...cur, rechecking: true } } };
-    });
-    void checkOne(name, sel, abort.current.signal, id);
-  }
-
-  function retry(name: string) {
-    if (!run || !abort.current) return;
-    const { id, sel } = run;
-    setRun((r) => (r && r.id === id ? { ...r, items: { ...r.items, [name]: { state: "loading" } } } : r));
-    void checkOne(name, sel, abort.current.signal, id);
   }
 
   function submitNames(names: string[]) {
@@ -247,7 +85,7 @@ export function Checker({
       return;
     }
     setFormError("");
-    start(sel, true);
+    startRun(sel, true);
   }
 
   function onSubmit(e: React.FormEvent) {
@@ -262,18 +100,10 @@ export function Checker({
     if (inert || autoStarted.current) return;
     autoStarted.current = true;
     if (initial.names.length && initial.names.length <= config.maxNames && hasAnySource(initial)) {
-      queueMicrotask(() => start(initial));
+      queueMicrotask(() => startRun(initial));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  useEffect(
-    () => () => {
-      abort.current?.abort();
-      clearRetries();
-    },
-    [],
-  );
 
   // Nach „Prüfen“ (nicht beim automatischen Start über ?q=) Fokus auf die Ergebnis-Überschrift
   // setzen und den Bereich zeigen, wenn er außerhalb des sichtbaren Ausschnitts liegt.
@@ -296,40 +126,13 @@ export function Checker({
   // kann der Anker scrollen. Der Eintrag öffnet sich über das hashchange-Ereignis (siehe ReportEntry).
   useEffect(() => {
     const anchor = jumpTo.current;
-    if (view !== "list" || !anchor) return;
+    if (mode !== "list" || !anchor) return;
     jumpTo.current = null;
     if (window.location.hash === `#${anchor}`) {
       window.history.replaceState(null, "", window.location.pathname + window.location.search);
     }
     window.location.hash = anchor;
-  }, [view]);
-
-  // Drucken (Strg+P): alle Berichtszeilen aufklappen und danach den alten Zustand wiederherstellen.
-  // CSS allein kann ein geschlossenes <details> nicht in allen Browsern öffnen.
-  useEffect(() => {
-    const opened: HTMLDetailsElement[] = [];
-    const expand = () => {
-      resultsRef.current?.querySelectorAll<HTMLDetailsElement>("details[id^='bericht-']").forEach((d) => {
-        if (!d.open) {
-          d.open = true;
-          opened.push(d);
-        }
-      });
-    };
-    const restore = () => {
-      for (const d of opened.splice(0)) d.open = false;
-    };
-    const media = window.matchMedia?.("print");
-    const onMedia = (e: MediaQueryListEvent) => (e.matches ? expand() : restore());
-    window.addEventListener("beforeprint", expand);
-    window.addEventListener("afterprint", restore);
-    media?.addEventListener("change", onMedia);
-    return () => {
-      window.removeEventListener("beforeprint", expand);
-      window.removeEventListener("afterprint", restore);
-      media?.removeEventListener("change", onMedia);
-    };
-  }, []);
+  }, [mode]);
 
   function toggleNs(ns: Namespace) {
     setNamespaces((cur) => (cur.includes(ns) ? cur.filter((x) => x !== ns) : [...cur, ns]));
@@ -360,353 +163,63 @@ export function Checker({
   function exportJson() {
     if (!run) return;
     trackEvent("export/json");
-    const reports = run.sel.names
-      .map((n) => run.items[n])
-      .filter((i): i is Extract<Item, { state: "done" }> => i?.state === "done")
-      .map((i) => i.report);
-    const data = {
-      tool: "Markenfrei",
-      note: "Vorprüfung, keine Rechtsberatung. Marke nicht geprüft.",
-      exportedAt: new Date().toISOString(),
-      query: { names: run.sel.names, namespaces: run.sel.namespaces, tlds: run.sel.tlds, sources: run.sel.extra },
-      ranking: rankReports(reports),
-      reports,
-    };
+    const { data, reports } = buildJsonExport(run, new Date().toISOString());
     downloadFile(exportFileName(reports, "json"), "application/json", JSON.stringify(data, null, 2));
   }
 
   function exportCsv() {
     trackEvent("export/csv");
-    downloadFile(exportFileName(ranked, "csv"), "text/csv;charset=utf-8", toCsv(ranked));
+    downloadFile(exportFileName(view.ranked, "csv"), "text/csv;charset=utf-8", toCsv(view.ranked));
   }
 
   function exportMarkdown() {
     trackEvent("export/markdown");
-    downloadFile(exportFileName(ranked, "md"), "text/markdown;charset=utf-8", toMarkdown(ranked));
+    downloadFile(exportFileName(view.ranked, "md"), "text/markdown;charset=utf-8", toMarkdown(view.ranked));
   }
 
   function openFromMatrix(name: string) {
     jumpTo.current = reportAnchor(name);
-    setView("list");
+    setMode("list");
   }
-
-  // Abgeleitete Ergebnisdaten
-  const names = run?.sel.names ?? [];
-  const done: NameReport[] = [];
-  const seen = new Set<string>();
-  for (const n of names) {
-    const it = run?.items[n];
-    if (it?.state === "done" && !seen.has(it.report.name)) {
-      seen.add(it.report.name);
-      done.push(it.report);
-    }
-  }
-  const pending = names.filter((n) => run?.items[n]?.state === "loading");
-  const failed = names.filter((n) => run?.items[n]?.state === "error");
-  const ranking = rankReports(done);
-  /** Fertige Berichte in Rangfolge, für Vergleich und Export */
-  const byName = new Map(done.map((r) => [r.name, r]));
-  const ranked = ranking.flatMap((e) => {
-    const r = byName.get(e.name);
-    return r ? [r] : [];
-  });
-  const showMatrix = view === "matrix" && ranked.length > 1;
-  const latestCheck = done.reduce((latest, r) => (r.checkedAt > latest ? r.checkedAt : latest), "");
-  const finished = run !== null && pending.length === 0;
-  const domainsOn = namespaces.includes("domains");
-  /** Beim Einhängen offen: bei mehreren Namen der erste mit Treffer oder Lücke (Rangfolge), sonst nichts */
-  const firstOpen = ranking.find((e) => e.verdict !== "green")?.name;
 
   return (
     <div className="space-y-8">
-      <form onSubmit={onSubmit} noValidate aria-label="Namen prüfen" className="space-y-4">
-        <div>
-          <label htmlFor={fieldId} className="mb-2 block text-sm font-medium text-ink">
-            Name oder Shortlist
-          </label>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
-            <textarea
-              id={fieldId}
-              ref={fieldRef}
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-                  e.preventDefault();
-                  e.currentTarget.form?.requestSubmit();
-                }
-              }}
-              rows={1}
-              spellCheck={false}
-              autoCapitalize="none"
-              autoComplete="off"
-              placeholder="z. B. wachwerk oder wachwerk, schichtflux, planzeit"
-              aria-describedby={`${hintId}${formError ? ` ${errorId}` : ""}`}
-              aria-invalid={formError ? true : undefined}
-              className="auto-grow w-full flex-1 resize-none rounded-lg border border-line-strong bg-surface px-3.5 py-3 font-mono text-base text-ink placeholder:font-sans placeholder:text-muted hover:border-muted"
-            />
-            <button
-              type="submit"
-              disabled={inert}
-              className="inline-flex min-h-12 shrink-0 items-center justify-center rounded-lg bg-button px-6 font-medium text-button-ink transition-colors hover:bg-button-hover active:scale-[0.98] disabled:opacity-60"
-            >
-              Prüfen
-            </button>
-          </div>
-          <p id={hintId} className="mt-2 text-sm text-muted">
-            Bis zu {config.maxNames} Namen, mit Komma getrennt
-          </p>
-          {formError && (
-            <p id={errorId} role="alert" className="mt-2 text-sm font-medium text-bad">
-              {formError}
-            </p>
-          )}
-        </div>
+      <CheckerForm
+        config={config}
+        inert={inert}
+        text={text}
+        onTextChange={setText}
+        fieldRef={fieldRef}
+        formError={formError}
+        namespaces={namespaces}
+        tlds={tlds}
+        extra={extra}
+        onSubmit={onSubmit}
+        onToggleNs={toggleNs}
+        onToggleTld={toggleTld}
+        onToggleExtra={toggleExtra}
+      />
 
-        <details>
-          <summary className="flex min-h-8 items-center justify-between gap-3 text-sm">
-            <span className="min-w-0 text-muted">{selectionSummary({ namespaces, tlds, extra }, config)}</span>
-            <span className="inline-flex shrink-0 items-center gap-1 text-soft underline hover:text-ink">
-              Anpassen
-              <Chevron />
-            </span>
-          </summary>
-
-          <div className="mt-3 space-y-5 border-t border-line pt-4">
-            <fieldset>
-              <legend className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">Namensräume</legend>
-              <div className="flex flex-wrap gap-1.5">
-                {config.namespaces.map((n) => (
-                  <Chip key={n.id} pressed={namespaces.includes(n.id)} onClick={() => toggleNs(n.id)}>
-                    {n.label}
-                  </Chip>
-                ))}
-              </div>
-            </fieldset>
-
-            <fieldset disabled={!domainsOn} className="disabled:opacity-60">
-              <legend className="mb-2 flex w-full flex-wrap items-baseline justify-between gap-x-3 text-xs font-medium uppercase tracking-wide text-muted">
-                <span>Endungen</span>
-                <span className="font-normal normal-case tracking-normal">
-                  {domainsOn ? `${tlds.length} von höchstens ${config.maxTlds}` : "Domains abgewählt"}
-                </span>
-              </legend>
-              <div className="flex flex-wrap gap-1.5">
-                {tlds.map((t) => (
-                  <Chip key={t} pressed onClick={() => toggleTld(t)} mono>
-                    .{t}
-                    <span className="sr-only"> (abwählen)</span>
-                  </Chip>
-                ))}
-              </div>
-              <details className="mt-2">
-                <summary className="inline-flex min-h-8 items-center gap-1.5 text-sm text-soft hover:text-ink">
-                  <span aria-hidden className="toggle-sign" />
-                  Alle {config.tlds.length} Endungen
-                </summary>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {config.tlds.map((t) => (
-                    <Chip
-                      key={t}
-                      mono
-                      pressed={tlds.includes(t)}
-                      disabled={!tlds.includes(t) && tlds.length >= config.maxTlds}
-                      onClick={() => toggleTld(t)}
-                    >
-                      .{t}
-                    </Chip>
-                  ))}
-                </div>
-              </details>
-            </fieldset>
-
-            {optionalGroups.length > 0 && (
-              <fieldset>
-                <legend className="mb-1 flex w-full flex-wrap items-baseline justify-between gap-x-3 text-xs font-medium uppercase tracking-wide text-muted">
-                  <span>Weitere Quellen</span>
-                  <span className="font-normal normal-case tracking-normal">
-                    {extra.length > 0 ? `${extra.length} gewählt` : "keine gewählt"}
-                  </span>
-                </legend>
-                <div className="divide-y divide-line border-y border-line">
-                  {optionalGroups.map((g) => (
-                    <ExtraGroup key={g.ns} ns={g.ns} list={g.list} extra={extra} onToggle={toggleExtra} />
-                  ))}
-                </div>
-                <p className="mt-2 text-[13px] text-muted">
-                  Was jede Quelle prüft, steht unter{" "}
-                  <Link href="/quellen" className="underline hover:text-ink">
-                    Quellen
-                  </Link>
-                  .
-                </p>
-              </fieldset>
-            )}
-          </div>
-        </details>
-      </form>
-
-      <div ref={resultsRef} className="scroll-mt-6 space-y-3">
-        <p className="sr-only" aria-live="polite">
-          {run
-            ? finished
-              ? `${done.length} von ${names.length} Namen geprüft.`
-              : `Prüfe ${names.length === 1 ? "einen Namen" : `${names.length} Namen`} …`
-            : ""}
-        </p>
-
-        {run && (
-          <>
-            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-              <div className="flex flex-wrap items-baseline gap-x-3">
-                <h2 ref={headingRef} tabIndex={-1} className="font-serif text-2xl tracking-tight text-ink outline-none">
-                  {names.length === 1 ? "Ergebnis" : "Ergebnisse"}
-                </h2>
-                {names.length > 1 && <p className="text-sm text-muted">{shortlistCount(ranking, pending.length)}</p>}
-              </div>
-              {done.length > 0 && (
-                <div className="flex flex-wrap gap-x-4 print:hidden">
-                  <CopyButton text={() => window.location.href} label="Link kopieren" />
-                  <button type="button" onClick={exportJson} className={QUIET_BUTTON}>
-                    JSON exportieren
-                  </button>
-                  <button type="button" onClick={exportCsv} className={QUIET_BUTTON}>
-                    Als CSV
-                  </button>
-                  <button type="button" onClick={exportMarkdown} className={QUIET_BUTTON}>
-                    Als Markdown
-                  </button>
-                  <button type="button" onClick={() => window.print()} className={QUIET_BUTTON}>
-                    Drucken
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {ranked.length > 1 && (
-              <div role="group" aria-label="Ansicht" className="flex gap-1.5 print:hidden">
-                <Chip pressed={!showMatrix} onClick={() => setView("list")}>
-                  Liste
-                </Chip>
-                <Chip pressed={showMatrix} onClick={() => setView("matrix")}>
-                  Vergleich
-                </Chip>
-              </div>
-            )}
-
-            {showMatrix && (
-              <div className="print:hidden">
-                <MatrixView reports={ranked} pending={pending.length + failed.length} onOpen={openFromMatrix} />
-              </div>
-            )}
-
-            <div className={`divide-y divide-line border-y border-line ${showMatrix ? "hidden print:block" : ""}`}>
-              {ranking.map((e) => {
-                const key = names.find((n) => {
-                  const it = run.items[n];
-                  return it?.state === "done" && it.report.name === e.name;
-                });
-                const it = key === undefined ? undefined : run.items[key];
-                if (key === undefined || it?.state !== "done") return null;
-                return (
-                  <ReportEntry
-                    key={e.name}
-                    report={it.report}
-                    defaultOpen={names.length === 1 || firstOpen === e.name}
-                    settled={finished}
-                    waiting={it.waiting}
-                    rechecking={it.rechecking}
-                    onRecheck={() => recheck(key)}
-                    onCheckVariants={checkTypoVariants}
-                  />
-                );
-              })}
-              {pending.map((n) => (
-                <ReportSkeleton key={`p-${n}`} name={n} />
-              ))}
-              {failed.map((n) => {
-                const it = run.items[n];
-                return (
-                  <ReportError
-                    key={`f-${n}`}
-                    name={n}
-                    message={it?.state === "error" ? it.message : ""}
-                    onRetry={() => retry(n)}
-                  />
-                );
-              })}
-            </div>
-
-            <Legend />
-
-            {done.length > 0 && (
-              <p className="print-footer">
-                Geprüft am {PRINT_DATE.format(new Date(latestCheck))} · markenfrei.app · {EXPORT_DISCLAIMER}
-              </p>
-            )}
-          </>
-        )}
-      </div>
+      <CheckResults
+        run={run}
+        view={view}
+        mode={mode}
+        onViewChange={setMode}
+        resultsRef={resultsRef}
+        headingRef={headingRef}
+        exportJson={exportJson}
+        exportCsv={exportCsv}
+        exportMarkdown={exportMarkdown}
+        openFromMatrix={openFromMatrix}
+        recheck={recheck}
+        retry={retry}
+        checkTypoVariants={checkTypoVariants}
+      />
 
       <div className="space-y-2 print:hidden">
         <IdeaFinder max={config.maxNames} onUse={applyIdeas} />
         <VariantPicker text={text} max={config.maxNames} onUse={applyIdeas} />
       </div>
     </div>
-  );
-}
-
-/** Zusatzquellen eines Namensraums als einzeilige Chip-Reihe, eingeklappt mit Zähler („Pakete +14“). */
-function ExtraGroup({
-  ns,
-  list,
-  extra,
-  onToggle,
-}: {
-  ns: Namespace;
-  list: SourceInfo[];
-  extra: string[];
-  onToggle: (id: string) => void;
-}) {
-  const chosen = list.filter((s) => extra.includes(s.id)).length;
-  const [open, setOpen] = useState(chosen > 0);
-  return (
-    <details open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
-      <summary className="flex min-h-9 items-center justify-between gap-3 text-sm">
-        <span>
-          <span className="font-medium text-ink">{NAMESPACE_LABEL[ns]}</span>{" "}
-          <span className="text-muted">+{list.length}</span>
-          {chosen > 0 && <span className="text-muted"> · {chosen} gewählt</span>}
-        </span>
-        <Chevron className="text-muted" />
-      </summary>
-      <div className="flex flex-wrap gap-1.5 pb-3 pt-1">
-        {list.map((s) => (
-          <Chip key={s.id} pressed={extra.includes(s.id)} onClick={() => onToggle(s.id)} title={s.description}>
-            {s.label}
-          </Chip>
-        ))}
-      </div>
-    </details>
-  );
-}
-
-/** Eine Zeile Ampel-Legende, erst sichtbar, wenn Ergebnisse da sind. Die ausführliche Erklärung steht unter Quellen. */
-function Legend() {
-  return (
-    <p className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-1 text-sm text-muted">
-      <span className="inline-flex items-center gap-2">
-        <VerdictBadge verdict="green" size="sm" /> alle Quellen ohne Fund
-      </span>
-      <span className="inline-flex items-center gap-2">
-        <VerdictBadge verdict="yellow" size="sm" /> ähnlich, unzulässig oder offen
-      </span>
-      <span className="inline-flex items-center gap-2">
-        <VerdictBadge verdict="red" size="sm" /> mindestens eine Quelle
-      </span>
-      <Link href="/quellen#ampel" className="underline hover:text-ink">
-        Mehr zur Ampel
-      </Link>
-    </p>
   );
 }

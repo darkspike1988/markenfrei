@@ -56,7 +56,7 @@ flowchart TD
 | `app/mcp/page.tsx` | Statische Seite zur Einrichtung des MCP-Servers (Claude Code, Claude Desktop, Cursor). |
 | `app/layout.tsx`, `app/globals.css` | Rahmen (`lang="de"`, Sprunglink, Kopf- und Fußzeile) und Farbvariablen für hell und dunkel über `prefers-color-scheme`. |
 | `app/api/` | Routen, siehe [app/api/README.md](app/api/README.md). |
-| `components/` | `checker.tsx` (Eingabe, Zustand im Link, höchstens 3 Anfragen gleichzeitig), `checker-config.ts` (Auswahl und Link-Zustand), `report-card.tsx`, `status-badge.tsx`, `trademark-block.tsx`, `shortlist-ranking.tsx`, `idea-finder.tsx`, `copy-button.tsx`, `site-header.tsx`, `site-footer.tsx`. |
+| `components/` | `checker.tsx` (hält die Eingaben und die Ansicht, verbindet die Teile unten), `check-form.tsx` (Formular und Auswahl), `use-check-run.ts` (Prüflauf: höchstens 3 Anfragen gleichzeitig, automatische Wiederholung bei Lücken, Abbruch), `check-run.ts` (Lauf-Typen, `deriveRun` und JSON-Export als reine Funktionen, getestet in `tests/check-run.test.ts`), `check-results.tsx` (Ergebnisbereich), `use-print-expand.ts` (Berichtszeilen vor dem Druck aufklappen), `chip.tsx`, `download.ts`, `checker-config.ts` (Auswahl und Link-Zustand), `report-card.tsx`, `status-badge.tsx`, `trademark-block.tsx`, `shortlist-ranking.tsx`, `idea-finder.tsx`, `copy-button.tsx`, `site-header.tsx`, `site-footer.tsx`. |
 | `lib/` | Engine und Hilfsmodule, siehe [lib/README.md](lib/README.md). |
 | `mcp/` | `server.ts` mit `createMarkenfreiMcpServer` und den Tools `markenfrei_check_name`, `markenfrei_check_names`, `markenfrei_trademark_prep`, `markenfrei_suggest_names`; `cli.ts` startet ihn über stdio. Das veröffentlichbare Paket baut `mcp/build.mjs` im Repo-Wurzelordner. |
 

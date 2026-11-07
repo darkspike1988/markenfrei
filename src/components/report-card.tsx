@@ -112,6 +112,7 @@ export function ReportEntry({
   settled,
   waiting,
   rechecking,
+  retryError,
   onRecheck,
   onCheckVariants,
 }: {
@@ -123,6 +124,8 @@ export function ReportEntry({
   /** Gesetzt, solange die Oberfläche offene Quellen automatisch erneut prüft */
   waiting?: { attempt: number; max: number };
   rechecking?: boolean;
+  /** Die letzte Wiederholung ist gescheitert; der angezeigte Bericht stammt noch von der früheren Prüfung */
+  retryError?: string;
   onRecheck?: () => void;
   /** „Tippfehler-Varianten prüfen“: Original plus gewählte Varianten als Shortlist */
   onCheckVariants?: (original: string, variants: string[]) => void;
@@ -172,15 +175,22 @@ export function ReportEntry({
         </span>
         <span className="order-4 min-w-0 basis-full text-sm text-muted sm:order-3 sm:basis-0 sm:flex-1 sm:truncate" title={reason}>
           {reason}
+          {retryError && <span className="text-warn"> · Stand {DATE.format(checkedAt)}, Neuprüfung fehlgeschlagen</span>}
         </span>
         <Chevron className="order-3 ml-auto text-muted sm:order-4" />
       </summary>
 
       <div className="space-y-4 pb-5">
-        {(report.input.trim().toLowerCase() !== report.name || report.incomplete.length > 0 || waiting) && (
+        {(report.input.trim().toLowerCase() !== report.name || report.incomplete.length > 0 || waiting || retryError) && (
           <div className="space-y-1.5 text-sm">
             {report.input.trim().toLowerCase() !== report.name && (
               <p className="text-muted">Eingabe „{report.input.trim()}“ geprüft als {report.name}.</p>
+            )}
+            {retryError && (
+              <p role="status" className="text-warn">
+                Erneute Prüfung fehlgeschlagen: {retryError} Angezeigt wird das Ergebnis vom{" "}
+                <time dateTime={report.checkedAt}>{DATE.format(checkedAt)}</time>.
+              </p>
             )}
             {report.incomplete.length > 0 && (
               <p className="text-warn">

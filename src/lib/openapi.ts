@@ -15,6 +15,7 @@ import { computeVerdict, countStatuses, rankReports, STATUS_LABEL, VERDICT_LABEL
 import { DEFAULT_CACHE_TTL_MS } from "@/lib/cache";
 import { DEFAULT_RATE_LIMIT, RATE_LIMIT_WINDOW_MS, rateLimitMessage } from "@/lib/rate-limit";
 import { DEFAULT_PUBLIC_URL } from "@/lib/site";
+import { buildSourcesCatalog, SourcesCatalogSchema, SOURCES_MAX_AGE_SECONDS } from "@/lib/sources-catalog";
 import { APP_VERSION } from "@/lib/version";
 
 /**
@@ -208,6 +209,7 @@ function schemas(): JsonObject {
       },
       required: ["jsonrpc"],
     },
+    SourcesCatalog: jsonSchema(SourcesCatalogSchema, "output"),
     Health: {
       type: "object",
       properties: {
@@ -234,6 +236,25 @@ function errorResponse(description: string, message: string, headers?: JsonObjec
 
 const NO_STORE_HEADER = {
   "Cache-Control": { description: "Immer no-store: Antworten werden nicht zwischengespeichert.", schema: { type: "string", const: "no-store" } },
+};
+
+/**
+ * RateLimit-Header der Antworten von /api/check und /api/mcp, die das Client-Limit betreffen
+ * (Einzelheader früherer Fassungen von draft-ietf-httpapi-ratelimit-headers). Fehlen bei
+ * gemeinsamem Zählschlüssel (siehe rate-limit.ts) und beim 429 des Prozesslimits.
+ */
+const RATE_LIMIT_HEADERS = {
+  "RateLimit-Limit": { description: "Einheiten pro Fenster für diesen Client.", schema: { type: "integer", minimum: 1 } },
+  "RateLimit-Remaining": {
+    description: "Noch freie Einheiten im aktuellen Fenster, nach dieser Anfrage. Jeder verschiedene Name kostet mindestens eine Einheit.",
+    schema: { type: "integer", minimum: 0 },
+  },
+  "RateLimit-Reset": { description: "Sekunden bis zum Ende des Fensters.", schema: { type: "integer", minimum: 1 } },
+};
+
+const RETRY_AFTER_HEADERS = {
+  "Retry-After": { description: "Sekunden bis zum Ende des Fensters.", schema: { type: "integer", minimum: 1 } },
+  ...RATE_LIMIT_HEADERS,
 };
 
 function checkOperation(): JsonObject {
@@ -266,11 +287,11 @@ function checkOperation(): JsonObject {
     responses: {
       "200": {
         description: "Berichte und Rangliste.",
-        headers: NO_STORE_HEADER,
+        headers: { ...NO_STORE_HEADER, ...RATE_LIMIT_HEADERS },
         content: { "application/json": { schema: ref("CheckResponse") } },
       },
       "400": errorResponse(
-        "Ungültige Anfrage: kaputtes JSON, falsche Typen, keine oder zu viele Namen, ungültiger Name, unbekannte Endung, Quelle oder Namensraum. Die Meldung nennt den Grund.",
+        "Ungültige Anfrage: kaputtes JSON, falsche Typen, keine oder zu viele Namen, ungültiger Name, unbekannte Endung, Quelle oder Namensraum, oder die Kosten der Anfrage übersteigen das Limit pro Fenster (dann hilft kein Wiederholen; weniger Namen oder Quellen wählen). Die Meldung nennt den Grund. Nach der Rate-Limit-Prüfung erzeugte Fehler tragen die RateLimit-Header.",
         `Höchstens ${MAX_NAMES} Namen pro Anfrage.`,
         NO_STORE_HEADER,
       ),
@@ -280,7 +301,7 @@ function checkOperation(): JsonObject {
       "429": errorResponse(
         "Rate-Limit erreicht. Retry-After nennt die Sekunden bis zum nächsten Fenster.",
         rateLimitMessage(12),
-        { "Retry-After": { description: "Sekunden bis zum Ende des Fensters.", schema: { type: "integer", minimum: 1 } } },
+        RETRY_AFTER_HEADERS,
       ),
       "500": errorResponse("Unerwarteter Fehler (allgemeine Meldung, keine Details).", CHECK_ERRORS.failed, NO_STORE_HEADER),
     },
@@ -315,9 +336,9 @@ function mcpOperation(serverUrl: string): JsonObject {
       },
     },
     responses: {
-      "200": { description: "JSON-RPC-Antwort.", content: { "application/json": { schema: ref("JsonRpcResponse") } } },
+      "200": { description: "JSON-RPC-Antwort.", headers: RATE_LIMIT_HEADERS, content: { "application/json": { schema: ref("JsonRpcResponse") } } },
       "400": {
-        description: "Batch-Anfrage oder nicht lesbarer Body (JSON-RPC-Fehler -32600).",
+        description: "Batch-Anfrage, nicht lesbarer Body oder Kosten über dem Limit pro Fenster (JSON-RPC-Fehler -32600).",
         content: { "application/json": { schema: ref("JsonRpcResponse"), example: rpcExample(-32600, "Batch-Anfragen werden nicht unterstützt.") } },
       },
       "403": {
@@ -331,7 +352,7 @@ function mcpOperation(serverUrl: string): JsonObject {
       "429": errorResponse(
         "Rate-Limit erreicht.",
         rateLimitMessage(12),
-        { "Retry-After": { description: "Sekunden bis zum Ende des Fensters.", schema: { type: "integer", minimum: 1 } } },
+        RETRY_AFTER_HEADERS,
       ),
     },
   };
@@ -348,6 +369,25 @@ function healthOperation(): JsonObject {
         description: "Der Prozess läuft.",
         headers: NO_STORE_HEADER,
         content: { "application/json": { schema: ref("Health"), example: { status: "ok", version: APP_VERSION } } },
+      },
+    },
+  };
+}
+
+function sourcesOperation(): JsonObject {
+  return {
+    operationId: "listSources",
+    tags: ["Prüfung"],
+    summary: "Quellen, Namensräume und Endungen auflisten",
+    description:
+      "Die gültigen Werte für `sources`, `namespaces` und `tlds` von POST /api/check, dazu welche zur Standardprüfung gehören. Keine Abfragen bei Dritten, kein Rate-Limit. Achtung: `sources` ersetzt die Standardquellen außerhalb von Domains; wer Zusatzquellen will, schickt die Quellen mit `default: true` mit.",
+    responses: {
+      "200": {
+        description: "Der Katalog.",
+        headers: {
+          "Cache-Control": { description: `Eine Stunde zwischenspeicherbar.`, schema: { type: "string", const: `public, max-age=${SOURCES_MAX_AGE_SECONDS}` } },
+        },
+        content: { "application/json": { schema: ref("SourcesCatalog"), example: buildSourcesCatalog() } },
       },
     },
   };
@@ -382,6 +422,7 @@ export function buildOpenApiDocument(serverUrl: string = DEFAULT_PUBLIC_URL): Js
     externalDocs: { description: "API für Entwickler", url: `${base}/api-docs` },
     paths: {
       "/api/check": { post: checkOperation() },
+      "/api/sources": { get: sourcesOperation() },
       "/api/mcp": { post: mcpOperation(base) },
       "/api/health": { get: healthOperation() },
     },

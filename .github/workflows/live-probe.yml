@@ -1,0 +1,33 @@
+name: Live-Probe der Quellen
+
+# Fragt jede Quelle mit einem bekannten vergebenen und einem Zufallsnamen ab (scripts/live-probe.ts).
+# Schlägt fehl, wenn ein Dienst Endpunkt oder Format ändert und die Quelle still "unbekannt" liefern würde.
+# Bewusst nicht Teil der normalen CI: sie hängt vom Netz und von Diensten Dritter ab.
+
+on:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Live-Probe
+        env:
+          MARKENFREI_CONTACT: ${{ vars.MARKENFREI_CONTACT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # shell: bash setzt -eo pipefail. Ohne das gilt nur der Exit-Code von tee (immer 0),
+        # und ein Fehler der Probe (Exit-Code 1) ließe den Lauf nie scheitern.
+        shell: bash
+        run: npm run probe:live | tee -a "$GITHUB_STEP_SUMMARY"

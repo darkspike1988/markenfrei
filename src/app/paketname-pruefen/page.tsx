@@ -23,7 +23,7 @@ function joinDe(items: string[]): string {
 const FAQ: FaqItem[] = [
   {
     q: "Reicht es, wenn npm oder PyPI den Namen nicht kennt?",
-    a: "Nein. „Kein Paket gefunden“ heißt nur, dass das Register den Namen nicht führt. npm kann ähnliche Namen trotzdem ablehnen, PyPI kann gesperrte oder ähnliche Namen ablehnen, und crates.io behandelt - und _ gleich und sperrt manche Namen.",
+    a: "Nein. „Kein Paket gefunden“ heißt nur, dass das Register den Namen nicht führt. npm kann ähnliche Namen trotzdem ablehnen, PyPI kann gesperrte oder ähnliche Namen ablehnen, und crates.io behandelt - und _ gleich und sperrt manche Namen. Markenfrei fragt deshalb alle Schreibweisen ab (bis zu zwei Bindestriche).",
   },
   {
     q: "Welche Register prüft Markenfrei standardmäßig?",

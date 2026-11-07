@@ -1,6 +1,6 @@
 import { MAX_NAMES, resolveSources, type CheckOptions } from "@/lib/engine/check";
 import { normalizeName } from "@/lib/name";
-import { createRateLimiter, guardRequest, limitedResponse, type RateLimiter } from "@/lib/rate-limit";
+import { createRateLimiter, guardRequestDetailed, limitedResponse, type GuardOutcome, type RateLimiter } from "@/lib/rate-limit";
 import { DEFAULT_PUBLIC_URL } from "@/lib/site";
 
 /**
@@ -197,5 +197,16 @@ const processGuard = createProcessGuard(
  * Liefert eine 429-Antwort oder null.
  */
 export function guard(req: Request, cost: number, outbound = true): Response | null {
-  return guardRequest(req, cost) ?? (outbound ? processGuard(cost) : null);
+  return guardDetailed(req, cost, outbound).response;
+}
+
+/**
+ * Wie guard, liefert aber auch die RateLimit-Header des Clients (RateLimit-Limit, -Remaining, -Reset),
+ * die bei Erfolg an die Antwort gehören. Das Prozesslimit bleibt intern; es meldet nur 429.
+ */
+export function guardDetailed(req: Request, cost: number, outbound = true): GuardOutcome {
+  const client = guardRequestDetailed(req, cost);
+  if (client.response) return client;
+  const process = outbound ? processGuard(cost) : null;
+  return process ? { response: process, headers: client.headers } : client;
 }

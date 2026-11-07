@@ -374,7 +374,7 @@ const github: Source = {
 // ---------------------------------------------------------------------------
 // crates.io
 
-const crates = statusSource({
+const cratesApi = statusSource({
   id: "crates",
   label: "crates.io",
   defaultEnabled: true,
@@ -385,6 +385,87 @@ const crates = statusSource({
   validate: cratesProblem,
   notFound: "kein Crate mit diesem Namen; crates.io behandelt - und _ gleich und sperrt manche Namen",
 });
+
+/** Pfad einer Datei im Sparse-Index von crates.io (https://doc.rust-lang.org/cargo/reference/registry-index.html). */
+export function cratesIndexPath(name: string): string {
+  const n = name.toLowerCase();
+  if (n.length === 1) return `1/${n}`;
+  if (n.length === 2) return `2/${n}`;
+  if (n.length === 3) return `3/${n[0]}/${n}`;
+  return `${n.slice(0, 2)}/${n.slice(2, 4)}/${n}`;
+}
+
+/** Vorübergehend gescheitert (gleiche Regel wie isTransient in check.ts, dort nicht importierbar: Zyklus). */
+function transientReply(r: HttpResponse): boolean {
+  return r.error === "timeout" || r.error === "budget" || r.error === "deadline" || r.status === 429;
+}
+
+/** Höchstens so viele Trennzeichen, damit alle Schreibweisen (2^k) einzeln abgefragt werden. */
+const CRATES_MAX_SEPARATORS = 2;
+
+const CRATES_NOT_FOUND = "kein Crate mit diesem Namen (auch nicht mit _ statt -); crates.io sperrt manche Namen trotzdem";
+
+/**
+ * Alle Schreibweisen, die crates.io als denselben Namen behandelt (- und _ gleich), oder null, wenn
+ * es zu viele wären. Der Index kennt nur die Schreibweise, mit der das Crate veröffentlicht wurde.
+ */
+export function cratesVariants(name: string): string[] | null {
+  const parts = name.split("-");
+  const k = parts.length - 1;
+  if (k > CRATES_MAX_SEPARATORS) return null;
+  const out: string[] = [];
+  for (let mask = 0; mask < 1 << k; mask++) {
+    out.push(parts.reduce((acc, part, i) => acc + (i === 0 ? "" : mask & (1 << (i - 1)) ? "_" : "-") + part, ""));
+  }
+  return out;
+}
+
+/**
+ * crates.io über den Sparse-Index (index.crates.io). Beleg: crates.io Data Access Policy
+ * (https://crates.io/data-access, Stand 7. November 2026): "No rate limits are required to use data from
+ * the sparse crate index." Die API dagegen: höchstens 1 Anfrage pro Sekunde und ein User-Agent, der die
+ * Anwendung identifiziert; das wäre für Shortlists zu knapp. Hat der Name zu viele Trennzeichen für alle
+ * Schreibweisen, fragt die Quelle die API ab. Weiterleitungen (3xx) werden nicht verfolgt und ergeben unknown.
+ */
+const crates: Source = {
+  ...cratesApi,
+  endpoint:
+    "https://index.crates.io/{Pfad}/{name} (Pfad: 1/, 2/, 3/{erstes Zeichen}/ oder {ab}/{cd}/; - und _ einzeln; bei mehr als zwei Bindestrichen https://crates.io/api/v1/crates/{name})",
+  description: "crates.io (Rust): existiert ein Crate mit diesem Namen (Sparse-Index, - und _ gleich)?",
+  async check(name: string, ctx: CheckContext): Promise<SourceResult> {
+    const b = base("crates", "crates.io", name, `https://crates.io/crates/${enc(name)}`);
+    try {
+      const problem = cratesProblem(name);
+      if (problem) return invalidResult(b, problem);
+      const variants = cratesVariants(name);
+      if (!variants) return cratesApi.check(name, ctx);
+      const replies = await Promise.all(
+        variants.map((v) => ctx.http.request(`https://index.crates.io/${cratesIndexPath(v)}`, { method: "GET", read: "none", redirect: "manual" })),
+      );
+      const hit = replies.findIndex((r) => r.status === 200 && !r.error);
+      if (hit >= 0) {
+        const found = variants[hit];
+        return {
+          ...b,
+          url: `https://crates.io/crates/${enc(found)}`,
+          status: "taken",
+          evidence: "Index HTTP 200",
+          ...(found !== name ? { note: `Crate „${found}“; crates.io behandelt - und _ gleich` } : {}),
+        };
+      }
+      if (replies.every((r) => r.status === 404 && !r.error)) {
+        return { ...b, status: "not_found", note: CRATES_NOT_FOUND, evidence: "Index HTTP 404" };
+      }
+      // Unter den fehlerhaften Antworten eine vorübergehende bevorzugen, damit retryable gesetzt wird
+      const bads = replies.filter((r) => r.error || r.status !== 404);
+      const bad =
+        bads.find(transientReply) ?? bads.find((r) => r.status >= 500) ?? bads[0] ?? replies[0];
+      return unknownResult(b, bad);
+    } catch (err) {
+      return crashResult(b, err);
+    }
+  },
+};
 
 // ---------------------------------------------------------------------------
 // Homebrew (Formula UND Cask)

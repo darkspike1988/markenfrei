@@ -91,7 +91,16 @@ test("keine absoluten Versprechen in den Einstiegstexten", () => {
     assert.doesNotMatch(read(path), /überall nutzen/, `${path}: „überall“ ist nicht geprüft`);
   }
   assert.doesNotMatch(read("CONTRIBUTING.md"), /sicher freien/);
-  assert.doesNotMatch(read("README.md"), /mit Link zu jeder Quelle/);
+  for (const path of ["README.md", "src/app/page.tsx", "src/lib/site.ts", "src/lib/llms-txt.ts"]) {
+    assert.doesNotMatch(read(path), /Link zu jeder Quelle/, `${path}: Link gibt es nicht für jede Quelle`);
+  }
+});
+
+test("README beschreibt Rot nicht als Folge von `invalid`", () => {
+  const readme = read("README.md");
+  assert.doesNotMatch(readme, /Rot[^\n.]*`invalid`/, "README: invalid ist nicht rot (verdict.ts)");
+  assert.doesNotMatch(readme, /`taken` oder `invalid`/, "README: invalid ist nicht rot (verdict.ts)");
+  assert.match(readme, /`invalid` ist bewusst nicht rot/);
 });
 
 test("Docker-Hinweis zu Umgebungsvariablen steht in README und .env.example", () => {
@@ -119,4 +128,30 @@ test("Produkt-, Paket- und Registry-Version stimmen überein", () => {
   assert.equal(registry.packages?.[0]?.version, server, "mcp/server.json packages[0].version");
   const userAgent = /Markenfrei\/(\d+\.\d+)/.exec(read("src/lib/engine/http.ts"))?.[1];
   assert.equal(userAgent, server.split(".").slice(0, 2).join("."), "User-Agent Haupt.Neben");
+});
+
+test("Live-Probe-Workflow bricht bei einem Fehler der Probe ab (pipefail) und hat ein Zeitlimit", () => {
+  const wf = read(".github/workflows/live-probe.yml");
+  // Ohne `shell: bash` zählt bei `a | tee` nur der Exit-Code von tee, ein Fehler der Probe bliebe unsichtbar.
+  const step = /- name: Live-Probe[\s\S]*?(?=\n\s+- |\n*$)/.exec(wf)?.[0] ?? "";
+  assert.match(step, /^\s+shell: bash\s*$/m, "Schritt Live-Probe braucht die Zeile shell: bash (pipefail), ein Kommentar genügt nicht");
+  assert.match(wf, /timeout-minutes:\s*\d+/, "Job braucht ein Zeitlimit");
+});
+
+test("llms.txt verspricht nichts, was nicht überall gilt", () => {
+  const src = read("src/lib/llms-txt.ts");
+  assert.doesNotMatch(src, /Jede Antwort nennt/, "RateLimit-Header gibt es nur bei /api/check und /api/mcp");
+  assert.doesNotMatch(src, /jeder Name eine Einheit/, "ein Name kostet mindestens eine Einheit");
+  assert.doesNotMatch(src, /Deterministisch/, "Ergebnisse hängen von Diensten Dritter ab");
+});
+
+test("Origin-Doku sagt nicht, der eigene Host genüge (der Code vergleicht nur konfigurierte Origins)", () => {
+  assert.doesNotMatch(read("README.md"), /nur der eigene Host/);
+  assert.doesNotMatch(read(".env.example"), /nur der eigene Host/);
+  assert.doesNotMatch(read("ROADMAP.md"), /Abgleich mit dem eigenen Host schützt nicht/);
+});
+
+test("Der Grundsatz „nur Einzelabfragen“ nennt die wöchentliche Funktionsprobe als Ausnahme", () => {
+  assert.match(read("README.md"), /Ausnahme: die wöchentliche Funktionsprobe `live-probe\.yml`/);
+  assert.match(read(".github/workflows/live-probe.yml"), /cron:/, "Wenn der Zeitplan entfällt, die Ausnahme in README und docs/v2-spec.md streichen");
 });

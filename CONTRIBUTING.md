@@ -40,7 +40,7 @@ tsx). Das veröffentlichbare Bündel entsteht mit `npm run build:mcp` in `mcp/di
 | `src/lib/cache.ts`, `src/lib/rate-limit.ts` | Cache im Arbeitsspeicher; Rate-Limit pro IP |
 | `src/lib/opendata.ts` | Wortfeld und regelbasierte Vorschläge für „Keine Idee?“ und `markenfrei_suggest_names` |
 | `src/app/` | Oberfläche (`page.tsx`, `/quellen`, `/mcp`) und Routen unter `api/` |
-| `src/components/` | Komponenten der Oberfläche; `checker.tsx` ist die Client-Komponente |
+| `src/components/` | Komponenten der Oberfläche; `checker.tsx` ist die Client-Komponente (Formular `check-form.tsx`, Prüflauf `use-check-run.ts`, Ergebnisse `check-results.tsx`) |
 | `src/mcp/` | MCP-Server (`server.ts`) und stdio-Start (`cli.ts`) |
 | `mcp/` | npm-Paket `markenfrei-mcp`: Build-Skript, Pakettest, `server.json` |
 
@@ -71,11 +71,18 @@ npx tsc --noEmit          # Typen
 npm run build             # Next.js-Build
 npm run build:mcp         # MCP-Bündel
 npm run test:mcp-package  # npm pack, entpacken, Start aus fremdem Verzeichnis
+npm run e2e               # Playwright gegen den Build (zuerst npm run build): Oberfläche und axe-Prüfung
+npm run probe:live        # Live-Probe der Quellen mit echtem Netz (nicht in der normalen CI)
 ```
 
-Die Tests laufen ohne Netz: `fetch` bzw. der HTTP-Client wird gestubbt, die Uhr injiziert.
-Die CI (`.github/workflows/ci.yml`) führt Lint, Tests, MCP-Build, Pakettest und den
-Next.js-Build aus.
+Die Tests in `tests/` laufen ohne Netz: `fetch` bzw. der HTTP-Client wird gestubbt, die Uhr injiziert.
+Die End-to-End-Tests in `e2e/` starten `next start` und stubben `POST /api/check` mit einem echten,
+aber netzlosen Bericht der Engine (`e2e/helpers.ts`); sie prüfen Ampel, Shortlist, Wiederholung bei
+Lücken, Exporte, Tastaturbedienung und WCAG-2.1-AA-Regeln mit axe. Einmalig `npx playwright install chromium`.
+Die CI (`.github/workflows/ci.yml`) führt `npm audit`, Lint, Typen, Tests, MCP-Build, Pakettest, den
+Next.js-Build und die End-to-End-Tests aus. `.github/workflows/live-probe.yml` fragt montags jede Quelle
+mit einem bekannten vergebenen und einem Zufallsnamen ab (`scripts/live-probe.ts`) und schlägt fehl,
+wenn ein Dienst Endpunkt oder Format ändert. Neue Quelle: Kanarienname in `CANARIES` ergänzen.
 
 ---
 
