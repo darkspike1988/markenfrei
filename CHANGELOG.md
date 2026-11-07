@@ -6,6 +6,8 @@ Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 
 ### Hinzugefügt
 
+- Die wöchentliche Live-Probe schreibt mit `--json` eine `probe-status.json` (je Quelle nur ok/Warnung/Fehler, ohne Notizen und Namen) und lädt sie als Artefakt hoch.
+- Kommandozeile `npm run cli -- check <name…>` (Text oder `--json`, `--namespaces`, `--tlds`, `--sources`) auf derselben Engine wie Web und MCP. Exit-Code nach der Ampel (0 grün, 1 gelb, 2 rot, bei mehreren Namen die schlechteste; 64 Aufruffehler, 70 interner Fehler). Kein `bin`-Eintrag und keine Veröffentlichung. Budgets gelten nur je Prozess, deshalb nicht in Schleifen aufrufen.
 - Erinnerung als .ics: Ein Klick lädt einen ganztägigen Kalendertermin „Name erneut prüfen“ in 30 Tagen herunter, erzeugt nur im Browser.
 - Mehr Endungen über RDAP: Alle Endungen mit RDAP-Server im IANA-Bootstrap sind wählbar (Schnappschuss `src/lib/engine/sources/rdap-tlds.json`, von Hand erneuert mit `scripts/update-rdap-tlds.ts`, nicht im Build, nicht in CI). Die Oberfläche zeigt weiter die 33 bisherigen Endungen als Chips; weitere findet man über ein Suchfeld, höchstens 8 je Prüfung.
 - Nur die bisherigen 33 Endungen sind einzeln geprüft. Bei allen anderen ergibt RDAP-404 nie „nicht gefunden“, sondern „unbekannt“ mit dem Hinweis, beim Registrar zu bestätigen; RDAP-200 gilt weiter als „vergeben“.
@@ -20,12 +22,14 @@ Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 
 ### Geändert
 
+- Die Textformatierer (`formatReport`, `formatRanking`, `prepareShortlist`, `effectiveSources`) liegen jetzt in `src/lib/engine/format.ts` ohne MCP-SDK; der Hinweis am Ende ist ein Parameter, die MCP-Texte bleiben unverändert.
 - Fällt der IANA-Bootstrap zur Laufzeit aus, dient der Schnappschuss als Rückfall (vorher nur die festen Server für `.de`, `.io`, `.ch`, `.li`).
 - OpenAPI und MCP-Schema zählen die Endungen nicht mehr auf (Muster, Verweis auf `/api/sources`); die Fehlermeldung bei einer unbekannten Endung nennt nicht mehr alle Endungen. Ungültige Endungen ergeben im MCP weiterhin `isError`.
 - `foo.bar` wird zu `foo` (die Endung wird abgetrennt, wenn sie in der Liste steht) statt zu einer Fehlermeldung.
 - Die Prüfoberfläche ist in Formular, Prüflauf-Hook und Ergebnisbereich aufgeteilt.
 - `npm audit` läuft über alle Abhängigkeiten; `minimatch` in `typescript-estree` auf eine gepatchte Version angehoben (GHSA-g3hv-75wg-m249).
 - Betriebsangaben in der Dokumentation angeglichen.
+- Der .ics-Export wird nicht mehr gezählt.
 
 ### Behoben
 

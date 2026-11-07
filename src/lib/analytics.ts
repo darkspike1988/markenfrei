@@ -22,7 +22,6 @@ export type AnalyticsEvent =
   | "export/json"
   | "export/csv"
   | "export/markdown"
-  | "export/ics"
   | "export/link"
   | "varianten/tippfehler"
   | "varianten/muster"

@@ -1,6 +1,6 @@
-import { expect, test } from "@playwright/test";
+import { expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
-import { stubCheckApi } from "./helpers";
+import { stubCheckApi, test } from "./helpers";
 
 test.describe("Prüfer", () => {
   test("ein freier Name ergibt Grün, ein vergebener Rot, jeweils mit Text", async ({ page }) => {
@@ -169,7 +169,7 @@ test.describe("Prüfer", () => {
     expect(text).toContain("SUMMARY:wachwerk erneut prüfen");
     expect(text).toContain("URL:http://");
     expect(calls).toHaveLength(callsBefore);
-    expect(requests.filter((u) => !u.startsWith("blob:") && !u.includes("/_gc/count"))).toEqual([]);
+    expect(requests.filter((u) => !u.startsWith("blob:"))).toEqual([]);
   });
 
   test("leere und zu lange Eingaben zeigen eine Fehlermeldung statt einer Anfrage", async ({ page }) => {

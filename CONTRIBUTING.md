@@ -23,6 +23,9 @@ npm run dev   # http://localhost:3000
 Den MCP-Server startest du ohne Build direkt aus den Quellen mit `npm run mcp` (stdio, über
 tsx). Das veröffentlichbare Bündel entsteht mit `npm run build:mcp` in `mcp/dist/`.
 
+Die Kommandozeile startest du mit `npm run cli -- check wachwerk` (siehe README, Abschnitt
+Kommandozeile). Nicht in Schleifen aufrufen: die Abfragebudgets gelten nur je Prozess.
+
 ---
 
 ## Aufbau
@@ -42,6 +45,8 @@ tsx). Das veröffentlichbare Bündel entsteht mit `npm run build:mcp` in `mcp/di
 | `src/app/` | Oberfläche (`page.tsx`, `/quellen`, `/mcp`) und Routen unter `api/` |
 | `src/components/` | Komponenten der Oberfläche; `checker.tsx` ist die Client-Komponente (Formular `check-form.tsx`, Prüflauf `use-check-run.ts`, Ergebnisse `check-results.tsx`) |
 | `src/mcp/` | MCP-Server (`server.ts`) und stdio-Start (`cli.ts`) |
+| `src/cli/` | Kommandozeile `markenfrei check` (`run.ts` mit ersetzbaren Abhängigkeiten, `main.ts` als Einstieg); lädt das MCP-SDK nicht und hat keine eigene Quellenliste |
+| `src/lib/engine/format.ts` | Textausgabe (`formatReport`, `formatRanking`) und Shortlist-Vorbereitung, gemeinsam für MCP und CLI; `src/mcp/server.ts` exportiert sie weiter |
 | `mcp/` | npm-Paket `markenfrei-mcp`: Build-Skript, Pakettest, `server.json` |
 
 Die Oberfläche bekommt von der Server-Komponente nur reine Daten. Engine-Code gehört nicht
