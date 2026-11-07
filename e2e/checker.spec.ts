@@ -117,6 +117,27 @@ test.describe("Prüfer", () => {
     expect(page.url()).toMatch(/src=[^&]*nuget/);
   });
 
+  test("Endung über das Suchfeld wählen: Anfrage enthält sie, Enter im Feld sendet nichts ab", async ({ page }) => {
+    const bodies: { names: string[]; tlds?: string[] }[] = [];
+    await stubCheckApi(page);
+    page.on("request", (req) => {
+      if (req.url().endsWith("/api/check")) bodies.push(req.postDataJSON());
+    });
+    await page.goto("/");
+    await page.getByText("Anpassen").click();
+    await page.getByText("Endungen wählen oder suchen").click();
+    const search = page.getByLabel(/Weitere Endung suchen/);
+    await search.fill(".Academy");
+    await search.press("Enter");
+    expect(bodies).toHaveLength(0);
+    await expect(page.getByRole("button", { name: /^\.academy/ }).first()).toBeVisible();
+    await page.getByRole("textbox").first().fill("wachwerk");
+    await page.getByRole("button", { name: "Prüfen", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Ergebnis" })).toBeVisible();
+    expect(bodies.at(-1)?.tlds).toContain("academy");
+    expect(page.url()).toMatch(/tld=[^&]*academy/);
+  });
+
   test("Exporte: CSV, Markdown und JSON laden eine Datei", async ({ page }) => {
     await stubCheckApi(page);
     await page.goto("/");

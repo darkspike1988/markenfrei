@@ -16,7 +16,10 @@ export type CheckerConfig = {
   /** Namensräume, die sich umschalten lassen (mit mindestens einer Standardquelle) */
   namespaces: { id: Namespace; label: string }[];
   defaultNamespaces: Namespace[];
+  /** Alle wählbaren Endungen (für Suchfeld und ?tld=) */
   tlds: string[];
+  /** Die kuratierten Endungen, die als Chips erscheinen */
+  featuredTlds: string[];
   defaultTlds: string[];
   maxTlds: number;
   maxNames: number;
@@ -131,6 +134,31 @@ export function selectionSummary(
   if (sel.namespaces.includes("domains") && sel.tlds.length) parts.push(sel.tlds.map((t) => `.${t}`).join(" "));
   if (sel.extra.length) parts.push(`+${sel.extra.length} ${sel.extra.length === 1 ? "weitere Quelle" : "weitere Quellen"}`);
   return parts.join(" · ") || "Keine Quelle gewählt";
+}
+
+const COUNTRY_TLDS = ["de", "ch", "li", "at", "eu", "fr", "uk", "nl", "pl", "cz", "ca", "io", "ai", "tv"];
+const GENERIC_TLDS = ["com", "net", "org", "info", "biz", "pro"];
+
+/** Kuratierte Endungen für die Chips: Länder, Allgemein, Neue Endungen (alles Übrige). */
+export function groupFeaturedTlds(featured: readonly string[]): { label: string; tlds: string[] }[] {
+  const groups = [
+    { label: "Länder", tlds: featured.filter((t) => COUNTRY_TLDS.includes(t)) },
+    { label: "Allgemein", tlds: featured.filter((t) => GENERIC_TLDS.includes(t)) },
+    {
+      label: "Neue Endungen",
+      tlds: featured.filter((t) => !COUNTRY_TLDS.includes(t) && !GENERIC_TLDS.includes(t)),
+    },
+  ];
+  return groups.filter((g) => g.tlds.length > 0);
+}
+
+/**
+ * Normalisiert die Eingabe im Suchfeld („.Shop “ → „shop“) und liefert die Endung,
+ * wenn sie wählbar ist, sonst undefined.
+ */
+export function findTld(input: string, all: readonly string[]): string | undefined {
+  const t = input.trim().toLowerCase().replace(/^\./, "");
+  return t && all.includes(t) ? t : undefined;
 }
 
 /** Wählbare Zusatzquellen nach Namensraum gruppiert, in der Reihenfolge der Namensräume. */
