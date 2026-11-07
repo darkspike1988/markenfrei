@@ -144,3 +144,14 @@ test("llms.txt verspricht nichts, was nicht überall gilt", () => {
   assert.doesNotMatch(src, /jeder Name eine Einheit/, "ein Name kostet mindestens eine Einheit");
   assert.doesNotMatch(src, /Deterministisch/, "Ergebnisse hängen von Diensten Dritter ab");
 });
+
+test("Origin-Doku sagt nicht, der eigene Host genüge (der Code vergleicht nur konfigurierte Origins)", () => {
+  assert.doesNotMatch(read("README.md"), /nur der eigene Host/);
+  assert.doesNotMatch(read(".env.example"), /nur der eigene Host/);
+  assert.doesNotMatch(read("ROADMAP.md"), /Abgleich mit dem eigenen Host schützt nicht/);
+});
+
+test("Der Grundsatz „nur Einzelabfragen“ nennt die wöchentliche Funktionsprobe als Ausnahme", () => {
+  assert.match(read("README.md"), /Ausnahme: die wöchentliche Funktionsprobe `live-probe\.yml`/);
+  assert.match(read(".github/workflows/live-probe.yml"), /cron:/, "Wenn der Zeitplan entfällt, die Ausnahme in README und docs/v2-spec.md streichen");
+});

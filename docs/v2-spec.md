@@ -20,7 +20,7 @@ die Kandidaten, Markenfrei prüft sie deterministisch (`check_names`).
 
 Kein LLM im Produkt, keine Konten, kein Personen-Tracking (nur anonyme Seitenzählung ohne Cookies, ohne Namen), keine Speicherung von Suchanfragen, nur
 offene Quellen ohne Schlüssel, keine Umgehung von Bot-Abwehr, robots.txt und
-Nutzungsbedingungen respektieren, nur Einzelabfragen, die ein Nutzer auslöst.
+Nutzungsbedingungen respektieren, nur Einzelabfragen, die ein Nutzer auslöst (einzige Ausnahme: die wöchentliche Funktionsprobe `live-probe.yml`, siehe README).
 
 ## Ergebnismodell
 

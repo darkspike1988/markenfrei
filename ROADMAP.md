@@ -48,7 +48,7 @@ keine Rechtsberatung.
 | 🟡 | Veröffentlichung des MCP-Pakets | `markenfrei-mcp` ist gebaut und getestet, aber nicht auf npm. Der Registry-Name `app.markenfrei/mcp` setzt eine Domain-Verifizierung für markenfrei.app voraus. Die Versionen sind nach dem Schema unten angeglichen. |
 | 🟡 | Echte Registerabfrage | EUIPO (Registrierung, Sandbox) und USPTO (API-Schlüssel) wären die einzigen Wege. Möglich als optionale Quelle mit eigenem Schlüssel des Betreibers, nach Prüfung der Nutzungsbedingungen. |
 | 🟡 | GitHub-Token | Ein Token beim Betreiber hebt das Limit von 60 auf 5.000 Anfragen pro Stunde, ist aber ein Geheimnis in der Server-Umgebung. |
-| 🟡 | Origin-Prüfung für `/api/mcp` | Der Abgleich mit dem eigenen Host schützt nicht vor DNS-Rebinding. Für eine strengere Prüfung `MARKENFREI_ALLOWED_ORIGINS` setzen und den Host-Abgleich entfernen. |
+| ✅ | Origin-Prüfung für `/api/mcp` | Verglichen wird nur mit `MARKENFREI_PUBLIC_URL`, `MARKENFREI_ALLOWED_ORIGINS` und localhost, nie mit `Host`, `X-Forwarded-Host` oder `Sec-Fetch-Site`; so schützt sie auch vor DNS-Rebinding. Belegt durch `tests/api-guard.test.ts` und `tests/api-routes-guard.test.ts`. |
 
 ### Livegang (Stand 5. November 2026)
 
