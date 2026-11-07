@@ -4,7 +4,10 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import {
   MAX_SNAPSHOT_BYTES,
   brandKey,
+  buildCandidates,
   dedupe,
+  describeFilter,
+  stripLegalForm,
   isLatinLabel,
   passesFilter,
   serializeSnapshot,
@@ -104,6 +107,74 @@ test("Deduplizierung: gleiche Schlüssel, höchstens 3 IDs, Label der meisten Si
     ["brausol", "Brausol", ["Q7"]],
     ["fendrix", "Fendrix", ["Q1", "Q3", "Q4"]],
   ]);
+});
+
+test("Rechtsformen: nur am Ende (ausgedachte Namen)", () => {
+  assert.equal(stripLegalForm("Fendrix Corporation"), "Fendrix");
+  assert.equal(stripLegalForm("Tomorin GmbH"), "Tomorin");
+  assert.equal(stripLegalForm("Calvento Inc."), "Calvento");
+  assert.equal(stripLegalForm("Calvento, Inc."), "Calvento");
+  assert.equal(stripLegalForm("Aurelion Co., Ltd."), "Aurelion");
+  assert.equal(stripLegalForm("Glimmo S.p.A."), "Glimmo");
+  assert.equal(stripLegalForm("Glimmo S.A."), "Glimmo");
+  assert.equal(stripLegalForm("Lunabar N.V."), "Lunabar");
+  assert.equal(stripLegalForm("Bexalt A/S"), "Bexalt");
+  assert.equal(stripLegalForm("Bexalt e.V."), "Bexalt");
+  assert.equal(stripLegalForm("Bexalt GmbH & Co. KG"), "Bexalt");
+  assert.equal(stripLegalForm("Fendrix PLC"), "Fendrix");
+  // Rechtsform nicht am Ende: bleibt
+  assert.equal(stripLegalForm("Corporation Zero"), "Corporation Zero");
+  assert.equal(stripLegalForm("Tomorin GmbH Nord"), "Tomorin GmbH Nord");
+  // nichts übrig: unverändert; Teilwörter werden nicht angefasst
+  assert.equal(stripLegalForm("GmbH"), "GmbH");
+  assert.equal(stripLegalForm("Fendrixag"), "Fendrixag");
+  assert.equal(stripLegalForm("Fendrix Companyx"), "Fendrix Companyx");
+});
+
+const row = (id: string, label: string, sitelinks: number, type: string) => ({ id, label, sitelinks, type });
+const OPTS = { minSitelinks: 1, includeTrademark: false, includeCompanies: true, companyMinSitelinks: 20 };
+
+test("Kandidaten: Rechtsformen nur bei Firmen, Schwelle je Art, Marken unverändert", () => {
+  const rows = [
+    row("Q1", "Fendrix Corporation", 30, "Q4830453"), // Firma, stark genug
+    row("Q2", "Tomorin GmbH", 5, "Q891723"), // Firma, zu wenige Sitelinks
+    row("Q3", "Calvento Inc", 3, "Q431289"), // Marke: Label bleibt
+    row("Q4", "Corporation Zero", 25, "Q6881511"), // Rechtsform nicht am Ende
+    row("Q5", "Aurelion", 2, "Q167270"), // reine Handelsmarke: aus
+    row("Q6", "Lunabar AG", 40, "Q431289"), // Marke und Firma: gilt als Marke
+    row("Q6", "Lunabar AG", 40, "Q4830453"),
+  ];
+  const out = buildCandidates(rows, OPTS);
+  assert.deepEqual(
+    out.map((c) => [c.id, c.label]),
+    [["Q1", "Fendrix"], ["Q3", "Calvento Inc"], ["Q4", "Corporation Zero"], ["Q6", "Lunabar AG"]],
+  );
+  assert.deepEqual(dedupe(out).map((e) => e[0]), ["calventoinc", "corporationzero", "fendrix", "lunabarag"]);
+  // Ohne includeCompanies: keine Firmen
+  assert.deepEqual(buildCandidates(rows, { ...OPTS, includeCompanies: false }).map((c) => c.id), ["Q3", "Q6"]);
+  // Firmen-Schwelle einstellbar
+  assert.ok(buildCandidates(rows, { ...OPTS, companyMinSitelinks: 5 }).some((c) => c.label === "Tomorin"));
+  // gleiche Filter wie bei Marken (Schlüssel zu kurz nach dem Entfernen)
+  assert.deepEqual(buildCandidates([row("Q9", "Ab GmbH", 99, "Q4830453")], OPTS), []);
+});
+
+test("Dateikopf enthaelt: optional, geprüft, rund; Filtertext nennt es", () => {
+  const withField = (e: unknown) => serializeSnapshot({ ...fixture, enthaelt: e as never });
+  // Datei ohne Feld bleibt gültig
+  assert.deepEqual(validateSnapshotText(fixtureText, { minEntries: 12 }), []);
+  assert.equal(fixtureText.includes("enthaelt"), false);
+  for (const e of [["marken"], ["marken", "firmen"]]) {
+    const t = withField(e);
+    assert.deepEqual(validateSnapshotText(t, { minEntries: 12 }), []);
+    assert.equal(serializeSnapshot(JSON.parse(t)), t);
+  }
+  for (const e of [["firmen"], [], ["marken", "marken"], ["marken", "x"], "marken", 1]) {
+    assert.match(validateSnapshotText(withField(e), { minEntries: 12 }).join("|"), /enthaelt/, JSON.stringify(e));
+  }
+  assert.match(describeFilter(OPTS), /enthält Marken und Firmen/);
+  assert.match(describeFilter(OPTS), /Q4830453, Q891723, Q6881511; Sitelinks >= 20; Rechtsformen am Ende entfernt/);
+  assert.match(describeFilter({ ...OPTS, includeCompanies: false }), /enthält Marken$/);
+  assert.doesNotMatch(describeFilter({ ...OPTS, includeCompanies: false }), /Firmen/);
 });
 
 // Die echte Datei wird später von Hand erzeugt. Tests setzen sie nicht voraus: Fehlt sie, wird übersprungen

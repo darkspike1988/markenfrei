@@ -1,7 +1,7 @@
 import snapshotFile from "./wikidata-brands.json";
 import { buildBrandIndex, compareWithBrands, type BrandEntry, type BrandIndex } from "@/lib/brand-similarity";
 import type { Source, SourceResult } from "@/lib/engine/types";
-import { serializeSnapshot, validateSnapshotText, type Snapshot } from "./wikidata-brands-format";
+import { containsCompanies, serializeSnapshot, validateSnapshotText, type Snapshot } from "./wikidata-brands-format";
 
 /**
  * Quelle `wikidata_brands` (Namensraum known_names): Ähnlichkeitsvergleich gegen einen Schnappschuss
@@ -21,7 +21,7 @@ const NAME_RE = /^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$/;
 export const MIN_SNAPSHOT_ENTRIES = 1000;
 
 /** Was die Quelle zum Vergleichen braucht. */
-export type LoadedBrands = { marken: readonly BrandEntry[]; abgerufen: string };
+export type LoadedBrands = { marken: readonly BrandEntry[]; abgerufen: string; enthaelt?: readonly string[] };
 
 export type WikidataBrandsOptions = {
   /** Liefert die Liste (Standard: die echte Datei, mit geprüftem Kopf). Darf null liefern oder werfen. */
@@ -36,7 +36,7 @@ export function loadSnapshotFile(raw: unknown, minEntries = MIN_SNAPSHOT_ENTRIES
   const errors = validateSnapshotText(text, { minEntries });
   if (errors.length > 0) throw new Error(errors[0]);
   const s = raw as Snapshot;
-  return { marken: s.marken, abgerufen: s.abgerufen };
+  return { marken: s.marken, abgerufen: s.abgerufen, enthaelt: s.enthaelt };
 }
 
 const loadReal = (): LoadedBrands => loadSnapshotFile(snapshotFile);
@@ -52,14 +52,23 @@ function tmviewUrl(term: string): string {
   return `https://www.tmdn.org/tmview/#/tmview/results?page=1&pageSize=30&criteria=C&basicSearch=${encodeURIComponent(term)}`;
 }
 
+/** "Marken" bzw. "Marken- und Firmennamen", je nach Feld `enthaelt` im Dateikopf (ohne Feld: Marken). */
+export function nounFor(enthaelt: unknown): string {
+  return containsCompanies(enthaelt) ? "Marken- und Firmennamen" : "Marken";
+}
+
 /** Kurzbeschreibung mit Stand und Anzahl aus dem Dateikopf (nicht als feste Zahl im Code). */
-function describe(): string {
-  const stand = typeof snapshotFile.abgerufen === "string" ? snapshotFile.abgerufen : "unbekannt";
-  const n = Array.isArray(snapshotFile.marken) ? snapshotFile.marken.length : 0;
+export function describeSnapshot(abgerufen: unknown, anzahl: number, enthaelt: unknown): string {
+  const stand = typeof abgerufen === "string" ? abgerufen : "unbekannt";
   return (
-    `Ähnlichkeitsvergleich ohne Netz gegen einen Schnappschuss von ${groupThousands(n)} Marken aus Wikidata (CC0, Stand ${stand}): gleich, klanggleich, schreibähnlich oder an einer Wortgrenze enthalten. ` +
+    `Ähnlichkeitsvergleich ohne Netz gegen einen Schnappschuss von ${groupThousands(anzahl)} ${nounFor(enthaelt)} aus Wikidata (CC0, Stand ${stand}): gleich, klanggleich, schreibähnlich oder an einer Wortgrenze enthalten. ` +
     `Die Liste ist unvollständig und kein Markenregister; ein Treffer ist nur ein Hinweis (gelb, nie rot), kein Treffer ist keine Freigabe.`
   );
+}
+
+function describe(): string {
+  const n = Array.isArray(snapshotFile.marken) ? snapshotFile.marken.length : 0;
+  return describeSnapshot(snapshotFile.abgerufen, n, (snapshotFile as { enthaelt?: unknown }).enthaelt);
 }
 
 export function createWikidataBrandsSource(opts: WikidataBrandsOptions = {}): Source {
@@ -105,7 +114,7 @@ export function createWikidataBrandsSource(opts: WikidataBrandsOptions = {}): So
         if (r.hits.length === 0) {
           return res("not_found", {
             note:
-              `Kein ähnlicher Eintrag unter ${groupThousands(index.size)} Marken aus Wikidata (Stand ${loaded.abgerufen}). ` +
+              `Kein ähnlicher Eintrag unter ${groupThousands(index.size)} ${nounFor(loaded.enthaelt)} aus Wikidata (Stand ${loaded.abgerufen}). ` +
               `Die Liste ist unvollständig: Viele bekannte Marken sind dort nicht als Marke geführt. ` +
               `Kein Markenregister, keine Freigabe.` +
               (hint ? ` Nur auf Gleichheit geprüft (unter 4 Zeichen).` : ""),

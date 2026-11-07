@@ -20,13 +20,24 @@ const QID = /^Q[1-9]\d*$/;
 /** Ein Eintrag der Datei: [Schlüssel, Anzeigelabel, Wikidata-IDs]. */
 export type BrandEntry = [key: string, label: string, ids: string[]];
 
+/** Was der Schnappschuss enthält. Fehlt das Feld im Kopf, gilt: nur Marken. */
+export type Enthaelt = "marken" | "firmen";
+export const ENTHAELT_VALUES: readonly Enthaelt[] = ["marken", "firmen"];
+
 export type SnapshotHeader = {
   quelle: string;
   lizenz: string;
   abgerufen: string;
   abfrage_sha256: string;
   filter: string;
+  /** Optional (ältere Dateien haben es nicht): ["marken"] oder ["marken","firmen"]. */
+  enthaelt?: Enthaelt[];
 };
+
+/** True, wenn der Kopf Firmennamen ausweist. Ohne Feld: false. */
+export function containsCompanies(enthaelt: unknown): boolean {
+  return Array.isArray(enthaelt) && enthaelt.includes("firmen");
+}
 
 export type Snapshot = SnapshotHeader & { anzahl: number; marken: BrandEntry[] };
 
@@ -53,6 +64,89 @@ export function isLatinLabel(label: string): boolean {
 export function wordCount(label: string): number {
   const t = label.trim();
   return t === "" ? 0 : t.split(/\s+/).length;
+}
+
+/** Rechtsformen, die bei Firmen-Labels am Ende entfallen (verglichen ohne Punkte, klein). */
+const LEGAL_FORMS = new Set([
+  "inc", "corp", "corporation", "co", "company", "ltd", "limited", "llc", "plc", "gmbh", "ag", "se", "sa",
+  "spa", "nv", "bv", "ab", "a/s", "kg", "ev",
+]);
+
+/**
+ * Entfernt Rechtsformen am ENDE eines Firmen-Labels (auch mehrere, auch mit Komma davor:
+ * "Foo Co., Ltd." -> "Foo"). Steht die Rechtsform nicht am Ende ("Corporation Zero"), bleibt das Label.
+ * Bleibt sonst nichts übrig (Label besteht nur aus Rechtsformen), bleibt das Label unverändert.
+ */
+export function stripLegalForm(label: string): string {
+  const tokens = label.trim().split(/\s+/).filter(Boolean);
+  let removed = false;
+  while (tokens.length > 1) {
+    const last = tokens[tokens.length - 1].toLowerCase().replace(/\./g, "").replace(/,$/, "");
+    if (LEGAL_FORMS.has(last)) {
+      tokens.pop();
+      removed = true;
+    } else if (removed && (last === "&" || last === "und" || last === "and")) {
+      tokens.pop();
+    } else break;
+  }
+  if (!removed) return label;
+  return tokens.join(" ").replace(/[,;]+$/, "");
+}
+
+/** Zeile der Abfrage: ein Label mit Typ (Wikidata-Klasse). */
+export type Row = { id: string; label: string; sitelinks: number; type: string };
+
+export const BRAND_TYPE = "Q431289";
+export const TRADEMARK_TYPE = "Q167270";
+/** Firmen: business, public company, enterprise. */
+export const COMPANY_TYPES = ["Q4830453", "Q891723", "Q6881511"] as const;
+
+export type CandidateOptions = {
+  minSitelinks: number;
+  includeTrademark: boolean;
+  includeCompanies: boolean;
+  companyMinSitelinks: number;
+};
+
+/**
+ * Macht aus Abfragezeilen gefilterte Kandidaten. Marken (Q431289, optional Q167270) behalten ihr Label und
+ * brauchen `minSitelinks`. Reine Firmen-Einträge (kein Markentyp) verlieren Rechtsformen am Ende und brauchen
+ * `companyMinSitelinks`. Ein Eintrag, der Marke ist, gilt immer als Marke.
+ */
+export function buildCandidates(rows: Row[], o: CandidateOptions): Candidate[] {
+  const types = new Map<string, Set<string>>();
+  for (const r of rows) types.set(r.id, (types.get(r.id) ?? new Set<string>()).add(r.type));
+  const seen = new Set<string>();
+  const out: Candidate[] = [];
+  for (const r of rows) {
+    const t = types.get(r.id);
+    const isBrand = t?.has(BRAND_TYPE) || (o.includeTrademark && t?.has(TRADEMARK_TYPE));
+    const isCompany = o.includeCompanies && COMPANY_TYPES.some((c) => t?.has(c));
+    let cand: Candidate;
+    if (isBrand) cand = { id: r.id, label: r.label, sitelinks: r.sitelinks };
+    else if (isCompany) cand = { id: r.id, label: stripLegalForm(r.label), sitelinks: r.sitelinks };
+    else continue;
+    if (!passesFilter(cand, isBrand ? o.minSitelinks : o.companyMinSitelinks)) continue;
+    const k = `${cand.id}\u0000${cand.label}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(cand);
+  }
+  return out;
+}
+
+/** Filtertext für den Dateikopf. */
+export function describeFilter(o: CandidateOptions): string {
+  return (
+    `Typ ${o.includeTrademark ? `${BRAND_TYPE} oder ${TRADEMARK_TYPE}` : BRAND_TYPE}` +
+    (o.includeCompanies
+      ? ` sowie Firmen (${COMPANY_TYPES.join(", ")}; Sitelinks >= ${o.companyMinSitelinks}; Rechtsformen am Ende entfernt)`
+      : "") +
+    `; ohne aufgelöst (P576) und eingestellt (P2669); ` +
+    `Labels de/en/mul; Schlüssel 3-30 Zeichen; lateinische Schrift; höchstens 4 Wörter; Sitelinks >= ${o.minSitelinks}` +
+    `${o.includeCompanies ? " (Marken)" : ""}; Dedup nach Schlüssel, höchstens 3 IDs; ` +
+    `enthält ${o.includeCompanies ? "Marken und Firmen" : "Marken"}`
+  );
 }
 
 /** Filter gegen Müll. `minSitelinks` ist die (noch offene) Mindestzahl an Wikipedia-Verlinkungen. */
@@ -108,7 +202,9 @@ export function serializeSnapshot(s: Snapshot): string {
   const head =
     `"quelle": ${JSON.stringify(s.quelle)},\n"lizenz": ${JSON.stringify(s.lizenz)},\n` +
     `"abgerufen": ${JSON.stringify(s.abgerufen)},\n"abfrage_sha256": ${JSON.stringify(s.abfrage_sha256)},\n` +
-    `"filter": ${JSON.stringify(s.filter)},\n"anzahl": ${s.anzahl},\n`;
+    `"filter": ${JSON.stringify(s.filter)},\n` +
+    (s.enthaelt === undefined ? "" : `"enthaelt": ${JSON.stringify(s.enthaelt)},\n`) +
+    `"anzahl": ${s.anzahl},\n`;
   return `{\n${head}"marken": [\n${s.marken.map((m) => JSON.stringify(m)).join(",\n")}\n]}\n`;
 }
 
@@ -136,6 +232,15 @@ export function validateSnapshotText(text: string, opts: ValidateOptions = {}): 
 
   for (const f of ["quelle", "lizenz", "abgerufen", "abfrage_sha256", "filter"] as const) {
     if (typeof o[f] !== "string" || (o[f] as string).trim() === "") errors.push(`Kopffeld fehlt oder leer: ${f}`);
+  }
+  if (o.enthaelt !== undefined) {
+    const e = o.enthaelt;
+    const ok =
+      Array.isArray(e) &&
+      e.every((x) => ENTHAELT_VALUES.includes(x as Enthaelt)) &&
+      new Set(e).size === e.length &&
+      e.includes("marken");
+    if (!ok) errors.push('enthaelt ungültig (erlaubt: ["marken"] oder ["marken","firmen"])');
   }
   if (typeof o.lizenz === "string" && !o.lizenz.includes("CC0")) errors.push('lizenz enthält nicht "CC0"');
   if (typeof o.abgerufen === "string") {

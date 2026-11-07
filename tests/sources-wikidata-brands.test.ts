@@ -7,6 +7,7 @@ import { DEFAULT_NAMESPACES } from "@/lib/engine/check";
 import { computeVerdict } from "@/lib/engine/verdict";
 import {
   createWikidataBrandsSource,
+  describeSnapshot,
   loadSnapshotFile,
   wikidataBrands,
   type LoadedBrands,
@@ -159,4 +160,46 @@ test("defaultEnabled ist false, Registrierung vorhanden, Standardliste unveränd
   const defaults = STATIC_SOURCES.filter((s) => s.namespace === "known_names" && s.defaultEnabled).map((s) => s.id);
   assert.deepEqual(defaults.sort(), ["gleif", "known_brands", "wikidata"]);
   assert.ok((DEFAULT_NAMESPACES as readonly string[]).includes("known_names"));
+});
+
+test("Kopf mit firmen: Texte sprechen von Marken- und Firmennamen, Pflichttext bleibt", async () => {
+  const withFirms = createWikidataBrandsSource({
+    load: () => ({ ...MINI, enthaelt: ["marken", "firmen"] }),
+    minEntries: 12,
+  });
+  const r = await run(withFirms, "zzzzqq");
+  assert.equal(r.status, "not_found");
+  assert.match(r.note ?? "", /Kein ähnlicher Eintrag unter 12 Marken- und Firmennamen aus Wikidata \(Stand 2000-01-01\)/);
+  assert.match(r.note ?? "", /unvollständig/);
+  assert.match(r.note ?? "", /keine Freigabe/);
+  // nur "marken" oder Feld fehlt: wie bisher
+  for (const e of [["marken"], undefined]) {
+    const s = createWikidataBrandsSource({ load: () => ({ ...MINI, enthaelt: e }), minEntries: 12 });
+    const n = (await run(s, "zzzzqq")).note ?? "";
+    assert.match(n, /unter 12 Marken aus Wikidata/);
+    assert.doesNotMatch(n, /Firmennamen/);
+  }
+});
+
+test("Beschreibung: Firmennamen nur, wenn der Kopf firmen enthält; unvollständig und keine Freigabe bleiben", () => {
+  const a = describeSnapshot("2026-11-07", 4742, ["marken", "firmen"]);
+  assert.match(a, /4\.742 Marken- und Firmennamen aus Wikidata \(CC0, Stand 2026-11-07\)/);
+  assert.match(a, /unvollständig/);
+  assert.match(a, /kein Treffer ist keine Freigabe/);
+  for (const e of [["marken"], undefined, "firmen"]) {
+    const b = describeSnapshot("2026-11-07", 4742, e);
+    assert.match(b, /4\.742 Marken aus Wikidata/);
+    assert.doesNotMatch(b, /Firmennamen/);
+    assert.match(b, /unvollständig/);
+    assert.match(b, /keine Freigabe/);
+  }
+});
+
+test("loadSnapshotFile reicht enthaelt durch und lehnt ungültige Werte ab", () => {
+  const raw = {
+    ...JSON.parse(readFileSync(new URL("./fixtures/brands-snapshot-mini.json", import.meta.url), "utf8")),
+    enthaelt: ["marken", "firmen"],
+  };
+  assert.deepEqual(loadSnapshotFile(raw, 12).enthaelt, ["marken", "firmen"]);
+  assert.throws(() => loadSnapshotFile({ ...raw, enthaelt: ["firmen"] }, 12), /enthaelt/);
 });
