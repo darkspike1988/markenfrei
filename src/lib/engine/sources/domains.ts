@@ -1,13 +1,22 @@
 import type { HttpClient, HttpResponse, Source, SourceResult } from "@/lib/engine/types";
+import snapshotFile from "./rdap-tlds.json";
 
 /**
  * Domain-Quellen: eine Quelle pro Endung (id "rdap:<tld>").
  *
  * Signal: nur der HTTP-Status des autoritativen RDAP-Servers der Registry zählt
  * (200 = registriert, 404 = dort nicht registriert). Der Server kommt aus dem
- * IANA-Bootstrap (RFC 9224) oder aus festen Overrides für Endungen, die dort fehlen.
- * DNS über HTTPS dient nur zur Bestätigung von „vergeben“ (NS-Einträge vorhanden),
- * nie als Beleg für „frei“.
+ * IANA-Bootstrap (RFC 9224), ersatzweise aus dem Schnappschuss `rdap-tlds.json`, oder aus
+ * festen Overrides für Endungen, die dort fehlen. DNS über HTTPS dient nur zur Bestätigung
+ * von „vergeben“ (NS-Einträge vorhanden), nie als Beleg für „frei“.
+ *
+ * Zwei Gruppen von Endungen:
+ * - „kuratiert“ (`FEATURED_TLDS`, 33 Stück): unten aufgelistet und live geprüft, 200 und 404
+ *   sind dort belegt. Nur für sie darf RDAP-404 „nicht gefunden“ ergeben.
+ * - Alle übrigen Endungen des Schnappschusses (IANA-Bootstrap, von Hand eingespielt mit
+ *   `scripts/update-rdap-tlds.ts`): RDAP-200 ergibt „vergeben“, RDAP-404 aber nur „offen“,
+ *   weil ein 404 dort auch reservierte, gesperrte oder nicht registrierbare Namen (etwa bei
+ *   Marken-Endungen) betreffen kann. Diese Endungen sind nicht einzeln geprüft.
  *
  * Live geprüft am 4. November 2026 mit google.<tld> (200) und zzqxkvjwabc.<tld> (404)
  * für alle RDAP-Endungen unten; `cloud`, `online`, `site`, `store`, `blog`, `design`,
@@ -18,7 +27,7 @@ import type { HttpClient, HttpResponse, Source, SourceResult } from "@/lib/engin
 
 const BOOTSTRAP_URL = "https://data.iana.org/rdap/dns.json";
 const BOOTSTRAP_TTL_MS = 24 * 60 * 60 * 1000;
-/** Nach einem Ausfall den Bootstrap so lange nicht erneut laden (nur Overrides). */
+/** Nach einem Ausfall den Bootstrap so lange nicht erneut laden (Rückfall: Schnappschuss). */
 const BOOTSTRAP_RETRY_MS = 5 * 60 * 1000;
 const BOOTSTRAP_MAX_BYTES = 512 * 1024;
 
@@ -33,7 +42,7 @@ const RDAP_OVERRIDES: Readonly<Record<string, string>> = {
 /** Endungen ohne verlässliches öffentliches RDAP: nur DNS, Ergebnis höchstens „vergeben“. */
 const DOH_ONLY: readonly string[] = ["at", "eu"];
 
-/** Endungen mit RDAP (Bootstrap oder Override), jeweils mit 200/404 live geprüft. */
+/** Kuratierte Endungen mit RDAP (Bootstrap oder Override), jeweils mit 200/404 live geprüft. */
 const RDAP_TLDS: readonly string[] = [
   "de",
   "com",
@@ -68,7 +77,32 @@ const RDAP_TLDS: readonly string[] = [
   "berlin",
 ];
 
-export const DOMAIN_TLDS: readonly string[] = [...RDAP_TLDS, ...DOH_ONLY];
+/** Kuratierte, live geprüfte Endungen; die Oberfläche zeigt nur diese als Chips. */
+export const FEATURED_TLDS: readonly string[] = [...RDAP_TLDS, ...DOH_ONLY];
+
+const FEATURED_SET: ReadonlySet<string> = new Set(FEATURED_TLDS);
+
+/** Schnappschuss der IANA-Bootstrap-Datei: Endung → Basis-URL des RDAP-Servers (https, mit "/"). */
+const SNAPSHOT: Readonly<Record<string, string>> = snapshotFile.endungen;
+
+/**
+ * Alle wählbaren Endungen: kuratierte zuerst (feste Reihenfolge), dann der Rest des
+ * Schnappschusses sortiert. Feste Server (de, io, ch, li) und at/eu stehen schon bei den
+ * kuratierten, auch wenn sie im Schnappschuss fehlen.
+ */
+export const DOMAIN_TLDS: readonly string[] = [
+  ...FEATURED_TLDS,
+  ...Object.keys(SNAPSHOT)
+    .filter((t) => !FEATURED_SET.has(t))
+    .sort(),
+];
+
+const DOMAIN_TLD_SET: ReadonlySet<string> = new Set(DOMAIN_TLDS);
+
+/** Ist das eine wählbare Endung (ohne Punkt, kleingeschrieben)? */
+export function isDomainTld(tld: string): boolean {
+  return DOMAIN_TLD_SET.has(tld);
+}
 
 export const DEFAULT_DOMAIN_TLDS: readonly string[] = ["de", "com", "dev", "app", "io"];
 
@@ -80,8 +114,21 @@ export const DOH_ONLY_TLDS: readonly string[] = DOH_ONLY;
 let bootstrapCache: { map: Map<string, string>; expiresAt: number } | undefined;
 let bootstrapPending: Promise<Map<string, string>> | undefined;
 
-function overridesOnly(): Map<string, string> {
-  return new Map(Object.entries(RDAP_OVERRIDES));
+let snapshotOverride: Readonly<Record<string, string>> | undefined;
+
+/** Rückfall ohne Netz: feste Overrides, darüber der Schnappschuss (Basis-URLs inkl. "domain/"). */
+function fallbackServers(): Map<string, string> {
+  const map = new Map<string, string>(Object.entries(RDAP_OVERRIDES));
+  for (const [tld, base] of Object.entries(snapshotOverride ?? SNAPSHOT)) {
+    map.set(tld, `${base.endsWith("/") ? base : `${base}/`}domain/`);
+  }
+  return map;
+}
+
+/** Nur für Tests: Schnappschuss ersetzen (undefined = echter Schnappschuss). Leert den Cache. */
+export function setRdapSnapshotForTests(snapshot: Readonly<Record<string, string>> | undefined): void {
+  snapshotOverride = snapshot;
+  resetRdapBootstrapCache();
 }
 
 function parseBootstrap(json: unknown): Map<string, string> | undefined {
@@ -104,9 +151,9 @@ function parseBootstrap(json: unknown): Map<string, string> | undefined {
 }
 
 /**
- * Lädt den IANA-RDAP-Bootstrap (Prozess-Cache 24 h) und ergänzt die festen Overrides.
- * Einträge aus dem Bootstrap haben Vorrang, Overrides füllen nur Lücken.
- * Bei Ausfall oder unerwartetem Format: nur die Overrides (5 Minuten, dann neuer Versuch).
+ * Lädt den IANA-RDAP-Bootstrap (Prozess-Cache 24 h) und ergänzt Schnappschuss und feste Overrides.
+ * Einträge aus dem Bootstrap haben Vorrang vor dem Schnappschuss, dieser vor den Overrides.
+ * Bei Ausfall oder unerwartetem Format: Schnappschuss und Overrides (5 Minuten, dann neuer Versuch).
  * Werte sind Basis-URLs inklusive "domain/", z. B. "https://rdap.verisign.com/com/v1/domain/".
  */
 export async function loadRdapBootstrap(
@@ -128,7 +175,7 @@ export async function loadRdapBootstrap(
     } catch {
       parsed = undefined;
     }
-    const map = overridesOnly();
+    const map = fallbackServers();
     if (parsed) {
       for (const [tld, base] of parsed) map.set(tld, base);
       bootstrapCache = { map, expiresAt: now() + BOOTSTRAP_TTL_MS };
@@ -253,14 +300,21 @@ function describe(res: HttpResponse): string {
   return res.error ? `RDAP: ${res.error}` : `RDAP HTTP ${res.status}`;
 }
 
+/** Hinweis bei RDAP-404 für Endungen, die nicht zu den live geprüften gehören. */
+export const NOT_INDIVIDUALLY_CHECKED_NOTE =
+  "RDAP meldet „nicht gefunden“, diese Endung wird aber nicht einzeln geprüft; beim Registrar bestätigen.";
+
 function makeSource(tld: string): Source {
   const label = `.${tld}`;
   const dohOnly = DOH_ONLY.includes(tld);
-  const override = RDAP_OVERRIDES[tld];
+  const featured = FEATURED_SET.has(tld);
+  const override = Object.hasOwn(RDAP_OVERRIDES, tld) ? RDAP_OVERRIDES[tld] : undefined;
 
   const description = dohOnly
     ? `${label}: kein öffentliches RDAP, nur DNS-Abfrage (NS). Ergebnis höchstens „vergeben“, sonst offen.`
-    : `${label}: RDAP der Registry (200 = registriert, 404 = dort nicht registriert, nicht gleich registrierbar). DNS nur zur Bestätigung von „vergeben“.`;
+    : featured
+      ? `${label}: RDAP der Registry (200 = registriert, 404 = dort nicht registriert, nicht gleich registrierbar). DNS nur zur Bestätigung von „vergeben“.`
+      : `${label}: RDAP der Registry (200 = registriert). Diese Endung wird nicht einzeln geprüft: Bei 404 bleibt der Status offen, nie „nicht gefunden“. DNS nur zur Bestätigung von „vergeben“.`;
   const endpoint = dohOnly
     ? `https://dns.google/resolve?name={name}.${tld}&type=NS`
     : override
@@ -306,7 +360,7 @@ function makeSource(tld: string): Source {
         let rdapEvidence: string;
         let rdapNote: string;
         if (!server) {
-          rdapEvidence = "RDAP: kein Server (IANA-Bootstrap nicht verfügbar)";
+          rdapEvidence = "RDAP: kein Server (weder im IANA-Bootstrap noch im Schnappschuss)";
           rdapNote = "RDAP-Server der Registry nicht ermittelbar.";
         } else {
           const res = await ctx.http.request(`${server}${encodeURIComponent(domain)}`, {
@@ -315,6 +369,10 @@ function makeSource(tld: string): Source {
           });
           if (!res.error && res.status === 200) {
             return { ...base, status: "taken", note: "Bei der Registry registriert.", evidence: "RDAP HTTP 200" };
+          }
+          if (!res.error && res.status === 404 && !featured) {
+            // Nicht live geprüft: ein 404 kann hier auch reservierte oder gesperrte Namen meinen.
+            return { ...base, note: NOT_INDIVIDUALLY_CHECKED_NOTE, evidence: "RDAP HTTP 404" };
           }
           if (!res.error && res.status === 404) {
             return {
@@ -361,7 +419,7 @@ export function domainSources(tlds: string[]): Source[] {
   const out: Source[] = [];
   for (const raw of tlds) {
     const tld = String(raw ?? "").trim().toLowerCase().replace(/^\./, "");
-    if (!DOMAIN_TLDS.includes(tld) || seen.has(tld)) continue;
+    if (!DOMAIN_TLD_SET.has(tld) || seen.has(tld)) continue;
     seen.add(tld);
     out.push(makeSource(tld));
   }

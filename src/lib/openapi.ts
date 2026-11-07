@@ -7,7 +7,7 @@ import {
   SourceResultSchema,
   TrademarkPrepSchema,
 } from "@/lib/engine/report-schema";
-import { DEFAULT_DOMAIN_TLDS, DOMAIN_TLDS, domainSources } from "@/lib/engine/sources/domains";
+import { DEFAULT_DOMAIN_TLDS, FEATURED_TLDS, domainSources } from "@/lib/engine/sources/domains";
 import { manualSocialLinks } from "@/lib/engine/sources/stores-social";
 import { trademarkPrep } from "@/lib/engine/trademark-prep";
 import { NAMESPACE_LABEL, NAMESPACES, type SourceResult } from "@/lib/engine/types";
@@ -128,9 +128,9 @@ function requestSchema(): JsonObject {
   names.description = `Ein bis ${MAX_NAMES} Namen. Jeder wird normalisiert (Kleinbuchstaben, Umlaute ausgeschrieben, bekannte Endung abgetrennt); ein ungültiger Name lässt die ganze Anfrage scheitern, bevor eine Quelle abgefragt wird. Doppelte Namen nach der Normalisierung zählen einmal.`;
 
   const tlds = child(props, "tlds");
-  tlds.description = `Endungen für den Namensraum domains, höchstens ${MAX_TLDS} verschiedene. Standard: ${DEFAULT_DOMAIN_TLDS.join(", ")}. Wer tlds angibt, bekommt Domainabfragen auch ohne den Namensraum domains.`;
+  tlds.description = `Endungen für den Namensraum domains, höchstens ${MAX_TLDS} verschiedene. Standard: ${DEFAULT_DOMAIN_TLDS.join(", ")}. Wer tlds angibt, bekommt Domainabfragen auch ohne den Namensraum domains. Gültig sind alle Endungen mit RDAP-Server im IANA-Bootstrap sowie at und eu; die vollständige Liste liefert GET /api/sources. Eine unbekannte Endung lässt die ganze Anfrage scheitern (400). Nur ${FEATURED_TLDS.length} Endungen sind einzeln geprüft; bei den übrigen ergibt RDAP-404 nie „nicht gefunden“, sondern „unknown“.`;
   tlds.default = [...DEFAULT_DOMAIN_TLDS];
-  child(tlds, "items").enum = [...DOMAIN_TLDS];
+  child(tlds, "items").pattern = "^\\.?[A-Za-z0-9]{2,63}$";
 
   const namespaces = child(props, "namespaces");
   namespaces.description = `Namensräume, deren Standardquellen geprüft werden. Standard: ${DEFAULT_NAMESPACES.join(", ")}. Im Namensraum social ist keine Quelle Standard: dort Quellen über sources wählen. Wirkt nicht, wenn sources gesetzt ist (Ausnahme: domains).`;

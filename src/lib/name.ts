@@ -1,4 +1,4 @@
-import { DOMAIN_TLDS } from "@/lib/engine/sources/domains";
+import { isDomainTld } from "@/lib/engine/sources/domains";
 
 export type NameResult =
   | { ok: true; name: string }
@@ -33,7 +33,7 @@ export function normalizeName(raw: unknown): NameResult {
     const parts = text.split(".");
     const last = parts[parts.length - 1];
     const rest = parts.slice(0, -1).join(".");
-    if (!rest.includes(".") && DOMAIN_TLDS.includes(last)) {
+    if (!rest.includes(".") && isDomainTld(last)) {
       text = rest;
     } else {
       return {

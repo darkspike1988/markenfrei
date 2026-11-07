@@ -174,7 +174,8 @@ OpenAPI 3.1 für `POST /api/check`, `POST /api/mcp`, `GET /api/sources` und `GET
 `/api/opendata-words` stehen bewusst nicht darin (interne Routen der Oberfläche). Das Dokument
 entsteht aus dem Code und kann deshalb nicht davon abweichen:
 
-- Endungen (`DOMAIN_TLDS`), Namensräume (`NAMESPACES`), Quellen-IDs (`STATIC_SOURCES`, auch die auf
+- Endungen kommen aus `DOMAIN_TLDS` (über 1.000, deshalb im Dokument nur als Muster mit Verweis auf
+  `GET /api/sources`, nicht aufgezählt), Namensräume (`NAMESPACES`), Quellen-IDs (`STATIC_SOURCES`, auch die auf
   Wunsch), Status und Ampel kommen aus den Konstanten der Engine; die Schemas von `NameReport`,
   `SourceResult`, `TrademarkPrep` und `ShortlistEntry` werden aus den zod-Schemas in
   `src/lib/engine/report-schema.ts` erzeugt (`z.toJSONSchema`), dieselben wie beim MCP-`outputSchema`.
@@ -190,7 +191,7 @@ entsteht aus dem Code und kann deshalb nicht davon abweichen:
   `502` kommt nur bei `/api/contact` vor und steht deshalb nicht im Dokument.
 
 `tests/openapi.test.ts` prüft Aufbau, dass alle `$ref` auflösen, dass die Aufzählungen den Konstanten
-entsprechen, dass die Beispiele zu den Schemas passen und dass die dokumentierten Fehlermeldungen
+entsprechen (Endungen: Muster statt Aufzählung), dass die Beispiele zu den Schemas passen und dass die dokumentierten Fehlermeldungen
 die der Route sind.
 
 ---
@@ -198,7 +199,8 @@ die der Route sind.
 ## `GET /api/sources` (`sources/route.ts`, Aufbau in `src/lib/sources-catalog.ts`)
 
 Antwort: `{ schemaVersion: 2, namespaces, tlds, sources, limits }` aus denselben Konstanten wie die Seite
-`/quellen` und die Prüfung (`STATIC_SOURCES`, `DOMAIN_TLDS`). Jede Quelle hat `id`, `namespace`, `label`,
+`/quellen` und die Prüfung (`STATIC_SOURCES`, `DOMAIN_TLDS`). Jede Endung hat `tld`, `default` und `checked`
+(`false`: nicht einzeln geprüft, RDAP-404 ergibt dort `unknown`, nie `not_found`). Jede Quelle hat `id`, `namespace`, `label`,
 `default`, `description` und `endpoint`. `Cache-Control: public, max-age=3600`. Kein Rate-Limit, keine Abfragen
 bei Dritten. Wer `sources` für `/api/check` setzt, nimmt die IDs von hier; Quellen mit `default: true` gehören zur
 Standardprüfung und müssen mitgeschickt werden, wenn sie bleiben sollen. `GET /llms.txt` (`src/app/llms.txt/route.ts`)

@@ -84,11 +84,23 @@ test("tools/list: genau vier Werkzeuge, alle mit Titel, outputSchema und Annotat
   }
   const check = tools.find((t) => t.name === "markenfrei_check_name");
   const props = check?.inputSchema.properties as Record<string, { type?: string; items?: { enum?: string[] }; maxItems?: number }>;
-  assert.ok(props.tlds.items?.enum?.includes("de"));
   assert.equal(props.tlds.maxItems, 8);
   assert.deepEqual(props.namespaces.items?.enum, ["domains", "packages", "stores", "social", "known_names"]);
   assert.ok(props.sources.items?.enum?.includes("npm"));
   assert.ok(!props.sources.items?.enum?.some((id) => id.startsWith("rdap:")), "Domains laufen über tlds");
+});
+
+test("tools/list ohne Endungs-Aufzählung", async () => {
+  const { tools } = await client.listTools();
+  for (const name of ["markenfrei_check_name", "markenfrei_check_names"]) {
+    const tool = tools.find((t) => t.name === name);
+    const props = tool?.inputSchema.properties as Record<string, { description?: string; items?: { enum?: string[]; pattern?: string } }>;
+    assert.equal(props.tlds.items?.enum, undefined, `${name}: keine Aufzählung der Endungen`);
+    assert.ok(props.tlds.items?.pattern, `${name}: Muster statt Aufzählung`);
+    assert.match(props.tlds.description ?? "", /\/api\/sources/);
+    // die ganze Schemaausgabe bleibt klein, auch mit über 1.000 gültigen Endungen
+    assert.ok(JSON.stringify(tool?.inputSchema).length < 8000, `${name}: Schema ist ${JSON.stringify(tool?.inputSchema).length} Zeichen lang`);
+  }
 });
 
 test("markenfrei_check_name: kompakter Text und NameReport", async () => {
@@ -343,6 +355,9 @@ test("Eingabefehler der Engine ergeben isError mit deutscher Meldung", async () 
 test("Schemafehler (Endung, Anzahl, Länge) ergeben isError statt Absturz", async () => {
   const tld = await call("markenfrei_check_name", { name: "foo", tlds: ["constructor"] });
   assert.equal(tld.isError, true);
+  assert.match(text(tld), /\/api\/sources/);
+  const shape = await call("markenfrei_check_name", { name: "foo", tlds: [".de"] });
+  assert.equal(shape.isError, true, "Form ungültig (Punkt)");
 
   const many = await call("markenfrei_check_names", { names: Array.from({ length: 11 }, (_, i) => `name${i}`) });
   assert.equal(many.isError, true);

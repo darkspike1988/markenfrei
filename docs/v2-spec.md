@@ -54,7 +54,7 @@ Standard aktiv (Web und MCP gleich):
 
 | Namensraum | Quellen |
 |---|---|
-| domains | RDAP für gewählte Endungen (Standard `de`, `com`, `dev`, `app`, `io`), dynamisch aus dem IANA-Bootstrap plus feste Overrides für `de`, `io`, `ch`, `li` (Bootstrap fehlt dort); DoH nur als Bestätigung von „vergeben“ |
+| domains | RDAP für gewählte Endungen (Standard `de`, `com`, `dev`, `app`, `io`), dynamisch aus dem IANA-Bootstrap (Rückfall: Schnappschuss `rdap-tlds.json`, von Hand erneuert) plus feste Overrides für `de`, `io`, `ch`, `li` (Bootstrap fehlt dort); alle Endungen des Schnappschusses wählbar, einzeln geprüft nur die 33 kuratierten (nur dort ergibt RDAP-404 „nicht gefunden“, sonst „unbekannt“); DoH nur als Bestätigung von „vergeben“ |
 | packages | npm, PyPI, GitHub (Nutzer/Organisation), crates.io, Homebrew (Formula UND Cask) |
 | stores | Apple App Store (Suche, exakter Titel), Google Play (Bundle-IDs `com.{name}.app`, `de.{name}.app` per HEAD) |
 | known_names | bekannte Marken (Heuristik), Wikidata (SPARQL, exaktes Label mit Typ Unternehmen/Marke/Software), GLEIF (aktive Rechtsträger, exakter Name) |

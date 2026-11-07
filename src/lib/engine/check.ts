@@ -1,6 +1,6 @@
 import { cachedLookup, createTtlCache, DEFAULT_CACHE_MAX, DEFAULT_CACHE_TTL_MS } from "@/lib/cache";
 import { buildUserAgent, createHttpClient } from "@/lib/engine/http";
-import { DEFAULT_DOMAIN_TLDS, DOMAIN_TLDS, domainSources } from "@/lib/engine/sources/domains";
+import { DEFAULT_DOMAIN_TLDS, domainSources, isDomainTld } from "@/lib/engine/sources/domains";
 import { KNOWN_NAME_SOURCES } from "@/lib/engine/sources/known-names";
 import { PACKAGE_SOURCES } from "@/lib/engine/sources/packages";
 import { REGISTRY_SOURCES } from "@/lib/engine/sources/registries";
@@ -95,8 +95,10 @@ function parseTldList(input: unknown): string[] {
   const out = new Set<string>();
   for (const raw of input) {
     const t = String(raw ?? "").trim().toLowerCase().replace(/^\./, "");
-    if (!DOMAIN_TLDS.includes(t)) {
-      throw new CheckInputError(`Endung „${t.slice(0, 20)}“ wird nicht unterstützt. Erlaubt: ${DOMAIN_TLDS.join(", ")}.`);
+    if (!isDomainTld(t)) {
+      throw new CheckInputError(
+        `Endung „${t.slice(0, 20)}“ wird nicht unterstützt. Die erlaubten Endungen stehen unter /api/sources.`,
+      );
     }
     out.add(t);
   }

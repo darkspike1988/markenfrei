@@ -2,7 +2,16 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { SourceResult, Status } from "@/lib/engine/types";
 import { rankReports } from "@/lib/engine/verdict";
-import { groupOptional, selectionSummary, type SourceInfo } from "@/components/checker-config";
+import {
+  buildQuery,
+  findTld,
+  groupFeaturedTlds,
+  groupOptional,
+  parseSelection,
+  selectionSummary,
+  type CheckerConfig,
+  type SourceInfo,
+} from "@/components/checker-config";
 import { groupNotes, hiddenNoteLead, shortlistSummary } from "@/components/verdict-text";
 
 function res(label: string, status: Status, note?: string): SourceResult {
@@ -26,6 +35,37 @@ test("selectionSummary nennt Namensräume, Endungen und Zusatzquellen in einer Z
   );
   assert.equal(selectionSummary({ namespaces: [], tlds: [], extra: ["nuget"] }, config), "+1 weitere Quelle");
   assert.equal(selectionSummary({ namespaces: [], tlds: [], extra: [] }, config), "Keine Quelle gewählt");
+});
+
+const SEL_CONFIG: CheckerConfig = {
+  namespaces: [{ id: "domains", label: "Domains" }],
+  defaultNamespaces: ["domains"],
+  tlds: ["de", "com", "dev", "app", "io", "shop", "academy"],
+  featuredTlds: ["de", "com", "dev", "app", "io"],
+  defaultTlds: ["de", "com", "dev", "app", "io"],
+  maxTlds: 3,
+  maxNames: 10,
+  sources: [],
+};
+
+test("parseSelection akzeptiert eine nicht kuratierte Endung aus ?tld=", () => {
+  const sel = parseSelection(new URLSearchParams("q=foo&tld=shop,.Academy,gibtsnicht,de,com"), SEL_CONFIG);
+  assert.deepEqual(sel.tlds, ["shop", "academy", "de"], "unbekannte raus, Obergrenze (3) gilt");
+  const only = parseSelection(new URLSearchParams("tld=gibtsnicht"), SEL_CONFIG);
+  assert.deepEqual(only.tlds, SEL_CONFIG.defaultTlds, "nur Unbekanntes: Standard");
+  assert.equal(buildQuery({ names: ["foo"], namespaces: ["domains"], tlds: ["shop", "de"], extra: [] }, SEL_CONFIG), "q=foo&tld=shop,de");
+});
+
+test("groupFeaturedTlds gruppiert in Länder, Allgemein und Neue Endungen; findTld normalisiert", () => {
+  const groups = groupFeaturedTlds(["de", "com", "dev", "shop", "at", "net"]);
+  assert.deepEqual(groups, [
+    { label: "Länder", tlds: ["de", "at"] },
+    { label: "Allgemein", tlds: ["com", "net"] },
+    { label: "Neue Endungen", tlds: ["dev", "shop"] },
+  ]);
+  assert.equal(findTld(" .Shop ", SEL_CONFIG.tlds), "shop");
+  assert.equal(findTld("nope", SEL_CONFIG.tlds), undefined);
+  assert.equal(findTld("", SEL_CONFIG.tlds), undefined);
 });
 
 test("groupOptional gruppiert nur wählbare Quellen und folgt der Reihenfolge der Namensräume", () => {

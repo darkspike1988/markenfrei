@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { DEFAULT_NAMESPACES, MAX_NAMES, MAX_TLDS, STATIC_SOURCES } from "@/lib/engine/check";
-import { DEFAULT_DOMAIN_TLDS, DOMAIN_TLDS } from "@/lib/engine/sources/domains";
+import { DEFAULT_DOMAIN_TLDS, DOMAIN_TLDS, FEATURED_TLDS } from "@/lib/engine/sources/domains";
 import { NAMESPACE_LABEL, NAMESPACES } from "@/lib/engine/types";
 
 /**
@@ -15,7 +15,17 @@ export const SourcesCatalogSchema = z.object({
     .array(z.object({ id: z.enum(NAMESPACES), label: z.string(), default: z.boolean() }))
     .describe("Namensräume; `default` markiert die ohne Angabe geprüften."),
   tlds: z
-    .array(z.object({ tld: z.string(), default: z.boolean() }))
+    .array(
+      z.object({
+        tld: z.string(),
+        default: z.boolean(),
+        checked: z
+          .boolean()
+          .describe(
+            "Einzeln geprüft (200 und 404 belegt). Bei false ergibt RDAP-404 nie „nicht gefunden“, sondern „unknown“.",
+          ),
+      }),
+    )
     .describe("Endungen für den Namensraum domains."),
   sources: z
     .array(
@@ -42,7 +52,11 @@ export function buildSourcesCatalog(): SourcesCatalog {
       label: NAMESPACE_LABEL[id],
       default: (DEFAULT_NAMESPACES as readonly string[]).includes(id),
     })),
-    tlds: DOMAIN_TLDS.map((tld) => ({ tld, default: DEFAULT_DOMAIN_TLDS.includes(tld) })),
+    tlds: DOMAIN_TLDS.map((tld) => ({
+      tld,
+      default: DEFAULT_DOMAIN_TLDS.includes(tld),
+      checked: FEATURED_TLDS.includes(tld),
+    })),
     sources: STATIC_SOURCES.map((s) => ({
       id: s.id,
       namespace: s.namespace,

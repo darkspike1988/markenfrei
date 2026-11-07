@@ -52,6 +52,25 @@ test("unbekannte Quellen, Namensräume und Endungen werden abgelehnt", () => {
   assert.throws(() => resolveSources({ tlds: ["constructor"] }), CheckInputError);
 });
 
+test("unbekannte Endung: Meldung kurz, ohne Liste aller Endungen", () => {
+  assert.throws(
+    () => resolveSources({ tlds: ["zzzzz"] }),
+    (e: unknown) => {
+      assert.ok(e instanceof CheckInputError);
+      assert.match(e.message, /zzzzz/);
+      assert.match(e.message, /\/api\/sources/);
+      assert.ok(e.message.length < 200, `Meldung ist ${e.message.length} Zeichen lang`);
+      assert.ok(!e.message.includes("com, net"), "keine Aufzählung");
+      return true;
+    },
+  );
+  // eine Endung aus dem Schnappschuss ist erlaubt
+  assert.deepEqual(
+    resolveSources({ tlds: ["shop", "academy"] }).map((s) => s.id).filter((id) => id.startsWith("rdap:")),
+    ["rdap:shop", "rdap:academy"],
+  );
+});
+
 test("Bericht: normalisiert den Namen, zählt Status und meldet Lücken", async () => {
   const reg = [fake("npm", "not_found"), fake("gh", "unknown"), fake("x", "taken")];
   const r = await checkName("Müller", { registry: reg, now: () => 1_700_000_000_000 });

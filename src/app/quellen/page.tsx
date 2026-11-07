@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { VerdictBadge } from "@/components/status-badge";
 import { STATIC_SOURCES } from "@/lib/engine/check";
-import { DEFAULT_DOMAIN_TLDS, DOH_ONLY_TLDS, DOMAIN_TLDS } from "@/lib/engine/sources/domains";
+import { DEFAULT_DOMAIN_TLDS, DOH_ONLY_TLDS, DOMAIN_TLDS, FEATURED_TLDS } from "@/lib/engine/sources/domains";
 import { TRADEMARK_LINKS_CHECKED, trademarkPrep } from "@/lib/engine/trademark-prep";
 import { NAMESPACE_LABEL, NAMESPACES } from "@/lib/engine/types";
 
@@ -16,6 +16,8 @@ export const metadata: Metadata = {
  * Entspricht RDAP_OVERRIDES in src/lib/engine/sources/domains.ts (dort nicht exportiert).
  */
 const RDAP_OVERRIDE_TLDS = ["de", "io", "ch", "li"];
+
+const otherTlds = DOMAIN_TLDS.length - FEATURED_TLDS.length;
 
 function tldMethod(t: string): string {
   if (DOH_ONLY_TLDS.includes(t)) return "nur DNS (höchstens „vergeben“)";
@@ -107,9 +109,19 @@ export default function QuellenPage() {
         <H2 id="domains">Domains</H2>
         <p className="mb-4 max-w-2xl text-sm text-soft">
           Signal ist nur der HTTP-Status des RDAP-Servers der Registry (200 vergeben, 404 dort nicht registriert).
-          Den Server liefert der IANA-RDAP-Bootstrap; für Endungen, die dort fehlen, gibt es feste Overrides. DNS über
-          HTTPS bestätigt nur „vergeben“ und ist nie ein Beleg für „frei“. Premium- und reservierte Domains erkennt
-          RDAP nicht.
+          Den Server liefert der IANA-RDAP-Bootstrap, ersatzweise ein im Repository hinterlegter Schnappschuss davon;
+          für Endungen, die dort fehlen, gibt es feste Overrides. DNS über HTTPS bestätigt nur „vergeben“ und ist nie
+          ein Beleg für „frei“. Premium- und reservierte Domains erkennt RDAP nicht.
+        </p>
+        <p className="mb-4 max-w-2xl text-sm text-soft">
+          Die Tabelle zeigt die {FEATURED_TLDS.length} einzeln geprüften Endungen. Dazu kommen {otherTlds} weitere Endungen
+          mit RDAP-Server aus dem Schnappschuss, zu wählen über das Suchfeld im Prüfer. Bei ihnen ergibt RDAP-404 nie
+          „nicht gefunden“, sondern „unbekannt“ mit dem Hinweis, beim Registrar zu bestätigen; nur 200 gilt als „vergeben“.
+          Die vollständige Liste steht in{" "}
+          <a href="/api/sources" className="underline hover:text-ink">
+            /api/sources
+          </a>
+          .
         </p>
         <div className="border-y border-line">
           <table className="w-full text-left text-sm">
@@ -127,7 +139,7 @@ export default function QuellenPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
-              {DOMAIN_TLDS.map((t) => (
+              {FEATURED_TLDS.map((t) => (
                 <tr key={t}>
                   <td className="py-2 pr-4 font-mono text-ink">.{t}</td>
                   <td className="py-2 pr-4 text-soft">{tldMethod(t)}</td>

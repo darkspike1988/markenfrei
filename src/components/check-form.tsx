@@ -4,7 +4,7 @@ import { useId, useMemo, useState, type RefObject } from "react";
 import Link from "next/link";
 import type { Namespace } from "@/lib/engine/types";
 import { NAMESPACE_LABEL } from "@/lib/engine/types";
-import { groupOptional, selectionSummary, type CheckerConfig, type SourceInfo } from "@/components/checker-config";
+import { findTld, groupFeaturedTlds, groupOptional, selectionSummary, type CheckerConfig, type SourceInfo } from "@/components/checker-config";
 import { Chevron } from "@/components/chevron";
 import { Chip } from "@/components/chip";
 
@@ -47,6 +47,31 @@ export function CheckerForm({
   const errorId = useId();
   const optionalGroups = useMemo(() => groupOptional(config.sources), [config.sources]);
   const domainsOn = namespaces.includes("domains");
+  const featuredGroups = useMemo(() => groupFeaturedTlds(config.featuredTlds), [config.featuredTlds]);
+  const tldSearchId = useId();
+  const tldListId = useId();
+  const tldNoteId = useId();
+  const [tldQuery, setTldQuery] = useState("");
+  const [tldNote, setTldNote] = useState("");
+
+  /** Übernimmt die Endung aus dem Suchfeld, wenn sie existiert und noch Platz ist. */
+  function addSearchedTld() {
+    const t = findTld(tldQuery, config.tlds);
+    if (!t) {
+      setTldNote(tldQuery.trim() ? `„${tldQuery.trim().slice(0, 30)}“ ist keine unterstützte Endung.` : "Bitte eine Endung eingeben.");
+      return;
+    }
+    if (tlds.includes(t)) {
+      setTldNote(`.${t} ist schon gewählt.`);
+    } else if (tlds.length >= config.maxTlds) {
+      setTldNote(`Höchstens ${config.maxTlds} Endungen pro Prüfung.`);
+    } else {
+      onToggleTld(t);
+      setTldNote(`.${t} hinzugefügt.`);
+      setTldQuery("");
+      return;
+    }
+  }
 
   return (
     <form onSubmit={onSubmit} noValidate aria-label="Namen prüfen" className="space-y-4">
@@ -132,20 +157,79 @@ export function CheckerForm({
             <details className="mt-2">
               <summary className="inline-flex min-h-8 items-center gap-1.5 text-sm text-soft hover:text-ink">
                 <span aria-hidden className="toggle-sign" />
-                Alle {config.tlds.length} Endungen
+                Endungen wählen oder suchen
               </summary>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {config.tlds.map((t) => (
-                  <Chip
-                    key={t}
-                    mono
-                    pressed={tlds.includes(t)}
-                    disabled={!tlds.includes(t) && tlds.length >= config.maxTlds}
-                    onClick={() => onToggleTld(t)}
-                  >
-                    .{t}
-                  </Chip>
+              <div className="mt-2 space-y-3">
+                {featuredGroups.map((g) => (
+                  <div key={g.label}>
+                    <p className="mb-1 text-xs text-muted">{g.label}</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {g.tlds.map((t) => (
+                        <Chip
+                          key={t}
+                          mono
+                          pressed={tlds.includes(t)}
+                          disabled={!tlds.includes(t) && tlds.length >= config.maxTlds}
+                          onClick={() => onToggleTld(t)}
+                        >
+                          .{t}
+                        </Chip>
+                      ))}
+                    </div>
+                  </div>
                 ))}
+                <div>
+                  <label htmlFor={tldSearchId} className="mb-1 block text-xs text-muted">
+                    Weitere Endung suchen ({config.tlds.length - config.featuredTlds.length} zur Auswahl)
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      id={tldSearchId}
+                      type="text"
+                      list={tldListId}
+                      value={tldQuery}
+                      onChange={(e) => {
+                        setTldQuery(e.target.value);
+                        setTldNote("");
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          addSearchedTld();
+                        }
+                      }}
+                      spellCheck={false}
+                      autoCapitalize="none"
+                      autoComplete="off"
+                      aria-describedby={tldNote ? tldNoteId : undefined}
+                      placeholder="z. B. shop"
+                      className="min-h-9 w-40 rounded-lg border border-line-strong bg-surface px-3 font-mono text-sm text-ink placeholder:font-sans placeholder:text-muted hover:border-muted"
+                    />
+                    <datalist id={tldListId}>
+                      {config.tlds
+                        .filter((t) => !config.featuredTlds.includes(t))
+                        .map((t) => (
+                          <option key={t} value={t} />
+                        ))}
+                    </datalist>
+                    <button
+                      type="button"
+                      onClick={addSearchedTld}
+                      className="min-h-9 rounded-lg border border-line-strong px-3 text-sm text-ink hover:border-muted"
+                    >
+                      Hinzufügen
+                    </button>
+                  </div>
+                  {tldNote && (
+                    <p id={tldNoteId} role="status" className="mt-1 text-[13px] text-muted">
+                      {tldNote}
+                    </p>
+                  )}
+                  <p className="mt-1 text-[13px] text-muted">
+                    Nur {config.featuredTlds.length} Endungen sind einzeln geprüft. Bei den übrigen bedeutet „nicht gefunden“
+                    der Registry nie „frei“, das Ergebnis bleibt dann offen.
+                  </p>
+                </div>
               </div>
             </details>
           </fieldset>

@@ -1,6 +1,6 @@
 import type { CheckerConfig } from "@/components/checker-config";
 import { DEFAULT_NAMESPACES, MAX_NAMES, MAX_TLDS, STATIC_SOURCES } from "@/lib/engine/check";
-import { DEFAULT_DOMAIN_TLDS, DOMAIN_TLDS } from "@/lib/engine/sources/domains";
+import { DEFAULT_DOMAIN_TLDS, DOMAIN_TLDS, FEATURED_TLDS } from "@/lib/engine/sources/domains";
 import { NAMESPACE_LABEL, NAMESPACES, type Namespace } from "@/lib/engine/types";
 
 /**
@@ -18,6 +18,7 @@ export function buildCheckerConfig(defaultNamespaces: readonly Namespace[] = DEF
     })),
     defaultNamespaces: [...defaultNamespaces],
     tlds: [...DOMAIN_TLDS],
+    featuredTlds: [...FEATURED_TLDS],
     defaultTlds: [...DEFAULT_DOMAIN_TLDS],
     maxTlds: MAX_TLDS,
     maxNames: MAX_NAMES,

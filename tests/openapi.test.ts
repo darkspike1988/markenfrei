@@ -87,7 +87,12 @@ test("OpenAPI-Dokument ist reines JSON ohne undefined und alle $ref lösen auf",
 
 test("Aufzählungen stimmen mit den Konstanten im Code überein", () => {
   const props = schemas.CheckRequest.properties;
-  assert.deepEqual(props.tlds.items.enum, [...DOMAIN_TLDS]);
+  // Endungen werden nicht aufgezählt (über 1.000): Muster, Verweis auf /api/sources
+  assert.equal(props.tlds.items.enum, undefined);
+  const pattern = new RegExp(props.tlds.items.pattern);
+  for (const t of ["de", ".DE", "shop"]) assert.ok(pattern.test(t), t);
+  for (const t of ["", "d", "a b", "xn--abc", "de/x"]) assert.ok(!pattern.test(t), t);
+  assert.match(props.tlds.description, /\/api\/sources/);
   assert.deepEqual(props.tlds.default, [...DEFAULT_DOMAIN_TLDS]);
   assert.deepEqual(props.namespaces.items.enum, [...NAMESPACES]);
   assert.deepEqual(props.namespaces.default, [...DEFAULT_NAMESPACES]);
