@@ -61,6 +61,8 @@ export type HttpRequest = {
    * mindestens eine Sekunde lässt. Nur für Abfragen ohne Nebenwirkung (alle sind GET oder HEAD).
    */
   retry?: boolean;
+  /** Umgang mit Weiterleitungen, Standard "follow". Mit "manual" kommt die 3xx-Antwort selbst zurück. */
+  redirect?: "follow" | "manual";
 };
 
 export type HttpResponse = {
