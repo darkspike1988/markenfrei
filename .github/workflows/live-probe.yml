@@ -15,6 +15,7 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -26,4 +27,7 @@ jobs:
         env:
           MARKENFREI_CONTACT: ${{ vars.MARKENFREI_CONTACT }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # shell: bash setzt -eo pipefail. Ohne das gilt nur der Exit-Code von tee (immer 0),
+        # und ein Fehler der Probe (Exit-Code 1) ließe den Lauf nie scheitern.
+        shell: bash
         run: npm run probe:live | tee -a "$GITHUB_STEP_SUMMARY"

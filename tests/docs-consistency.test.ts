@@ -129,3 +129,18 @@ test("Produkt-, Paket- und Registry-Version stimmen überein", () => {
   const userAgent = /Markenfrei\/(\d+\.\d+)/.exec(read("src/lib/engine/http.ts"))?.[1];
   assert.equal(userAgent, server.split(".").slice(0, 2).join("."), "User-Agent Haupt.Neben");
 });
+
+test("Live-Probe-Workflow bricht bei einem Fehler der Probe ab (pipefail) und hat ein Zeitlimit", () => {
+  const wf = read(".github/workflows/live-probe.yml");
+  // Ohne `shell: bash` zählt bei `a | tee` nur der Exit-Code von tee, ein Fehler der Probe bliebe unsichtbar.
+  const step = /- name: Live-Probe[\s\S]*?(?=\n\s+- |\n*$)/.exec(wf)?.[0] ?? "";
+  assert.match(step, /^\s+shell: bash\s*$/m, "Schritt Live-Probe braucht die Zeile shell: bash (pipefail), ein Kommentar genügt nicht");
+  assert.match(wf, /timeout-minutes:\s*\d+/, "Job braucht ein Zeitlimit");
+});
+
+test("llms.txt verspricht nichts, was nicht überall gilt", () => {
+  const src = read("src/lib/llms-txt.ts");
+  assert.doesNotMatch(src, /Jede Antwort nennt/, "RateLimit-Header gibt es nur bei /api/check und /api/mcp");
+  assert.doesNotMatch(src, /jeder Name eine Einheit/, "ein Name kostet mindestens eine Einheit");
+  assert.doesNotMatch(src, /Deterministisch/, "Ergebnisse hängen von Diensten Dritter ab");
+});

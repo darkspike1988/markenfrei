@@ -13,7 +13,7 @@ export function buildLlmsTxt(origin: string): string {
   return [
     "# Markenfrei",
     "",
-    "> Vorprüfung für Namen: Domains (RDAP), Paketregister, App Stores und bekannte Namen in einem Durchgang, mit Ampel und Link zur Quelle, wo es einen gibt. Deterministisch, ohne LLM, ohne Konto, ohne Schlüssel. Keine Markenprüfung und keine Rechtsberatung.",
+    "> Vorprüfung für Namen: Domains (RDAP), Paketregister, App Stores und bekannte Namen in einem Durchgang, mit Ampel und Link zur Quelle, wo es einen gibt. Regelbasiert, ohne LLM-Bewertung, ohne Konto, ohne Schlüssel. Die Ergebnisse hängen von den Antworten der abgefragten Dienste ab. Keine Markenprüfung und keine Rechtsberatung.",
     "",
     "Wichtig für die Auswertung: Grün heißt nur, dass in den gewählten Quellen nichts gefunden wurde. Es heißt nicht „als Marke frei“ und nicht „registrierbar“. `unknown` ist nie frei. Die Marke steht immer auf „nicht geprüft“; die Antwort enthält die Vorbereitung für DPMA, EUIPO und WIPO.",
     "",
@@ -34,9 +34,9 @@ export function buildLlmsTxt(origin: string): string {
     "",
     "## Grenzen",
     "",
-    `- Einzelabfragen für ein konkretes Projekt, keine Massenabfragen. Rate-Limit ${DEFAULT_RATE_LIMIT} Einheiten pro ${RATE_LIMIT_WINDOW_MS / 1000} Sekunden und IP (jeder Name eine Einheit).`,
+    `- Einzelabfragen für ein konkretes Projekt, keine Massenabfragen. Standard-Rate-Limit ${DEFAULT_RATE_LIMIT} Einheiten pro ${RATE_LIMIT_WINDOW_MS / 1000} Sekunden und IP (jeder Name kostet mindestens eine Einheit, eine größere Quellenauswahl mehr; der Betreiber kann das Limit ändern).`,
     "- Eine Prüfung dauert höchstens etwa 8 Sekunden. Quellen, die nicht rechtzeitig antworten, melden `unknown` (mit `retryable: true`, wenn ein erneuter Versuch sinnvoll ist).",
-    "- Jede Antwort nennt den Stand in den Headern RateLimit-Limit, RateLimit-Remaining und RateLimit-Reset; bei 429 gilt Retry-After.",
+    "- Erfolgsantworten von /api/check und /api/mcp nennen den Stand in den Headern RateLimit-Limit, RateLimit-Remaining und RateLimit-Reset; bei 429 des Client-Limits gilt Retry-After.",
     "- Aufrufe aus Browserseiten fremder Herkunft werden abgelehnt (403); Server, Skripte und curl funktionieren.",
     "",
   ].join("\n");
