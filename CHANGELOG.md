@@ -22,6 +22,7 @@ Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 ### Behoben
 
 - Eine fehlgeschlagene Wiederholung ersetzt keinen fertigen Bericht mehr.
+- Ein vor Abschluss der Hydrierung ins Namensfeld getippter Text ging verloren (Auslöser der wackeligen E2E-Tests); das Feld ist bis dahin schreibgeschützt.
 - Kontaktversand läuft wieder auf Node 20 (`Promise.withResolvers` ersetzt).
 - Die Live-Probe schlägt bei Fehlern fehl (pipefail).
 - Dokumentation: Ampel-Regel an `verdict.ts` angeglichen, falsche Zusage „Link zu jeder Quelle“ entfernt, `llms.txt` ohne falsche Zusagen.

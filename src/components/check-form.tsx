@@ -67,6 +67,9 @@ export function CheckerForm({
               }
             }}
             rows={1}
+            // Bis zur Hydrierung (inert) nur lesbar: Die Platzhalter-Fassung nähme Eingaben an, und React
+            // leert das Feld beim Einhängen der echten Komponente. Lieber kurz gesperrt als Name weg.
+            readOnly={inert}
             spellCheck={false}
             autoCapitalize="none"
             autoComplete="off"
