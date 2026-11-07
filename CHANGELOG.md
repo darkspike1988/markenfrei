@@ -26,6 +26,7 @@ Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 - Die Prüfoberfläche ist in Formular, Prüflauf-Hook und Ergebnisbereich aufgeteilt.
 - `npm audit` läuft über alle Abhängigkeiten; `minimatch` in `typescript-estree` auf eine gepatchte Version angehoben (GHSA-g3hv-75wg-m249).
 - Betriebsangaben in der Dokumentation angeglichen.
+- Der .ics-Export wird nicht mehr gezählt.
 
 ### Behoben
 

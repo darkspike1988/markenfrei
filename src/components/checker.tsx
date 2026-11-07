@@ -179,7 +179,6 @@ export function Checker({
   }
 
   function exportIcs() {
-    trackEvent("export/ics");
     const names = view.ranked.map((r) => r.name);
     const url = new URL("/", window.location.origin);
     url.searchParams.set("q", names.join(","));

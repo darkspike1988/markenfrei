@@ -1,6 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { analyticsEnabled, cleanPath, externalReferrerOrigin } from "@/lib/analytics";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { analyticsEnabled, cleanPath, externalReferrerOrigin, type AnalyticsEvent } from "@/lib/analytics";
+
+const ROOT = join(__dirname, "..");
+const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
 
 test("cleanPath entfernt Query und Fragment, damit geprüfte Namen nie übertragen werden", () => {
   assert.equal(cleanPath("/"), "/");
@@ -27,4 +32,31 @@ test("Do Not Track und Global Privacy Control schalten die Messung ab", () => {
   assert.equal(analyticsEnabled(nav({ doNotTrack: "1" })), false);
   assert.equal(analyticsEnabled(nav({ doNotTrack: null, globalPrivacyControl: true })), false);
   assert.equal(analyticsEnabled(undefined), false);
+});
+
+test("export/ics ist kein Ereignis mehr", () => {
+  // @ts-expect-error export/ics ist aus AnalyticsEvent entfernt; tsc muss hier den Fehler melden
+  const e: AnalyticsEvent = "export/ics";
+  assert.equal(e, "export/ics");
+});
+
+test("exportIcs ruft trackEvent nicht auf, die anderen Exporte zählen weiter", () => {
+  const src = read("src/components/checker.tsx");
+  const start = src.indexOf("function exportIcs()");
+  assert.notEqual(start, -1, "function exportIcs fehlt");
+  const end = src.indexOf("\n  function ", start + 1);
+  assert.notEqual(end, -1, "Ende von exportIcs nicht gefunden");
+  const body = src.slice(start, end);
+  assert.match(body, /downloadFile\(/, "der Rumpf muss den Download enthalten, sonst ist der Ausschnitt falsch");
+  assert.doesNotMatch(body, /trackEvent/, "exportIcs darf nicht zählen");
+  for (const ev of ["export/json", "export/csv", "export/markdown"]) {
+    const count = src.split(`trackEvent("${ev}")`).length - 1;
+    assert.equal(count, 1, `${ev} wird genau einmal gezählt`);
+  }
+});
+
+test("docs/analytics.md nennt export/ics nicht als Ereignis", () => {
+  const doc = read("docs/analytics.md");
+  assert.doesNotMatch(doc, /export\/ics/, "export/ics ist kein gezähltes Ereignis mehr");
+  assert.match(doc, /Die Kalender-Erinnerung \(\.ics\) wird nicht gezählt\./);
 });
