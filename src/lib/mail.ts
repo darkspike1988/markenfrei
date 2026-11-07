@@ -205,9 +205,11 @@ export async function sendContactMail(
     });
     // Ein Fehler nach Ablauf des Budgets darf keine unbehandelte Ablehnung auslösen.
     sending.catch(() => undefined);
-    const budget = Promise.withResolvers<never>();
-    timer = setTimeout(() => budget.reject(new MailSendError("timeout")), totalBudgetMs);
-    await Promise.race([sending, budget.promise]);
+    // Kein Promise.withResolvers: das gibt es erst ab Node 22, unterstützt wird Node 20.9.
+    const budget = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new MailSendError("timeout")), totalBudgetMs);
+    });
+    await Promise.race([sending, budget]);
   } catch (err) {
     throw err instanceof MailSendError ? err : new MailSendError("failed", errorCode(err));
   } finally {
