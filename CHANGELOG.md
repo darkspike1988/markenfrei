@@ -6,6 +6,7 @@ Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 
 ### Hinzugefügt
 
+- Erinnerung als .ics: Ein Klick lädt einen ganztägigen Kalendertermin „Name erneut prüfen“ in 30 Tagen herunter, erzeugt nur im Browser.
 - crates.io wird über den Sparse-Index abgefragt.
 - `GET /api/sources` und `GET /llms.txt`.
 - Browser-Suche: `GET /opensearch.xml` (OpenSearch-Beschreibung), `<link rel="search">` auf jeder Seite; Markenfrei lässt sich als Suchmaschine hinzufügen und öffnet dann `/?q=…`.

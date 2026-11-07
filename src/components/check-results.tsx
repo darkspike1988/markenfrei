@@ -27,6 +27,7 @@ export function CheckResults({
   exportJson,
   exportCsv,
   exportMarkdown,
+  exportIcs,
   openFromMatrix,
   recheck,
   retry,
@@ -41,6 +42,7 @@ export function CheckResults({
   exportJson: () => void;
   exportCsv: () => void;
   exportMarkdown: () => void;
+  exportIcs: () => void;
   openFromMatrix: (name: string) => void;
   recheck: (name: string) => void;
   retry: (name: string) => void;
@@ -79,6 +81,9 @@ export function CheckResults({
                 </button>
                 <button type="button" onClick={exportMarkdown} className={QUIET_BUTTON}>
                   Als Markdown
+                </button>
+                <button type="button" onClick={exportIcs} className={QUIET_BUTTON}>
+                  Erinnerung (.ics)
                 </button>
                 <button type="button" onClick={() => window.print()} className={QUIET_BUTTON}>
                   Drucken

@@ -188,6 +188,7 @@ test("toMarkdown: leere Eingabe und schwacher Treffer", () => {
 test("exportFileName: ein Name oder shortlist, ohne unzulässige Zeichen", () => {
   assert.equal(exportFileName([report("wachwerk", [])], "csv"), "markenfrei-wachwerk.csv");
   assert.equal(exportFileName([report("a", []), report("b", [])], "md"), "markenfrei-shortlist.md");
+  assert.equal(exportFileName([report("a", [])], "ics"), "markenfrei-a.ics");
   assert.equal(exportFileName([], "json"), "markenfrei-shortlist.json");
   assert.equal(exportFileName([report("a/b:c", [])], "csv"), "markenfrei-a_b_c.csv");
 });

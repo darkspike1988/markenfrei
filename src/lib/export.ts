@@ -100,7 +100,7 @@ export function toMarkdown(reports: readonly NameReport[]): string {
 }
 
 /** Dateiname für den Download: einzelner Name oder „shortlist“, ohne Zeichen, die Dateisysteme ablehnen. */
-export function exportFileName(reports: readonly NameReport[], extension: "json" | "csv" | "md"): string {
+export function exportFileName(reports: readonly NameReport[], extension: "json" | "csv" | "md" | "ics"): string {
   const base = reports.length === 1 ? reports[0].name.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_") : "shortlist";
   return `markenfrei-${base || "shortlist"}.${extension}`;
 }
