@@ -118,6 +118,27 @@ test.describe("Prüfer", () => {
     }
   });
 
+  test("Erinnerung (.ics): Download ohne neue Netzanfrage, Inhalt mit eigener Adresse", async ({ page }) => {
+    const calls = await stubCheckApi(page);
+    await page.goto("/");
+    await page.getByRole("textbox").first().fill("wachwerk");
+    await page.getByRole("button", { name: "Prüfen", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Ergebnis" })).toBeVisible();
+    const requests: string[] = [];
+    page.on("request", (r) => requests.push(r.url()));
+    const callsBefore = calls.length;
+    const download = page.waitForEvent("download");
+    await page.getByRole("button", { name: "Erinnerung (.ics)" }).click();
+    const file = await download;
+    expect(file.suggestedFilename()).toBe("markenfrei-wachwerk.ics");
+    const { readFile } = await import("node:fs/promises");
+    const text = await readFile((await file.path())!, "utf8");
+    expect(text).toContain("SUMMARY:wachwerk erneut prüfen");
+    expect(text).toContain("URL:http://");
+    expect(calls).toHaveLength(callsBefore);
+    expect(requests.filter((u) => !u.startsWith("blob:") && !u.includes("/_gc/count"))).toEqual([]);
+  });
+
   test("leere und zu lange Eingaben zeigen eine Fehlermeldung statt einer Anfrage", async ({ page }) => {
     const calls = await stubCheckApi(page);
     await page.goto("/");

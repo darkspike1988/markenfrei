@@ -95,7 +95,7 @@ Gelb, dann Rot, innerhalb davon nach Zahl der Treffer und dann der Lücken.
   und Ähnlichkeit zu bekannten Marken; Muster-Chips (Präfixe, Suffixe, Bindestrich, Plural) bauen eine Shortlist.
 - **Ergebnisse weiterverwenden:** Bei mehreren Namen zeigt „Vergleich“ eine Tabelle (Namen in Rangfolge, je
   Namensraum ein Text mit Zeichen, Ampel). Export als JSON, CSV (eine Zeile je Name und Quelle, Formeln
-  entschärft) oder Markdown, entsteht im Browser; „Drucken“ (oder Strg+P) liefert einen schlichten
+  entschärft), Markdown oder eine Kalender-Erinnerung (.ics, 30 Tage später „Name erneut prüfen“) entsteht im Browser; „Drucken“ (oder Strg+P) liefert einen schlichten
   schwarz-weißen Bericht mit Prüfdatum und Hinweis.
 - **Keine Rechtsberatung.** Vor Anmeldung oder Nutzung eines Namens gehört eine fachkundige
   Markenrecherche dazu.
