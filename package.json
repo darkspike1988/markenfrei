@@ -11,6 +11,7 @@
     "start": "next start",
     "lint": "eslint",
     "mcp": "tsx src/mcp/cli.ts",
+    "cli": "tsx src/cli/main.ts",
     "build:mcp": "node mcp/build.mjs",
     "test": "tsx --test tests/*.test.ts",
     "test:mcp-package": "node mcp/test-package.mjs",
