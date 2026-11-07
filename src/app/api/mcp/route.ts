@@ -1,5 +1,5 @@
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { guard, isAllowedMcpOrigin, mcpRequestCost, readLimited } from "@/app/api/_lib/http";
+import { guardDetailed, isAllowedMcpOrigin, mcpRequestCost, readLimited } from "@/app/api/_lib/http";
 import { createMarkenfreiMcpServer } from "@/mcp/server";
 
 /**
@@ -44,8 +44,8 @@ export async function POST(req: Request) {
   }
 
   const { cost, outbound } = mcpRequestCost(parsed);
-  const limited = guard(req, cost, outbound);
-  if (limited) return limited;
+  const limited = guardDetailed(req, cost, outbound);
+  if (limited.response) return limited.response;
 
   if (Array.isArray(parsed)) {
     return rpcError(400, -32600, "Batch-Anfragen werden nicht unterstützt.");
@@ -68,7 +68,11 @@ export async function POST(req: Request) {
 
   try {
     await server.connect(transport);
-    return await transport.handleRequest(request);
+    const res = await transport.handleRequest(request);
+    // RateLimit-Header an die Antwort des Transports hängen (Headers dort sind nicht änderbar)
+    const out = new Headers(res.headers);
+    for (const [k, v] of Object.entries(limited.headers)) out.set(k, v);
+    return new Response(res.body, { status: res.status, statusText: res.statusText, headers: out });
   } finally {
     // Pro Anfrage ein Server: nach der Antwort aufräumen
     await transport.close().catch(() => undefined);

@@ -36,6 +36,7 @@ export function buildLlmsTxt(origin: string): string {
     "",
     `- Einzelabfragen für ein konkretes Projekt, keine Massenabfragen. Rate-Limit ${DEFAULT_RATE_LIMIT} Einheiten pro ${RATE_LIMIT_WINDOW_MS / 1000} Sekunden und IP (jeder Name eine Einheit).`,
     "- Eine Prüfung dauert höchstens etwa 8 Sekunden. Quellen, die nicht rechtzeitig antworten, melden `unknown` (mit `retryable: true`, wenn ein erneuter Versuch sinnvoll ist).",
+    "- Jede Antwort nennt den Stand in den Headern RateLimit-Limit, RateLimit-Remaining und RateLimit-Reset; bei 429 gilt Retry-After.",
     "- Aufrufe aus Browserseiten fremder Herkunft werden abgelehnt (403); Server, Skripte und curl funktionieren.",
     "",
   ].join("\n");

@@ -9,7 +9,9 @@ Jede Route geht durch `guardRequest` aus `src/lib/rate-limit.ts` (Standard 60 Ei
 Minute und Client). Anfragen mit ausgehenden Abfragen zählen zusätzlich gegen ein Limit pro
 Prozess (`MARKENFREI_GLOBAL_RATE_LIMIT`, Standard 600 Einheiten pro Minute). Es greift auch,
 wenn jemand das Limit pro Client umgeht, und schützt die Server-IP vor Sperren bei den
-abgefragten Diensten. Bei Überschreitung kommt `429` mit `Retry-After`.
+abgefragten Diensten. Bei Überschreitung kommt `429` mit `Retry-After`. Antworten von `/api/check` und `/api/mcp`
+tragen `RateLimit-Limit`, `RateLimit-Remaining` und `RateLimit-Reset` (IETF-Entwurf; Sekunden bis zum Ende des Fensters; auch bei 429).
+Das Prozesslimit bleibt intern und erscheint nur als 429.
 
 **Kosten einer Prüfung:** verschiedene Namen (nach Normalisierung) × `ceil(aufgelöste Quellen /
 Quellen der Standardauswahl)`. Die Standardauswahl kostet 1 je Name, alle Quellen mit 8 Endungen

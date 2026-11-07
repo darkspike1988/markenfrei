@@ -8,7 +8,16 @@
 
 const MAX_KEYS = 10_000;
 
-export type RateLimitResult = { allowed: boolean; retryAfterSec: number };
+export type RateLimitResult = {
+  allowed: boolean;
+  retryAfterSec: number;
+  /** Einheiten pro Fenster */
+  limit: number;
+  /** Noch freie Einheiten im aktuellen Fenster (nach dieser Anfrage) */
+  remaining: number;
+  /** Sekunden bis zum Ende des Fensters */
+  resetSec: number;
+};
 
 /** cost: wie viele Einheiten die Anfrage verbraucht (z. B. Anzahl geprüfter Namen) */
 export type RateLimiter = { check(key: string, cost?: number): RateLimitResult };
@@ -44,10 +53,17 @@ export function createRateLimiter(opts: {
       }
 
       if (w.count + units > opts.limit) {
-        return { allowed: false, retryAfterSec: Math.max(1, Math.ceil((w.resetAt - t) / 1000)) };
+        const reset = Math.max(1, Math.ceil((w.resetAt - t) / 1000));
+        return { allowed: false, retryAfterSec: reset, limit: opts.limit, remaining: Math.max(0, opts.limit - w.count), resetSec: reset };
       }
       w.count += units;
-      return { allowed: true, retryAfterSec: 0 };
+      return {
+        allowed: true,
+        retryAfterSec: 0,
+        limit: opts.limit,
+        remaining: opts.limit - w.count,
+        resetSec: Math.max(1, Math.ceil((w.resetAt - t) / 1000)),
+      };
     },
   };
 }
@@ -101,7 +117,20 @@ export function rateLimitMessage(retryAfterSec: number): string {
   return `Zu viele Anfragen. Bitte in ${retryAfterSec} Sekunden erneut versuchen.`;
 }
 
-export function limitedResponse(retryAfterSec: number): Response {
+/**
+ * Header zur Auskunft über das Limit des Clients (IETF-Entwurf „RateLimit header fields for HTTP“):
+ * RateLimit-Limit, RateLimit-Remaining, RateLimit-Reset (Sekunden bis zum Ende des Fensters).
+ * Die Werte gelten pro Einheit; eine Anfrage mit mehreren Namen verbraucht mehrere.
+ */
+export function rateLimitHeaders(r: RateLimitResult): Record<string, string> {
+  return {
+    "RateLimit-Limit": String(r.limit),
+    "RateLimit-Remaining": String(r.remaining),
+    "RateLimit-Reset": String(r.resetSec),
+  };
+}
+
+export function limitedResponse(retryAfterSec: number, extraHeaders: Record<string, string> = {}): Response {
   return new Response(
     JSON.stringify({
       error: rateLimitMessage(retryAfterSec),
@@ -111,17 +140,32 @@ export function limitedResponse(retryAfterSec: number): Response {
       headers: {
         "Content-Type": "application/json",
         "Retry-After": String(retryAfterSec),
+        ...extraHeaders,
       },
     },
   );
 }
 
-/** Liefert eine 429-Antwort, wenn das Limit erreicht ist, sonst null. */
-export function createGuard(limiter: RateLimiter): (req: Request, cost?: number) => Response | null {
+export type GuardOutcome = {
+  /** 429-Antwort, wenn das Limit erreicht ist, sonst null */
+  response: Response | null;
+  /** RateLimit-Header für die Antwort (auch bei 429) */
+  headers: Record<string, string>;
+};
+
+/** Wie createGuard, liefert aber zusätzlich die RateLimit-Header für die Erfolgsantwort. */
+export function createGuardDetailed(limiter: RateLimiter): (req: Request, cost?: number) => GuardOutcome {
   return (req, cost = 1) => {
     const r = limiter.check(clientKey(req), cost);
-    return r.allowed ? null : limitedResponse(r.retryAfterSec);
+    const headers = rateLimitHeaders(r);
+    return { response: r.allowed ? null : limitedResponse(r.retryAfterSec, headers), headers };
   };
+}
+
+/** Liefert eine 429-Antwort, wenn das Limit erreicht ist, sonst null. */
+export function createGuard(limiter: RateLimiter): (req: Request, cost?: number) => Response | null {
+  const detailed = createGuardDetailed(limiter);
+  return (req, cost = 1) => detailed(req, cost).response;
 }
 
 const perMinute = Number(process.env.MARKENFREI_RATE_LIMIT);
@@ -131,10 +175,12 @@ export const DEFAULT_RATE_LIMIT = 60;
 /** Länge des Zeitfensters in Millisekunden. */
 export const RATE_LIMIT_WINDOW_MS = 60_000;
 
+const clientLimiter = createRateLimiter({
+  limit: Number.isFinite(perMinute) && perMinute > 0 ? perMinute : DEFAULT_RATE_LIMIT,
+  windowMs: RATE_LIMIT_WINDOW_MS,
+});
+
 /** Gemeinsamer Wächter für alle öffentlichen Routen (Standard: 60 Anfragen pro Minute und IP). */
-export const guardRequest = createGuard(
-  createRateLimiter({
-    limit: Number.isFinite(perMinute) && perMinute > 0 ? perMinute : DEFAULT_RATE_LIMIT,
-    windowMs: RATE_LIMIT_WINDOW_MS,
-  }),
-);
+export const guardRequest = createGuard(clientLimiter);
+/** Derselbe Zähler wie guardRequest, mit RateLimit-Headern für die Antwort. */
+export const guardRequestDetailed = createGuardDetailed(clientLimiter);

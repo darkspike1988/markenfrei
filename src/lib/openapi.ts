@@ -238,6 +238,21 @@ const NO_STORE_HEADER = {
   "Cache-Control": { description: "Immer no-store: Antworten werden nicht zwischengespeichert.", schema: { type: "string", const: "no-store" } },
 };
 
+/** RateLimit-Header der Antworten von /api/check und /api/mcp (IETF-Entwurf „RateLimit header fields for HTTP“). */
+const RATE_LIMIT_HEADERS = {
+  "RateLimit-Limit": { description: "Einheiten pro Fenster für diesen Client.", schema: { type: "integer", minimum: 1 } },
+  "RateLimit-Remaining": {
+    description: "Noch freie Einheiten im aktuellen Fenster, nach dieser Anfrage. Jeder verschiedene Name kostet mindestens eine Einheit.",
+    schema: { type: "integer", minimum: 0 },
+  },
+  "RateLimit-Reset": { description: "Sekunden bis zum Ende des Fensters.", schema: { type: "integer", minimum: 1 } },
+};
+
+const RETRY_AFTER_HEADERS = {
+  "Retry-After": { description: "Sekunden bis zum Ende des Fensters.", schema: { type: "integer", minimum: 1 } },
+  ...RATE_LIMIT_HEADERS,
+};
+
 function checkOperation(): JsonObject {
   return {
     operationId: "checkNames",
@@ -268,7 +283,7 @@ function checkOperation(): JsonObject {
     responses: {
       "200": {
         description: "Berichte und Rangliste.",
-        headers: NO_STORE_HEADER,
+        headers: { ...NO_STORE_HEADER, ...RATE_LIMIT_HEADERS },
         content: { "application/json": { schema: ref("CheckResponse") } },
       },
       "400": errorResponse(
@@ -282,7 +297,7 @@ function checkOperation(): JsonObject {
       "429": errorResponse(
         "Rate-Limit erreicht. Retry-After nennt die Sekunden bis zum nächsten Fenster.",
         rateLimitMessage(12),
-        { "Retry-After": { description: "Sekunden bis zum Ende des Fensters.", schema: { type: "integer", minimum: 1 } } },
+        RETRY_AFTER_HEADERS,
       ),
       "500": errorResponse("Unerwarteter Fehler (allgemeine Meldung, keine Details).", CHECK_ERRORS.failed, NO_STORE_HEADER),
     },
@@ -317,7 +332,7 @@ function mcpOperation(serverUrl: string): JsonObject {
       },
     },
     responses: {
-      "200": { description: "JSON-RPC-Antwort.", content: { "application/json": { schema: ref("JsonRpcResponse") } } },
+      "200": { description: "JSON-RPC-Antwort.", headers: RATE_LIMIT_HEADERS, content: { "application/json": { schema: ref("JsonRpcResponse") } } },
       "400": {
         description: "Batch-Anfrage oder nicht lesbarer Body (JSON-RPC-Fehler -32600).",
         content: { "application/json": { schema: ref("JsonRpcResponse"), example: rpcExample(-32600, "Batch-Anfragen werden nicht unterstützt.") } },
@@ -333,7 +348,7 @@ function mcpOperation(serverUrl: string): JsonObject {
       "429": errorResponse(
         "Rate-Limit erreicht.",
         rateLimitMessage(12),
-        { "Retry-After": { description: "Sekunden bis zum Ende des Fensters.", schema: { type: "integer", minimum: 1 } } },
+        RETRY_AFTER_HEADERS,
       ),
     },
   };

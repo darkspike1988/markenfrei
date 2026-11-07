@@ -2,7 +2,7 @@ import type { z } from "zod";
 import { checkNames, CheckInputError, MAX_NAMES } from "@/lib/engine/check";
 import type { Namespace } from "@/lib/engine/types";
 import { CHECK_ERRORS, CHECK_MAX_BODY_BYTES, checkBodySchema } from "@/app/api/_lib/check-schema";
-import { checkCost, distinctNameCount, guard, isAllowedBrowserCall, isJsonContentType, jsonError, NO_STORE, readLimited } from "@/app/api/_lib/http";
+import { checkCost, distinctNameCount, guardDetailed, isAllowedBrowserCall, isJsonContentType, jsonError, NO_STORE, readLimited } from "@/app/api/_lib/http";
 
 /**
  * POST /api/check
@@ -72,12 +72,12 @@ export async function POST(req: Request): Promise<Response> {
     return fail(500, CHECK_ERRORS.failed);
   }
 
-  const limited = guard(req, cost);
-  if (limited) return limited;
+  const limited = guardDetailed(req, cost);
+  if (limited.response) return limited.response;
 
   try {
     const result = await checkNames(body.names, opts);
-    return Response.json(result, { headers: NO_STORE });
+    return Response.json(result, { headers: { ...NO_STORE, ...limited.headers } });
   } catch (err) {
     if (err instanceof CheckInputError) return fail(400, err.message);
     return fail(500, CHECK_ERRORS.failed);
