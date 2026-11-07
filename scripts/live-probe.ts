@@ -5,12 +5,16 @@
  *
  *   npm run probe:live            alle Kanarien
  *   npm run probe:live -- npm,pypi  nur diese Quellen
+ *   npm run probe:live -- --json probe-status.json  zusätzlich Status je Quelle als JSON (ohne Notizen und Namen)
  *
  * Exit-Code 1, wenn eine Quelle mit Status "gate" abweicht. "advisory" meldet nur (Warnung).
  * Fragt je Quelle zwei Namen ab, also nur wenige Dutzend Anfragen; nicht in Schleifen aufrufen.
  */
+import { writeFileSync } from "node:fs";
+import { parseArgs } from "node:util";
 import { checkName, clearResultCache, resolveSources } from "@/lib/engine/check";
 import type { Status } from "@/lib/engine/types";
+import { toProbeStatus } from "@/lib/probe-status";
 
 type Canary = { name: string; level: "gate" | "advisory" };
 
@@ -34,7 +38,8 @@ const CANARIES: Record<string, Canary> = {
 };
 
 async function main(): Promise<number> {
-  const wanted = process.argv[2]?.split(",").filter(Boolean);
+  const { values, positionals } = parseArgs({ args: process.argv.slice(2), options: { json: { type: "string" } }, allowPositionals: true });
+  const wanted = positionals[0]?.split(",").filter(Boolean);
   const ids = Object.keys(CANARIES).filter((id) => !wanted || wanted.includes(id));
   const sources = resolveSources({ namespaces: ["packages", "stores", "known_names"], sources: ids });
   const free = `zq${Math.random().toString(36).slice(2, 12).replace(/[^a-z]/g, "q")}x`;
@@ -74,6 +79,7 @@ async function main(): Promise<number> {
   }
   const failed = rows.filter((r) => !r.ok && r.level === "gate");
   for (const r of failed) console.log(`::error title=Live-Probe ${r.id}::${r.note}`);
+  if (values.json) writeFileSync(values.json, JSON.stringify(toProbeStatus(rows, new Date()), null, 2) + "\n");
   return failed.length ? 1 : 0;
 }
 
