@@ -21,7 +21,7 @@
  * Format, Filter, Rechtsformen und Deduplizierung stehen in src/lib/engine/sources/wikidata-brands-format.ts.
  */
 import { createHash } from "node:crypto";
-import { writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
   BRAND_TYPE,
@@ -91,7 +91,17 @@ async function sparql(query: string): Promise<Binding[]> {
     err.timeout = res.status === 504 || res.status === 500 || /timeout/i.test(body);
     throw err;
   }
-  const json = (await res.json()) as { results?: { bindings?: Binding[] } };
+  let json: { results?: { bindings?: Binding[] } };
+  try {
+    // Einzelne Labels bei Wikidata enthalten Steuerzeichen (z. B. Tabulator), die in JSON-Strings verboten sind.
+    const text = (await res.text()).replace(/[\u0000-\u001F]/g, " ");
+    json = JSON.parse(text) as { results?: { bindings?: Binding[] } };
+  } catch (cause) {
+    // Wikidata bricht lange Abfragen nach dem Zeitlimit mitten im Text ab: das gilt wie ein Timeout.
+    const err = new Error(`Wikidata: Antwort abgeschnitten oder kein JSON (${(cause as Error).message})`) as Error & { timeout?: boolean };
+    err.timeout = true;
+    throw err;
+  }
   if (!Array.isArray(json.results?.bindings)) throw new Error("Unerwartetes Format: results.bindings fehlt");
   return json.results.bindings;
 }
@@ -103,14 +113,49 @@ function toRows(bindings: Binding[]): Row[] {
     const type = b.type?.value.split("/").pop() ?? "";
     const label = b.label?.value;
     const sitelinks = Number(b.sitelinks?.value);
-    if (!/^Q\d+$/.test(id) || !label || !Number.isFinite(sitelinks)) continue;
+    if (!/^Q\d+$/.test(id) || !label || /^Q\d+$/.test(label) || !Number.isFinite(sitelinks)) continue;
+    if (b.end?.value) continue; // aufgelöst (P576) oder eingestellt (P2669); nur die Firmen-Abfrage liefert ?end
     rows.push({ id, label, sitelinks, type });
   }
   return rows;
 }
 
-async function fetchRows(o: Args): Promise<Row[]> {
-  const all = [BRAND, TRADEMARK, ...(o.includeCompanies ? COMPANY_TYPES : [])];
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Firmen in EINER eigenen Abfrage: erst die Sitelinks-Schwelle, dann ?end (P576/P2669) als OPTIONAL und
+ * das Label über den Label-Dienst. Die Form mit FILTER NOT EXISTS und ORDER BY läuft bei Wikidata ins
+ * Zeitlimit (gemessen am 07.11.2026: 504 nach 65 s; diese Form braucht etwa 45 s).
+ */
+function buildCompanyQuery(lo: number, hi: number): string {
+  return `SELECT ?item ?label ?sitelinks ?type ?end WHERE {
+  VALUES ?type { ${COMPANY_TYPES.map((t) => `wd:${t}`).join(" ")} }
+  ?item wdt:P31 ?type ; wikibase:sitelinks ?sitelinks .
+  FILTER(?sitelinks >= ${lo} && ?sitelinks < ${hi})
+  OPTIONAL { ?item wdt:P576 ?d1 } OPTIONAL { ?item wdt:P2669 ?d2 }
+  BIND(COALESCE(?d1, ?d2) AS ?end)
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en,de". ?item rdfs:label ?label. }
+}`;
+}
+
+/** Bänder nach Sitelinks, damit jede Antwort klein bleibt (eine große Antwort wurde bei etwa 614 KB abgeschnitten). */
+function companyBands(min: number): Array<[number, number]> {
+  const cuts = [min, ...[30, 40, 50, 65, 80, 100, 150].filter((c) => c > min), 1_000_000];
+  return cuts.slice(0, -1).map((lo, i) => [lo, cuts[i + 1]] as [number, number]);
+}
+
+async function sparqlWithRetry(query: string): Promise<Binding[]> {
+  try {
+    return await sparql(query);
+  } catch (e) {
+    console.log(`  Fehler (${(e as Error).message.slice(0, 90)}), neuer Versuch nach 65 s.`);
+    await sleep(65_000);
+    return sparql(query);
+  }
+}
+
+async function fetchBrandRows(o: Args): Promise<Row[]> {
+  const all = [BRAND, TRADEMARK];
   try {
     return toRows(await sparql(buildQuery(all, o.companyMinSitelinks)));
   } catch (e) {
@@ -130,6 +175,34 @@ async function fetchRows(o: Args): Promise<Row[]> {
     }
   }
   return rows;
+}
+
+async function fetchRows(o: Args): Promise<Row[]> {
+  const rows = await fetchBrandRows(o);
+  if (!o.includeCompanies) return rows;
+  // Wikidata erlaubt etwa eine Anfrage pro Minute (HTTP 429 sonst).
+  const firms: Row[] = [];
+  for (const [lo, hi] of companyBands(o.companyMinSitelinks)) {
+    const cachedAlready = existsSync(fileURLToPath(new URL(`../.cache-wikidata-band-${lo}-${hi}.json`, import.meta.url)));
+    if (!cachedAlready) {
+      console.log(`Warte 65 s (Wikidata-Anfragegrenze), dann Firmen mit Sitelinks ${lo} bis ${hi === 1_000_000 ? "offen" : hi - 1}.`);
+      await sleep(65_000);
+    }
+    // Zwischenspeicher je Band, damit ein Fehlschlag später nicht alles neu holt (nur dieser manuelle Lauf).
+    const cache = fileURLToPath(new URL(`../.cache-wikidata-band-${lo}-${hi}.json`, import.meta.url));
+    let bindings: Binding[];
+    if (existsSync(cache)) {
+      bindings = JSON.parse(readFileSync(cache, "utf8")) as Binding[];
+      console.log(`  (aus Zwischenspeicher ${lo}-${hi})`);
+    } else {
+      bindings = await sparqlWithRetry(buildCompanyQuery(lo, hi));
+      writeFileSync(cache, JSON.stringify(bindings));
+    }
+    const part = toRows(bindings);
+    console.log(`  Firmen-Band ${lo}-${hi === 1_000_000 ? "offen" : hi - 1}: ${part.length} Zeilen (ohne aufgelöste)`);
+    firms.push(...part);
+  }
+  return [...rows, ...firms];
 }
 
 async function main(): Promise<void> {
@@ -167,7 +240,7 @@ async function main(): Promise<void> {
     quelle: ENDPOINT,
     lizenz: "CC0 1.0, Wikidata",
     abgerufen: new Date().toISOString().slice(0, 10),
-    abfrage_sha256: createHash("sha256").update(buildQuery(queryTypes, companyMinSitelinks)).digest("hex"),
+    abfrage_sha256: createHash("sha256").update(buildQuery([BRAND, TRADEMARK], companyMinSitelinks) + (includeCompanies ? companyBands(companyMinSitelinks).map(([lo, hi]) => buildCompanyQuery(lo, hi)).join("") : "")).digest("hex"),
     filter: describeFilter(opts(minSitelinks)),
     enthaelt: includeCompanies ? ["marken", "firmen"] : ["marken"],
     anzahl: marken.length,
