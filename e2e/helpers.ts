@@ -1,3 +1,22 @@
+import { test as base } from "@playwright/test";
+
+/**
+ * Wie der Playwright-`test`, aber `page.goto` wartet, bis das Netz ruhig ist. Ohne das drücken Tests
+ * Enter oder klicken, bevor die Seite aktiv ist: Der Browser sendet das Formular dann nativ ab und die
+ * Ergebnis-Überschrift erscheint nie (unregelmäßiger Fehler, bei jedem Lauf ein anderer Test).
+ */
+export const test = base.extend({
+  page: async ({ page }, provide) => {
+    const goto = page.goto.bind(page);
+    page.goto = async (url, options) => {
+      const response = await goto(url, options);
+      await page.waitForLoadState("networkidle");
+      return response;
+    };
+    await provide(page);
+  },
+});
+
 import type { Page, Route } from "@playwright/test";
 import { checkName, clearResultCache, type NameReport } from "@/lib/engine/check";
 
