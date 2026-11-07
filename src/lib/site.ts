@@ -17,7 +17,7 @@ export function publicUrl(env: Record<string, string | undefined> = process.env)
 export const SITE_NAME = "Markenfrei";
 export const SITE_TITLE = "Markenfrei · Namen vorprüfen";
 export const SITE_DESCRIPTION =
-  "Wo ist der Name schon vergeben? Domains, Pakete, App Stores und bekannte Namen in einem Durchgang prüfen, mit Link zu jeder Quelle. Marken werden nicht geprüft, die Recherche wird vorbereitet. Keine Rechtsberatung, keine Speicherung von Suchanfragen.";
+  "Wo ist der Name schon vergeben? Domains, Pakete, App Stores und bekannte Namen in einem Durchgang prüfen, mit Link zur Quelle, wo es einen gibt. Marken werden nicht geprüft, die Recherche wird vorbereitet. Keine Rechtsberatung, keine Speicherung von Suchanfragen.";
 
 /** Seiten, die in die Sitemap gehören. Impressum und Datenschutz sind enthalten, damit sie auffindbar sind. */
 export const SITEMAP_PATHS = [

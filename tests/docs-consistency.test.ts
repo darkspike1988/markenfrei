@@ -91,7 +91,16 @@ test("keine absoluten Versprechen in den Einstiegstexten", () => {
     assert.doesNotMatch(read(path), /überall nutzen/, `${path}: „überall“ ist nicht geprüft`);
   }
   assert.doesNotMatch(read("CONTRIBUTING.md"), /sicher freien/);
-  assert.doesNotMatch(read("README.md"), /mit Link zu jeder Quelle/);
+  for (const path of ["README.md", "src/app/page.tsx", "src/lib/site.ts", "src/lib/llms-txt.ts"]) {
+    assert.doesNotMatch(read(path), /Link zu jeder Quelle/, `${path}: Link gibt es nicht für jede Quelle`);
+  }
+});
+
+test("README beschreibt Rot nicht als Folge von `invalid`", () => {
+  const readme = read("README.md");
+  assert.doesNotMatch(readme, /Rot[^\n.]*`invalid`/, "README: invalid ist nicht rot (verdict.ts)");
+  assert.doesNotMatch(readme, /`taken` oder `invalid`/, "README: invalid ist nicht rot (verdict.ts)");
+  assert.match(readme, /`invalid` ist bewusst nicht rot/);
 });
 
 test("Docker-Hinweis zu Umgebungsvariablen steht in README und .env.example", () => {

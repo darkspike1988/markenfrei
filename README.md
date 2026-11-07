@@ -65,8 +65,9 @@ Anleitungen mit eingebettetem Prüfer: `/domain-pruefen`, `/paketname-pruefen`, 
 | `invalid` | der Name ist dort syntaktisch nicht zulässig |
 | `unknown` | keine verwertbare Antwort (Timeout, Rate-Limit, Fehler); nie als frei gewertet |
 
-- **Rot** („Vergeben“), sobald eine Quelle `taken` oder `invalid` meldet. Treffer bei
-  schwachen Signalen ergeben höchstens Gelb.
+- **Rot** („Vergeben“), sobald eine Quelle `taken` meldet. `invalid` ist bewusst nicht rot,
+  weil der Name dort nur unzulässig, aber nicht vergeben ist. Treffer bei schwachen Signalen
+  ergeben höchstens Gelb.
 - **Grün** („Keine Treffer“) nur, wenn alle angefragten Quellen `not_found` melden.
 - **Gelb** („Treffer oder Lücken prüfen“) in allen anderen Fällen.
 
