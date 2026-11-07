@@ -224,6 +224,8 @@ Markenfrei braucht keine API-Schlüssel. Außer den Betreiberangaben (siehe unte
 | `MARKENFREI_RATE_LIMIT` | Anfragen pro Minute und IP für alle öffentlichen Routen (Standard 60). Bei `/api/check` und `markenfrei_check_names` zählt jeder Name einzeln. Der Zähler gilt pro Serverprozess; mehrere Prozesse hinter einer ausgehenden IP werden nicht unterstützt (siehe „Vor dem Livegang“, Punkt 4). |
 | `MARKENFREI_CACHE_TTL_SEC` | Lebensdauer des Zwischenspeichers für eindeutige Quellenantworten im Arbeitsspeicher, Standard 600 Sekunden, `0` schaltet ihn aus. `unknown` wird nie zwischengespeichert, nichts wird auf die Platte geschrieben. |
 
+`/.well-known/security.txt` (RFC 9116) wird nur ausgeliefert, wenn `MARKENFREI_OPERATOR_EMAIL` gesetzt und gültig ist; sonst antwortet die Route mit 404. Sicherheitsmeldungen gehen an die Adresse aus dem Impressum. Das Ablaufdatum wird bei jedem Abruf auf 180 Tage ab dann gesetzt.
+
 ## Vor dem Livegang
 
 Geprüft am 4. November 2026 (Sicherheit, Fehler, Quellen). Diese Punkte muss der Betreiber erledigen,
