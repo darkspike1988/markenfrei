@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Guide, GuideList, GuideSection } from "@/components/guide";
 import { buildCheckerConfig } from "@/lib/checker-setup";
 import { MAX_NAMES, MAX_TLDS } from "@/lib/engine/check";
-import { DEFAULT_DOMAIN_TLDS, DOH_ONLY_TLDS, DOMAIN_TLDS } from "@/lib/engine/sources/domains";
+import { DEFAULT_DOMAIN_TLDS, DOH_ONLY_TLDS, DOMAIN_TLDS, FEATURED_TLDS } from "@/lib/engine/sources/domains";
 import type { FaqItem } from "@/lib/structured-data";
 
 export const metadata: Metadata = {
@@ -13,6 +13,8 @@ export const metadata: Metadata = {
 };
 
 const rdapTlds = DOMAIN_TLDS.filter((t) => !DOH_ONLY_TLDS.includes(t));
+const featuredRdapTlds = FEATURED_TLDS.filter((t) => !DOH_ONLY_TLDS.includes(t));
+const otherTlds = DOMAIN_TLDS.length - FEATURED_TLDS.length;
 
 const FAQ: FaqItem[] = [
   {
@@ -25,7 +27,7 @@ const FAQ: FaqItem[] = [
   },
   {
     q: "Wie viele Endungen prüft Markenfrei?",
-    a: `${DOMAIN_TLDS.length} Endungen stehen zur Auswahl, davon ${rdapTlds.length} per RDAP und ${DOH_ONLY_TLDS.length} nur per DNS. Vorausgewählt sind ${DEFAULT_DOMAIN_TLDS.map((t) => "." + t).join(", ")}; pro Prüfung sind höchstens ${MAX_TLDS} Endungen möglich.`,
+    a: `${DOMAIN_TLDS.length} Endungen stehen zur Auswahl, davon ${rdapTlds.length} per RDAP und ${DOH_ONLY_TLDS.length} nur per DNS. ${FEATURED_TLDS.length} sind einzeln geprüft, die übrigen ${otherTlds} nicht: Bei ihnen ergibt „bei der Registry nicht gefunden“ nur „unbekannt“. Vorausgewählt sind ${DEFAULT_DOMAIN_TLDS.map((t) => "." + t).join(", ")}; pro Prüfung sind höchstens ${MAX_TLDS} Endungen möglich.`,
   },
 ];
 
@@ -135,11 +137,17 @@ export default function DomainPruefenPage() {
           per DNS. Vorausgewählt sind {DEFAULT_DOMAIN_TLDS.map((t) => "." + t).join(", ")}. Pro Prüfung gehen höchstens{" "}
           {MAX_TLDS} Endungen und {MAX_NAMES} Namen.
         </p>
+        <p>
+          Einzeln geprüft sind {FEATURED_TLDS.length} Endungen; sie stehen unten. Die übrigen {otherTlds} haben einen
+          RDAP-Server im IANA-Bootstrap und sind im Prüfer über das Suchfeld wählbar. Bei ihnen zählt nur eine Antwort
+          200 als „vergeben“. Meldet die Registry „nicht gefunden“, zeigt Markenfrei „unbekannt“ und bittet um
+          Bestätigung beim Registrar, denn ein 404 kann dort auch reservierte oder nicht registrierbare Namen betreffen.
+        </p>
         <dl className="space-y-3 text-sm">
           <div>
-            <dt className="font-medium text-ink">Per RDAP ({rdapTlds.length})</dt>
+            <dt className="font-medium text-ink">Per RDAP, einzeln geprüft ({featuredRdapTlds.length})</dt>
             <dd className="mt-1 font-mono text-[13px] leading-relaxed text-soft">
-              {rdapTlds.map((t) => "." + t).join(" ")}
+              {featuredRdapTlds.map((t) => "." + t).join(" ")}
             </dd>
           </div>
           <div>

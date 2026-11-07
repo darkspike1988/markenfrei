@@ -79,7 +79,7 @@ claude mcp add --transport http markenfrei https://markenfrei.app/api/mcp
 | `markenfrei_suggest_names` | `keywords` (1 bis 6), optional `count` (1 bis 20) | ungeprüfte Kandidaten aus dem Wortfeld (OpenThesaurus, Datamuse, feste Regeln), zum Weiterreichen an `markenfrei_check_names` |
 
 Namensräume: `domains`, `packages`, `stores`, `known_names` (Standard) und `social` (nur auf
-Wunsch). Standard-Endungen: .de, .com, .dev, .app, .io; höchstens 8 je Prüfung.
+Wunsch). Standard-Endungen: .de, .com, .dev, .app, .io; höchstens 8 je Prüfung. Gültig sind alle Endungen mit RDAP-Server im IANA-Bootstrap sowie at und eu (Liste: `GET /api/sources`); nur 33 sind einzeln geprüft, bei den übrigen ergibt RDAP-404 „unbekannt“.
 
 `sources` ersetzt die Standardquellen außerhalb von Domains, es ergänzt sie nicht.
 `sources: ["nuget"]` prüft nur noch Domains und NuGet. Für Zusatzquellen die

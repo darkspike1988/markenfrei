@@ -46,6 +46,18 @@ test.describe("Prüfer", () => {
     expect(page.url()).toContain("q=wachwerk");
   });
 
+  test("Browser-Suche: Seite verlinkt die OpenSearch-Beschreibung, ?q=wachwerk prüft genau einmal", async ({ page }) => {
+    const calls = await stubCheckApi(page);
+    await page.goto("/?q=wachwerk");
+    await expect(page.locator('link[rel="search"][type="application/opensearchdescription+xml"]')).toHaveAttribute(
+      "href",
+      "/opensearch.xml",
+    );
+    await expect(page.getByRole("heading", { name: "Ergebnis" })).toBeVisible();
+    await page.waitForTimeout(1000);
+    expect(calls).toEqual(["wachwerk"]);
+  });
+
   test("vorübergehende Lücke (retryable) wird automatisch erneut geprüft und danach grün", async ({ page }) => {
     test.setTimeout(40_000);
     const calls = await stubCheckApi(page, { budgetGapFirst: true });
@@ -105,6 +117,27 @@ test.describe("Prüfer", () => {
     expect(page.url()).toMatch(/src=[^&]*nuget/);
   });
 
+  test("Endung über das Suchfeld wählen: Anfrage enthält sie, Enter im Feld sendet nichts ab", async ({ page }) => {
+    const bodies: { names: string[]; tlds?: string[] }[] = [];
+    await stubCheckApi(page);
+    page.on("request", (req) => {
+      if (req.url().endsWith("/api/check")) bodies.push(req.postDataJSON());
+    });
+    await page.goto("/");
+    await page.getByText("Anpassen").click();
+    await page.getByText("Endungen wählen oder suchen").click();
+    const search = page.getByLabel(/Weitere Endung suchen/);
+    await search.fill(".Academy");
+    await search.press("Enter");
+    expect(bodies).toHaveLength(0);
+    await expect(page.getByRole("button", { name: /^\.academy/ }).first()).toBeVisible();
+    await page.getByRole("textbox").first().fill("wachwerk");
+    await page.getByRole("button", { name: "Prüfen", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Ergebnis" })).toBeVisible();
+    expect(bodies.at(-1)?.tlds).toContain("academy");
+    expect(page.url()).toMatch(/tld=[^&]*academy/);
+  });
+
   test("Exporte: CSV, Markdown und JSON laden eine Datei", async ({ page }) => {
     await stubCheckApi(page);
     await page.goto("/");
@@ -116,6 +149,27 @@ test.describe("Prüfer", () => {
       await page.getByRole("button", { name: label }).click();
       expect((await download).suggestedFilename()).toMatch(new RegExp(`\\${ext}$`));
     }
+  });
+
+  test("Erinnerung (.ics): Download ohne neue Netzanfrage, Inhalt mit eigener Adresse", async ({ page }) => {
+    const calls = await stubCheckApi(page);
+    await page.goto("/");
+    await page.getByRole("textbox").first().fill("wachwerk");
+    await page.getByRole("button", { name: "Prüfen", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Ergebnis" })).toBeVisible();
+    const requests: string[] = [];
+    page.on("request", (r) => requests.push(r.url()));
+    const callsBefore = calls.length;
+    const download = page.waitForEvent("download");
+    await page.getByRole("button", { name: "Erinnerung (.ics)" }).click();
+    const file = await download;
+    expect(file.suggestedFilename()).toBe("markenfrei-wachwerk.ics");
+    const { readFile } = await import("node:fs/promises");
+    const text = await readFile((await file.path())!, "utf8");
+    expect(text).toContain("SUMMARY:wachwerk erneut prüfen");
+    expect(text).toContain("URL:http://");
+    expect(calls).toHaveLength(callsBefore);
+    expect(requests.filter((u) => !u.startsWith("blob:") && !u.includes("/_gc/count"))).toEqual([]);
   });
 
   test("leere und zu lange Eingaben zeigen eine Fehlermeldung statt einer Anfrage", async ({ page }) => {

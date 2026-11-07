@@ -29,7 +29,7 @@ Standardmäßig aktiv (Web und MCP gleich):
 
 | Namensraum | Quellen |
 |---|---|
-| Domains | RDAP für die gewählten Endungen (Standard `.de`, `.com`, `.dev`, `.app`, `.io`, höchstens 8 je Prüfung). Der RDAP-Server kommt aus dem IANA-Bootstrap, für `.de`, `.io`, `.ch` und `.li` aus festen Einträgen. `.at` und `.eu` laufen nur über DNS und können deshalb nie „nicht gefunden“ ergeben. DNS über HTTPS bestätigt nur „vergeben“. |
+| Domains | RDAP für die gewählten Endungen (Standard `.de`, `.com`, `.dev`, `.app`, `.io`, höchstens 8 je Prüfung). Der RDAP-Server kommt aus dem IANA-Bootstrap (ersatzweise aus einem Schnappschuss im Repository), für `.de`, `.io`, `.ch` und `.li` aus festen Einträgen. Einzeln geprüft sind 33 Endungen; die übrigen Endungen des Schnappschusses sind über ein Suchfeld wählbar, dort ergibt RDAP-404 nie „nicht gefunden“, sondern „unbekannt“. `.at` und `.eu` laufen nur über DNS und können deshalb nie „nicht gefunden“ ergeben. DNS über HTTPS bestätigt nur „vergeben“. |
 | Pakete | npm, PyPI, GitHub (Nutzer oder Organisation), crates.io, Homebrew (Formula und Cask) |
 | App Stores | Apple App Store Deutschland (Suche, vergeben nur bei exakt gleichem Haupttitel), Google Play (nur die Bundle-IDs `com.<name>.app` und `de.<name>.app`) |
 | Bekannte Namen | Liste bekannter Tech-Marken (Heuristik ohne Netz: identisch, klanggleich nach Kölner Phonetik, enthalten), Wikidata (exaktes Label mit Typ Unternehmen, Marke, Software oder App), GLEIF (aktive Rechtsträger mit LEI, Namensstamm ohne Rechtsform) |
@@ -51,7 +51,7 @@ hinzufügen will, schickt die Standardquellen-IDs mit: `npm`, `pypi`, `github`, 
 `homebrew`, `appstore`, `googleplay`, `known_brands`, `wikidata`, `gleif`, dazu die
 gewünschten Zusatzquellen. Alle IDs stehen auf der Seite `/quellen`.
 
-Alle 33 Endungen und alle Quellen mit Endpunkt stehen auf der Seite `/quellen`.
+Die 33 einzeln geprüften Endungen und alle Quellen mit Endpunkt stehen auf der Seite `/quellen`, die vollständige Endungsliste unter `GET /api/sources`. Den Schnappschuss erneuert man von Hand mit `npx tsx scripts/update-rdap-tlds.ts` (braucht Netz) und spielt ihn per Pull Request ein.
 
 Anleitungen mit eingebettetem Prüfer: `/domain-pruefen`, `/paketname-pruefen`, `/app-name-pruefen` und `/markenrecherche-vorbereiten`.
 
@@ -95,7 +95,7 @@ Gelb, dann Rot, innerhalb davon nach Zahl der Treffer und dann der Lücken.
   und Ähnlichkeit zu bekannten Marken; Muster-Chips (Präfixe, Suffixe, Bindestrich, Plural) bauen eine Shortlist.
 - **Ergebnisse weiterverwenden:** Bei mehreren Namen zeigt „Vergleich“ eine Tabelle (Namen in Rangfolge, je
   Namensraum ein Text mit Zeichen, Ampel). Export als JSON, CSV (eine Zeile je Name und Quelle, Formeln
-  entschärft) oder Markdown, entsteht im Browser; „Drucken“ (oder Strg+P) liefert einen schlichten
+  entschärft), Markdown oder eine Kalender-Erinnerung (.ics, 30 Tage später „Name erneut prüfen“) entsteht im Browser; „Drucken“ (oder Strg+P) liefert einen schlichten
   schwarz-weißen Bericht mit Prüfdatum und Hinweis.
 - **Keine Rechtsberatung.** Vor Anmeldung oder Nutzung eines Namens gehört eine fachkundige
   Markenrecherche dazu.
@@ -139,6 +139,11 @@ markenfrei.app {
     reverse_proxy 127.0.0.1:3000
 }
 ```
+
+### Browser-Suche
+
+Markenfrei lässt sich als Suchmaschine im Browser hinzufügen. Die Beschreibung liegt unter
+`/opensearch.xml`; eine Suche öffnet `/?q=…` und startet die Prüfung.
 
 ### HTTP-Schnittstelle
 

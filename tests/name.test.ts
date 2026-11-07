@@ -22,6 +22,14 @@ test("Leerzeichen und eine bekannte Endung werden entfernt", () => {
   assert.equal(ok("  Fokus-Nova  "), "fokus-nova");
 });
 
+test("normalizeName trennt neue Endungen ab (foo.shop → foo)", () => {
+  assert.equal(ok("foo.shop"), "foo");
+  assert.equal(ok("Wachwerk.Berlin"), "wachwerk");
+  // Endungen aus dem Schnappschuss, die nicht zu den kuratierten gehören
+  assert.equal(ok("foo.bar"), "foo");
+  assert.equal(ok("foo.academy"), "foo");
+});
+
 test("ungültige Namen werden mit Fehlertext abgelehnt", () => {
   bad("");
   bad("a");
@@ -29,7 +37,7 @@ test("ungültige Namen werden mit Fehlertext abgelehnt", () => {
   bad("foo-");
   bad("---");
   bad("x".repeat(64));
-  bad("foo.bar");
+  bad("foo.zzzzz");
   bad("a.b.de");
   bad("!!!");
 });

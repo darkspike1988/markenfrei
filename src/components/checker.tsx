@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import type { Namespace } from "@/lib/engine/types";
 import { exportFileName, toCsv, toMarkdown } from "@/lib/export";
+import { buildReminderIcs } from "@/lib/ics";
 import { buildShortlist, MAX_TYPO_CHECK } from "@/lib/insights";
 import { trackEvent } from "@/lib/analytics";
 import { hasAnySource, parseSelection, splitNames, type CheckerConfig, type Selection } from "@/components/checker-config";
@@ -177,6 +178,20 @@ export function Checker({
     downloadFile(exportFileName(view.ranked, "md"), "text/markdown;charset=utf-8", toMarkdown(view.ranked));
   }
 
+  function exportIcs() {
+    trackEvent("export/ics");
+    const names = view.ranked.map((r) => r.name);
+    const url = new URL("/", window.location.origin);
+    url.searchParams.set("q", names.join(","));
+    const ics = buildReminderIcs({
+      names,
+      now: new Date(),
+      uid: crypto.randomUUID(),
+      url: url.toString().replace(/%2C/gi, ","),
+    });
+    downloadFile(exportFileName(view.ranked, "ics"), "text/calendar;charset=utf-8", ics);
+  }
+
   function openFromMatrix(name: string) {
     jumpTo.current = reportAnchor(name);
     setMode("list");
@@ -210,6 +225,7 @@ export function Checker({
         exportJson={exportJson}
         exportCsv={exportCsv}
         exportMarkdown={exportMarkdown}
+        exportIcs={exportIcs}
         openFromMatrix={openFromMatrix}
         recheck={recheck}
         retry={retry}

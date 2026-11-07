@@ -44,6 +44,8 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="de" className={`${geistSans.variable} ${geistMono.variable} ${newsreader.variable} antialiased`}>
+      {/* Browser-Suche: „Markenfrei hinzufügen“. Die Metadata-API kennt rel="search" nicht; React hebt den Link in den Kopf. */}
+      <link rel="search" type="application/opensearchdescription+xml" title={SITE_NAME} href="/opensearch.xml" />
       <body className="flex min-h-dvh flex-col bg-canvas text-ink">
         <a
           href="#inhalt"

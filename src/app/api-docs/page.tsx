@@ -323,8 +323,10 @@ export default function ApiDocsPage() {
           <div>
             <dt className="font-medium text-ink">tlds</dt>
             <dd className="mt-1 text-soft">
-              Höchstens {MAX_TLDS} verschiedene. Standard: <Mono>{DEFAULT_DOMAIN_TLDS.join(", ")}</Mono>. Erlaubt:{" "}
-              <Mono>{DOMAIN_TLDS.join(", ")}</Mono>. Verfahren je Endung stehen unter{" "}
+              Höchstens {MAX_TLDS} verschiedene. Standard: <Mono>{DEFAULT_DOMAIN_TLDS.join(", ")}</Mono>. Erlaubt sind {DOMAIN_TLDS.length} Endungen
+              (alle mit RDAP-Server im IANA-Bootstrap sowie <Mono>at</Mono> und <Mono>eu</Mono>); die Liste liefert{" "}
+              <Mono>GET /api/sources</Mono>, bei <Mono>checked: false</Mono> ist die Endung nicht einzeln geprüft: Dort
+              ergibt RDAP-404 nie <Mono>not_found</Mono>, sondern <Mono>unknown</Mono>. Verfahren je Endung stehen unter{" "}
               <Link href="/quellen#domains" className="underline hover:text-ink">Quellen</Link>.
             </dd>
           </div>

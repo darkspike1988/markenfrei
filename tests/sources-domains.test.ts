@@ -4,11 +4,16 @@ import {
   DEFAULT_DOMAIN_TLDS,
   DOMAIN_TLDS,
   DOH_ONLY_TLDS,
+  FEATURED_TLDS,
+  NOT_INDIVIDUALLY_CHECKED_NOTE,
   domainLabelError,
   domainSources,
+  isDomainTld,
   loadRdapBootstrap,
   resetRdapBootstrapCache,
+  setRdapSnapshotForTests,
 } from "@/lib/engine/sources/domains";
+import snapshotJson from "@/lib/engine/sources/rdap-tlds.json";
 import type { CheckContext, HttpClient, HttpRequest, HttpResponse } from "@/lib/engine/types";
 
 type Reply = Partial<HttpResponse> & { status: number };
@@ -63,12 +68,46 @@ test("DOMAIN_TLDS und Standardauswahl", () => {
     assert.ok(DOMAIN_TLDS.includes(t), t);
   }
   assert.deepEqual([...DEFAULT_DOMAIN_TLDS], ["de", "com", "dev", "app", "io"]);
-  assert.ok(!DOMAIN_TLDS.includes("co"), ".co ist laut Spezifikation nicht aufgenommen");
   for (const t of DOH_ONLY_TLDS) assert.ok(DOMAIN_TLDS.includes(t));
+  assert.equal(FEATURED_TLDS.length, 33, "die bisherigen 33 Endungen bleiben die kuratierten");
+  assert.deepEqual([...DOMAIN_TLDS.slice(0, FEATURED_TLDS.length)], [...FEATURED_TLDS], "kuratierte zuerst");
+  assert.equal(new Set(DOMAIN_TLDS).size, DOMAIN_TLDS.length, "keine Dubletten");
+  assert.ok(DOMAIN_TLDS.length > 1000, `Schnappschuss ist angekommen (${DOMAIN_TLDS.length})`);
+  assert.ok(isDomainTld("shop") && !isDomainTld("constructor") && !isDomainTld("DE") && !isDomainTld(""));
+});
+
+// --- Schnappschuss ---
+
+type Snapshot = { quelle: string; veroeffentlicht: string; endungen: Record<string, string> };
+const snapshot = snapshotJson as Snapshot;
+
+test("Schnappschuss: nur https, keine xn--, sortiert, enthält com und net", () => {
+  const tlds = Object.keys(snapshot.endungen);
+  assert.ok(tlds.length > 1000);
+  assert.deepEqual(tlds, [...tlds].sort(), "sortiert");
+  assert.ok(tlds.includes("com") && tlds.includes("net"));
+  for (const [t, url] of Object.entries(snapshot.endungen)) {
+    assert.match(t, /^[a-z0-9]+$/, t);
+    assert.ok(!t.startsWith("xn--"), t);
+    assert.match(url, /^https:\/\/[^\s]+\/$/, `${t}: ${url}`);
+  }
+  assert.equal(snapshot.quelle, BOOTSTRAP);
+});
+
+test("DOMAIN_TLDS enthält de, io, ch, li sowie at und eu, obwohl sie im Schnappschuss fehlen", () => {
+  for (const t of ["de", "io", "ch", "li", "at", "eu"]) {
+    assert.ok(!(t in snapshot.endungen), `${t} fehlt im Schnappschuss`);
+    assert.ok(DOMAIN_TLDS.includes(t), `${t} in DOMAIN_TLDS`);
+  }
+  // alle kuratierten Endungen mit RDAP haben Server (Schnappschuss oder feste Overrides)
+  for (const t of FEATURED_TLDS) {
+    if (DOH_ONLY_TLDS.includes(t) || ["de", "io", "ch", "li"].includes(t)) continue;
+    assert.ok(t in snapshot.endungen, `${t} im Schnappschuss`);
+  }
 });
 
 test("domainSources: id, label, namespace, defaultEnabled, Filter und Dubletten", () => {
-  const list = domainSources(["de", ".COM", "de", "nl", "zz", "co"]);
+  const list = domainSources(["de", ".COM", "de", "nl", "zz", "zzzzz", "constructor"]);
   assert.deepEqual(
     list.map((s) => [s.id, s.label, s.namespace, s.defaultEnabled]),
     [
@@ -113,22 +152,65 @@ test("Bootstrap: gleichzeitige Aufrufe laden nur einmal", async () => {
   assert.equal(calls.length, 1);
 });
 
-test("Bootstrap-Ausfall: nur Overrides, .com dann unknown (DNS ohne NS)", async () => {
+test("Bootstrap-Ausfall: Schnappschuss als Rückfall, feste Server bleiben", async () => {
   const { http } = fakeHttp({
     [BOOTSTRAP]: { status: 503 },
-    [dnsGoogle("wachwerk.com")]: { status: 200, json: { Status: 3 } },
+    "https://rdap.verisign.com/com/v1/domain/google.com": { status: 200 },
   });
   const map = await loadRdapBootstrap(http);
-  assert.deepEqual([...map.keys()].sort(), ["ch", "de", "io", "li"]);
-  const r = await source("com").check("wachwerk", ctxOf(http));
-  assert.equal(r.status, "unknown");
-  assert.match(r.evidence ?? "", /Bootstrap/);
+  assert.equal(map.size, Object.keys(snapshot.endungen).length + 4, "Schnappschuss plus de, io, ch, li");
+  for (const t of ["de", "io", "ch", "li"]) assert.ok(map.has(t), t);
+  assert.equal(map.get("academy"), `${snapshot.endungen.academy}domain/`);
+  assert.match(map.get("com") ?? "", /^https:\/\/.+\/domain\/$/);
+  // eine Prüfung läuft gegen den Server aus dem Schnappschuss, nicht gegen „kein Server“
+  const r = await source("academy").check("google", ctxOf(http));
+  assert.doesNotMatch(r.evidence ?? "", /kein Server/);
+  const com = await source("com").check("google", ctxOf(http));
+  assert.ok(com.evidence?.startsWith("RDAP"), com.evidence);
+});
+
+test("Bootstrap-Ausfall: nicht kuratierte Endung wird gegen den Server des Schnappschusses abgefragt", async () => {
+  const { http, calls } = fakeHttp({ [BOOTSTRAP]: { status: 503 } });
+  await source("academy").check("wachwerk", ctxOf(http));
+  const rdap = calls.find((c) => c.url.endsWith("/domain/wachwerk.academy"));
+  assert.ok(rdap, "RDAP-Abfrage an den Schnappschuss-Server");
+  assert.equal(rdap.url, `${snapshot.endungen.academy}domain/wachwerk.academy`);
+});
+
+test("Bootstrap-Antwort hat Vorrang vor dem Schnappschuss", async () => {
+  setRdapSnapshotForTests({ com: "https://alt.example/", academy: "https://academy.example/rdap/" });
+  try {
+    const { http } = fakeHttp({ [BOOTSTRAP]: bootstrapOk });
+    const map = await loadRdapBootstrap(http);
+    assert.equal(map.get("com"), "https://rdap.verisign.com/com/v1/domain/");
+    assert.equal(map.get("academy"), "https://academy.example/rdap/domain/", "übrige Endungen aus dem Schnappschuss");
+    assert.equal(map.get("de"), "https://rdap.denic.de/domain/");
+  } finally {
+    setRdapSnapshotForTests(undefined);
+  }
+});
+
+test("Bootstrap-Ausfall ohne Server-Eintrag: .com dann unknown (DNS ohne NS)", async () => {
+  setRdapSnapshotForTests({});
+  try {
+    const { http } = fakeHttp({
+      [BOOTSTRAP]: { status: 503 },
+      [dnsGoogle("wachwerk.com")]: { status: 200, json: { Status: 3 } },
+    });
+    const map = await loadRdapBootstrap(http);
+    assert.deepEqual([...map.keys()].sort(), ["ch", "de", "io", "li"]);
+    const r = await source("com").check("wachwerk", ctxOf(http));
+    assert.equal(r.status, "unknown");
+    assert.match(r.evidence ?? "", /Bootstrap/);
+  } finally {
+    setRdapSnapshotForTests(undefined);
+  }
 });
 
 test("Bootstrap mit unerwartetem Format zählt als Ausfall", async () => {
   const { http } = fakeHttp({ [BOOTSTRAP]: { status: 200, json: { services: "x" } } });
   const map = await loadRdapBootstrap(http);
-  assert.equal(map.has("com"), false);
+  assert.equal(map.get("com"), `${snapshot.endungen.com}domain/`, "Rückfall: Server aus dem Schnappschuss");
   assert.equal(map.has("de"), true);
 });
 
@@ -172,6 +254,67 @@ test(".ch nutzt Override rdap.nic.ch", async () => {
   const r = await source("ch").check("switch", ctxOf(http));
   assert.equal(r.status, "taken");
   assert.equal(r.url, "https://www.nic.ch/de/whois/");
+});
+
+// --- nicht kuratierte Endungen (Fail-safe) ---
+
+const ACADEMY =`${snapshot.endungen.academy}domain/`;
+
+test("nicht kuratierte Endung: 404 → unknown mit Hinweis ‚nicht einzeln geprüft‘, nie not_found", async () => {
+  const { http, calls } = fakeHttp({ [BOOTSTRAP]: bootstrapOk, [`${ACADEMY}wachwerk.academy`]: { status: 404 } });
+  const r = await source("academy").check("wachwerk", ctxOf(http));
+  assert.equal(r.status, "unknown");
+  assert.equal(r.evidence, "RDAP HTTP 404");
+  assert.equal(r.note, NOT_INDIVIDUALLY_CHECKED_NOTE);
+  assert.match(r.note ?? "", /nicht einzeln geprüft; beim Registrar bestätigen/);
+  assert.ok(!calls.some((c) => c.url.includes("type=NS")), "bei 404 kein DNS, wie bei den kuratierten");
+});
+
+test("nicht kuratierte Endung: 200 → taken wie überall", async () => {
+  const { http } = fakeHttp({ [BOOTSTRAP]: bootstrapOk, [`${ACADEMY}google.academy`]: { status: 200 } });
+  const r = await source("academy").check("google", ctxOf(http));
+  assert.equal(r.status, "taken");
+  assert.equal(r.evidence, "RDAP HTTP 200");
+});
+
+test("nicht kuratierte Endung: 400/501 → unknown, nie frei", async () => {
+  for (const status of [400, 501]) {
+    const { http } = fakeHttp({
+      [BOOTSTRAP]: bootstrapOk,
+      [`${ACADEMY}wachwerk.academy`]: { status },
+      [dnsGoogle("wachwerk.academy")]: { status: 200, json: { Status: 3 } },
+    });
+    const r = await source("academy").check("wachwerk", ctxOf(http));
+    assert.equal(r.status, "unknown", String(status));
+    assert.equal(r.evidence, `RDAP HTTP ${status}; DNS: NXDOMAIN`);
+  }
+});
+
+test("kuratierte Endungen behalten ihr 404 → not_found", async () => {
+  const { http } = fakeHttp({
+    [BOOTSTRAP]: bootstrapOk,
+    "https://rdap.denic.de/domain/zzqxkvjwabc.de": { status: 404 },
+    "https://rdap.sidn.nl/domain/zzqxkvjwabc.nl": { status: 404 },
+  });
+  for (const t of ["de", "nl"]) {
+    assert.equal((await source(t).check("zzqxkvjwabc", ctxOf(http))).status, "not_found", t);
+  }
+});
+
+test("Endung ohne Server in Bootstrap und Schnappschuss: unknown, nie not_found", async () => {
+  setRdapSnapshotForTests({});
+  try {
+    const { http, calls } = fakeHttp({
+      [BOOTSTRAP]: { status: 200, json: { services: [[["com"], ["https://rdap.verisign.com/com/v1/"]]] } },
+      [dnsGoogle("wachwerk.academy")]: { status: 200, json: { Status: 3 } },
+    });
+    const r = await source("academy").check("wachwerk", ctxOf(http));
+    assert.equal(r.status, "unknown");
+    assert.match(r.evidence ?? "", /kein Server/);
+    assert.ok(!calls.some((c) => c.url.includes("/domain/")), "kein RDAP ohne Server");
+  } finally {
+    setRdapSnapshotForTests(undefined);
+  }
 });
 
 test("429 ohne DNS-Eintrag: unknown, nie frei", async () => {

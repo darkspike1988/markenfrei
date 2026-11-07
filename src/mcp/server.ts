@@ -19,7 +19,7 @@ import {
   ShortlistReportSchema,
   TrademarkPrepSchema,
 } from "@/lib/engine/report-schema";
-import { DEFAULT_DOMAIN_TLDS, DOMAIN_TLDS } from "@/lib/engine/sources/domains";
+import { DEFAULT_DOMAIN_TLDS, isDomainTld } from "@/lib/engine/sources/domains";
 import { trademarkPrep, type TrademarkPrep } from "@/lib/engine/trademark-prep";
 import { NAMESPACE_LABEL, NAMESPACES, type Namespace, type SourceResult } from "@/lib/engine/types";
 import { STATUS_LABEL, type ShortlistEntry, type Verdict } from "@/lib/engine/verdict";
@@ -74,6 +74,9 @@ const nameField = z
   .min(2, { error: "Der Name braucht mindestens 2 Zeichen." })
   .max(63, { error: "Der Name darf höchstens 63 Zeichen lang sein." });
 
+/** Form einer Endung ohne Punkt; ob sie wählbar ist, entscheidet `isDomainTld`. */
+const TLD_PATTERN = /^[a-z0-9]{2,63}$/;
+
 const checkFields = {
   namespaces: z
     .array(NamespaceSchema)
@@ -82,10 +85,17 @@ const checkFields = {
       `Namensräume (Standard: ${DEFAULT_NAMESPACES.join(", ")}). Erlaubt: ${NAMESPACES.map((n) => `${n} (${NAMESPACE_LABEL[n]})`).join(", ")}. social fragt ${SOCIAL_AUTO_SOURCE_IDS.join(" und ")} ab, solange sources fehlt; mit sources gilt nur diese Liste (Hacker News nur über sources: ["hackernews"]).`,
     ),
   tlds: z
-    .array(z.enum(DOMAIN_TLDS as unknown as [string, ...string[]]))
+    .array(
+      z
+        .string()
+        .regex(TLD_PATTERN, { error: "Endung ohne Punkt, nur a-z und 0-9." })
+        .refine(isDomainTld, { error: "Endung wird nicht unterstützt. Die erlaubten Endungen stehen unter /api/sources." }),
+    )
     .max(MAX_TLDS, { error: `Höchstens ${MAX_TLDS} Endungen pro Anfrage.` })
     .optional()
-    .describe(`Domain-Endungen ohne Punkt, höchstens ${MAX_TLDS} (Standard: ${DEFAULT_DOMAIN_TLDS.join(", ")}).`),
+    .describe(
+      `Domain-Endungen ohne Punkt, höchstens ${MAX_TLDS} (Standard: ${DEFAULT_DOMAIN_TLDS.join(", ")}). Gültig sind alle Endungen mit RDAP-Server im IANA-Bootstrap sowie at und eu; die Liste steht unter /api/sources.`,
+    ),
   sources: z
     .array(z.enum(SOURCE_IDS))
     .optional()
