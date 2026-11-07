@@ -238,7 +238,11 @@ const NO_STORE_HEADER = {
   "Cache-Control": { description: "Immer no-store: Antworten werden nicht zwischengespeichert.", schema: { type: "string", const: "no-store" } },
 };
 
-/** RateLimit-Header der Antworten von /api/check und /api/mcp (IETF-Entwurf „RateLimit header fields for HTTP“). */
+/**
+ * RateLimit-Header der Antworten von /api/check und /api/mcp, die das Client-Limit betreffen
+ * (Einzelheader früherer Fassungen von draft-ietf-httpapi-ratelimit-headers). Fehlen bei
+ * gemeinsamem Zählschlüssel (siehe rate-limit.ts) und beim 429 des Prozesslimits.
+ */
 const RATE_LIMIT_HEADERS = {
   "RateLimit-Limit": { description: "Einheiten pro Fenster für diesen Client.", schema: { type: "integer", minimum: 1 } },
   "RateLimit-Remaining": {
@@ -287,7 +291,7 @@ function checkOperation(): JsonObject {
         content: { "application/json": { schema: ref("CheckResponse") } },
       },
       "400": errorResponse(
-        "Ungültige Anfrage: kaputtes JSON, falsche Typen, keine oder zu viele Namen, ungültiger Name, unbekannte Endung, Quelle oder Namensraum. Die Meldung nennt den Grund.",
+        "Ungültige Anfrage: kaputtes JSON, falsche Typen, keine oder zu viele Namen, ungültiger Name, unbekannte Endung, Quelle oder Namensraum, oder die Kosten der Anfrage übersteigen das Limit pro Fenster (dann hilft kein Wiederholen; weniger Namen oder Quellen wählen). Die Meldung nennt den Grund. Nach der Rate-Limit-Prüfung erzeugte Fehler tragen die RateLimit-Header.",
         `Höchstens ${MAX_NAMES} Namen pro Anfrage.`,
         NO_STORE_HEADER,
       ),
@@ -334,7 +338,7 @@ function mcpOperation(serverUrl: string): JsonObject {
     responses: {
       "200": { description: "JSON-RPC-Antwort.", headers: RATE_LIMIT_HEADERS, content: { "application/json": { schema: ref("JsonRpcResponse") } } },
       "400": {
-        description: "Batch-Anfrage oder nicht lesbarer Body (JSON-RPC-Fehler -32600).",
+        description: "Batch-Anfrage, nicht lesbarer Body oder Kosten über dem Limit pro Fenster (JSON-RPC-Fehler -32600).",
         content: { "application/json": { schema: ref("JsonRpcResponse"), example: rpcExample(-32600, "Batch-Anfragen werden nicht unterstützt.") } },
       },
       "403": {

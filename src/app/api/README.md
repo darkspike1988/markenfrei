@@ -9,9 +9,14 @@ Jede Route geht durch `guardRequest` aus `src/lib/rate-limit.ts` (Standard 60 Ei
 Minute und Client). Anfragen mit ausgehenden Abfragen zählen zusätzlich gegen ein Limit pro
 Prozess (`MARKENFREI_GLOBAL_RATE_LIMIT`, Standard 600 Einheiten pro Minute). Es greift auch,
 wenn jemand das Limit pro Client umgeht, und schützt die Server-IP vor Sperren bei den
-abgefragten Diensten. Bei Überschreitung kommt `429` mit `Retry-After`. Antworten von `/api/check` und `/api/mcp`
-tragen `RateLimit-Limit`, `RateLimit-Remaining` und `RateLimit-Reset` (IETF-Entwurf; Sekunden bis zum Ende des Fensters; auch bei 429).
-Das Prozesslimit bleibt intern und erscheint nur als 429.
+abgefragten Diensten. Bei Überschreitung kommt `429` mit `Retry-After`. Antworten von `/api/check` und `/api/mcp`,
+die das Client-Limit betreffen, tragen `RateLimit-Limit`, `RateLimit-Remaining` und `RateLimit-Reset`
+(Einzelheader früherer Fassungen von draft-ietf-httpapi-ratelimit-headers; Sekunden bis zum Ende des Fensters;
+auch bei 429 des Client-Limits und bei Fehlern, die nach der Prüfung des Limits entstehen). Sie fehlen beim 429 des
+Prozesslimits (es hat ein eigenes Fenster, die Werte würden nicht zu `Retry-After` passen) und beim gemeinsamen
+Zählschlüssel `local` (`MARKENFREI_TRUSTED_PROXIES=0` oder keine Adresse): Dort zählen alle Nutzer zusammen, der Rest
+sagte nichts über den eigenen Client. Das Limit wirkt trotzdem. Übersteigen die Kosten einer Anfrage das Limit pro
+Fenster, kommt `400` mit fester Meldung statt eines `429`, das nie endet.
 
 **Kosten einer Prüfung:** verschiedene Namen (nach Normalisierung) × `ceil(aufgelöste Quellen /
 Quellen der Standardauswahl)`. Die Standardauswahl kostet 1 je Name, alle Quellen mit 8 Endungen
@@ -86,7 +91,7 @@ Fehler, jeweils `{ "error": "<deutsche Meldung>" }`:
 
 | Status | Fall |
 |---|---|
-| 400 | kaputtes JSON, falsche Typen, keine oder mehr als 10 Namen, unbekannte Endung, Quelle oder Namensraum, ungültiger Name |
+| 400 | kaputtes JSON, falsche Typen, keine oder mehr als 10 Namen, unbekannte Endung, Quelle oder Namensraum, ungültiger Name, Kosten über dem Limit pro Fenster |
 | 403 | fremder Origin |
 | 413 | Body größer als 16 KB (auch ohne `Content-Length`, der Body wird beim Lesen gezählt) |
 | 415 | Content-Type ist nicht `application/json` |

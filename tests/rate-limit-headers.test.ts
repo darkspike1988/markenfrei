@@ -93,3 +93,41 @@ test("POST /api/mcp: Antwort enthält die RateLimit-Header", async () => {
   const body = (await res.json()) as { result?: { tools?: unknown[] } };
   assert.ok((body.result?.tools?.length ?? 0) >= 4);
 });
+
+test("Schlüssel local: keine RateLimit-Header (gemeinsamer Zähler), das Limit wirkt trotzdem", () => {
+  const g = createGuardDetailed(createRateLimiter({ limit: 1, windowMs: 60_000 }));
+  // Ohne x-forwarded-for und x-real-ip fällt der Schlüssel auf "local"
+  const anonymous = () => new Request("http://localhost/x");
+  const first = g(anonymous());
+  assert.equal(first.response, null);
+  assert.deepEqual(first.headers, {});
+  const second = g(anonymous());
+  assert.equal(second.response?.status, 429);
+  assert.ok(Number(second.response?.headers.get("retry-after")) >= 1);
+  for (const name of ["ratelimit-limit", "ratelimit-remaining", "ratelimit-reset"]) {
+    assert.equal(second.response?.headers.get(name), null, name);
+  }
+});
+
+test("POST /api/check: Fehler nach dem Guard (400 aus der Engine) tragen die RateLimit-Header", async () => {
+  // Ein ungültiger Name scheitert erst in der Engine; die Kosten sind bereits verbraucht.
+  const res = await check("198.51.100.50", ["!!"]);
+  assert.equal(res.status, 400);
+  assert.ok(Number(res.headers.get("ratelimit-limit")) > 0);
+  assert.ok(res.headers.get("ratelimit-remaining") !== null);
+  assert.ok(Number(res.headers.get("ratelimit-reset")) >= 1);
+  assert.equal(res.headers.get("cache-control"), "no-store");
+});
+
+test("POST /api/mcp: Batch-Ablehnung (400) trägt die RateLimit-Header", async () => {
+  const res = await mcpPOST(
+    new Request("http://localhost/api/mcp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream", "x-forwarded-for": "198.51.100.60" },
+      body: JSON.stringify([{ jsonrpc: "2.0", id: 1, method: "tools/list" }]),
+    }),
+  );
+  assert.equal(res.status, 400);
+  assert.ok(Number(res.headers.get("ratelimit-limit")) > 0);
+  assert.ok(res.headers.get("ratelimit-remaining") !== null);
+});
