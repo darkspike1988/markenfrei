@@ -3,6 +3,7 @@ import { buildUserAgent, createHttpClient } from "@/lib/engine/http";
 import { DEFAULT_DOMAIN_TLDS, domainSources, isDomainTld } from "@/lib/engine/sources/domains";
 import { KNOWN_NAME_SOURCES } from "@/lib/engine/sources/known-names";
 import { PACKAGE_SOURCES } from "@/lib/engine/sources/packages";
+import { wikidataBrands } from "@/lib/engine/sources/wikidata-brands";
 import { REGISTRY_SOURCES } from "@/lib/engine/sources/registries";
 import { manualSocialLinks, SOCIAL_SOURCES, STORE_SOURCES } from "@/lib/engine/sources/stores-social";
 import { trademarkPrep, type TrademarkPrep } from "@/lib/engine/trademark-prep";
@@ -33,6 +34,7 @@ export const STATIC_SOURCES: readonly Source[] = [
   ...STORE_SOURCES,
   ...SOCIAL_SOURCES,
   ...KNOWN_NAME_SOURCES,
+  wikidataBrands,
 ];
 
 export class CheckInputError extends Error {

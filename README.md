@@ -42,7 +42,9 @@ Paketquellen von Distributionen, Homebrew, winget und weiteren), Docker Hub (nur
 Images), conda-forge und Clojars (diese drei über den Index von ecosyste.ms, nicht live aus dem
 Register; CocoaPods, CPAN und Julia fehlen bewusst, weil ihre Namen die Schreibweise brauchen),
 F-Droid, Firefox Add-ons, Bluesky, Mastodon (mastodon.social), Hacker News sowie Wikipedia und
-Show HN als schwache Signale. Für Instagram, TikTok, X, YouTube und den Chrome Web Store
+Show HN als schwache Signale, außerdem `wikidata_brands` (Ähnlichkeitsvergleich ohne Netz gegen
+einen Schnappschuss von Wikidata-Marken, CC0, Stand und Anzahl stehen auf `/quellen`; Treffer
+ergeben höchstens Gelb, die Liste ist unvollständig und ein fehlender Treffer keine Freigabe). Für Instagram, TikTok, X, YouTube und den Chrome Web Store
 gibt es nur Links zur Prüfung von Hand.
 
 **Achtung bei `sources`:** Die Liste ersetzt die Standardquellen außerhalb von Domains, sie

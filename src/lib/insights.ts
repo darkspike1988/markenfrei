@@ -1,6 +1,6 @@
 import { foldToAscii, normalizeName } from "@/lib/name";
 import { domainLabelError } from "@/lib/engine/sources/domains";
-import { matchKnownBrands } from "@/lib/engine/sources/known-names";
+import { matchKnownBrands } from "@/lib/brand-match";
 import { levenshtein, PROTECTED_TECH_BRANDS } from "@/lib/phonetics";
 
 /**

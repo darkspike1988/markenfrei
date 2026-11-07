@@ -31,6 +31,7 @@ export function buildLlmsTxt(origin: string): string {
     `- Endungen: ${DEFAULT_DOMAIN_TLDS.map((t) => `.${t}`).join(", ")}`,
     `- Quellen außerhalb von Domains: ${defaults.join(", ")}`,
     "- `sources` ersetzt die Standardquellen außerhalb von Domains. Zusatzquellen: die Standardquellen-IDs mitschicken.",
+    "- Nur auf Wunsch: `wikidata_brands` vergleicht ohne Netz gegen einen Schnappschuss von Wikidata-Marken (CC0, mit Stand). Treffer ergeben höchstens `similar`; ein fehlender Treffer ist keine Freigabe, die Liste ist unvollständig.",
     "",
     "## Grenzen",
     "",
