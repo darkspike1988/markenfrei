@@ -212,6 +212,24 @@ Nach der Veröffentlichung ersetzt `"command": "npx", "args": ["-y", "markenfrei
 lokalen Pfad. Weitere Varianten stehen in [mcp/README.md](mcp/README.md) und auf der Seite
 `/mcp`.
 
+## Kommandozeile
+
+Dieselbe Prüfung ohne Server und ohne MCP-Client, direkt aus dem Repo (noch nicht als Paket veröffentlicht):
+
+```bash
+npm run cli -- check wachwerk
+npm run cli -- check wachwerk nordlicht --json
+npm run cli -- check wachwerk --namespaces domains,packages --tlds de,com
+npm run cli -- --help
+```
+
+- Ein Name ergibt den Bericht, mehrere (bis 10) eine Rangliste. `--json` gibt den `NameReport` bzw. `{ ranking, reports }` aus, wie die HTTP-Schnittstelle.
+- `--namespaces`, `--tlds` und `--sources` nehmen Kommalisten und gelten wie in der API; die Engine meldet unbekannte Werte.
+- **Exit-Code:** 0 grün, 1 gelb, 2 rot; bei mehreren Namen zählt die schlechteste Ampel. 64 bei falschem Aufruf oder Eingabe, 70 bei einem internen Fehler. Ohne Netz kommt Gelb (Exit 1) mit dem Hinweis auf Lücken, nie Grün.
+- Die Abfragen gehen vom eigenen Rechner aus, mit dem User-Agent `Markenfrei/2.0 (+https://markenfrei.app; <kontakt>)`. Der Kontakt steht nur darin, wenn `MARKENFREI_CONTACT` gesetzt ist; sonst weist die CLI auf stderr darauf hin.
+- **Nicht in Schleifen aufrufen.** Die Abfragebudgets je Dienst (z. B. GitHub ohne Token, crates.io, iTunes) gelten nur innerhalb eines Aufrufs; jeder neue Prozess beginnt von vorn. Die Ratgrenze des Servers (`MARKENFREI_RATE_LIMIT`) gilt hier nicht, weil die CLI den Server nicht aufruft. Alle Namen gehören in einen Aufruf (höchstens 10 Namen und 8 Endungen). Das gilt ebenso für den stdio-MCP.
+- Grün heißt nur, dass die geprüften Quellen nichts gefunden haben. Markenregister werden nicht abgefragt.
+
 ## Umgebungsvariablen
 
 Markenfrei braucht keine API-Schlüssel. Außer den Betreiberangaben (siehe unten) sind alle Variablen optional, eine Vorlage steht in
