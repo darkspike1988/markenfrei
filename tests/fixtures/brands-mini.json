@@ -1,0 +1,20 @@
+{
+  "quelle": "synthetisch (ausgedachte Testmarken, keine echte Wikidata-Abfrage)",
+  "lizenz": "keine, ausgedacht",
+  "abgerufen": "2000-01-01",
+  "anzahl": 12,
+  "marken": [
+    ["aquorin", "Aquorin", ["Q900001"]],
+    ["bexalto", "Bexalto", ["Q900002"]],
+    ["brausol", "Brausol", ["Q900003"]],
+    ["cordavia", "Cordavia", ["Q900004"]],
+    ["dymlex", "Dymlex", ["Q900005"]],
+    ["elvaro", "Elvaro", ["Q900006"]],
+    ["fendrix", "Fendrix", ["Q900007"]],
+    ["gorlint", "Gorlint", ["Q900008"]],
+    ["hexaly", "Hexaly", ["Q900009"]],
+    ["kivrona", "Kivrona", ["Q900010"]],
+    ["lunabar", "Lunabar", ["Q900011"]],
+    ["tomorin", "Tomorin", ["Q900012"]]
+  ]
+}
