@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import type { NameReport } from "@/lib/engine/check";
 import { VERDICT_LABEL, rankReports, type Verdict } from "@/lib/engine/verdict";
 import { buildVerdictBar, type BarKey } from "@/lib/verdict-bar";
@@ -64,11 +65,15 @@ export function VerdictPanel({ report }: { report: NameReport }) {
       <p className="mt-1 text-sm text-ink">{reason}</p>
       <p className="mt-2 text-sm text-ink">
         {bar.countText.split(" · ").map((part, i, all) => (
-          // Das Trennzeichen hängt am Ende der vorigen Angabe, damit keine Zeile mit „·“ beginnt.
-          <span key={i} className="whitespace-nowrap">
-            {part}
-            {i < all.length - 1 ? " ·" : ""}{" "}
-          </span>
+          // Jede Angabe ist unteilbar; das Trennzeichen hängt an ihr, das Leerzeichen DAZWISCHEN liegt
+          // außerhalb der Hülle, sonst gäbe es keine Umbruchstelle und die Zeile liefe über.
+          <Fragment key={i}>
+            <span className="whitespace-nowrap">
+              {part}
+              {i < all.length - 1 ? " ·" : ""}
+            </span>
+            {i < all.length - 1 ? " " : ""}
+          </Fragment>
         ))}
       </p>
       <div className="mt-2">
