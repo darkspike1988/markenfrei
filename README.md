@@ -140,6 +140,11 @@ markenfrei.app {
 }
 ```
 
+### Browser-Suche
+
+Markenfrei lässt sich als Suchmaschine im Browser hinzufügen. Die Beschreibung liegt unter
+`/opensearch.xml`; eine Suche öffnet `/?q=…` und startet die Prüfung.
+
 ### HTTP-Schnittstelle
 
 `POST /api/check` mit `{ "names": ["wachwerk"], "tlds"?: [...], "namespaces"?: [...], "sources"?: [...] }`

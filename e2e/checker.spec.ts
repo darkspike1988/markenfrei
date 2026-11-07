@@ -46,6 +46,18 @@ test.describe("Prüfer", () => {
     expect(page.url()).toContain("q=wachwerk");
   });
 
+  test("Browser-Suche: Seite verlinkt die OpenSearch-Beschreibung, ?q=wachwerk prüft genau einmal", async ({ page }) => {
+    const calls = await stubCheckApi(page);
+    await page.goto("/?q=wachwerk");
+    await expect(page.locator('link[rel="search"][type="application/opensearchdescription+xml"]')).toHaveAttribute(
+      "href",
+      "/opensearch.xml",
+    );
+    await expect(page.getByRole("heading", { name: "Ergebnis" })).toBeVisible();
+    await page.waitForTimeout(1000);
+    expect(calls).toEqual(["wachwerk"]);
+  });
+
   test("vorübergehende Lücke (retryable) wird automatisch erneut geprüft und danach grün", async ({ page }) => {
     test.setTimeout(40_000);
     const calls = await stubCheckApi(page, { budgetGapFirst: true });

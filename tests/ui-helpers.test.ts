@@ -2,12 +2,27 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { SourceResult, Status } from "@/lib/engine/types";
 import { rankReports } from "@/lib/engine/verdict";
-import { groupOptional, selectionSummary, type SourceInfo } from "@/components/checker-config";
+import { groupOptional, parseSelection, selectionSummary, type CheckerConfig, type SourceInfo } from "@/components/checker-config";
 import { groupNotes, hiddenNoteLead, shortlistSummary } from "@/components/verdict-text";
 
 function res(label: string, status: Status, note?: string): SourceResult {
   return { sourceId: label, namespace: "domains", label, target: label, status, ...(note ? { note } : {}) };
 }
+
+test("?q=foo%20bar ergibt einen Namen mit Leerzeichen (Browser-Suche)", () => {
+  const config = {
+    namespaces: [{ id: "domains" as const, label: "Domains" }],
+    defaultNamespaces: ["domains" as const],
+    tlds: ["de", "com"],
+    defaultTlds: ["de"],
+    maxTlds: 10,
+    maxNames: 50,
+    sources: [],
+  } as CheckerConfig;
+  assert.deepEqual(parseSelection(new URLSearchParams("q=foo%20bar"), config).names, ["foo bar"]);
+  assert.deepEqual(parseSelection(new URLSearchParams("q=wachwerk"), config).names, ["wachwerk"]);
+  assert.deepEqual(parseSelection(new URLSearchParams("q=a,b"), config).names, ["a", "b"]);
+});
 
 test("selectionSummary nennt Namensräume, Endungen und Zusatzquellen in einer Zeile", () => {
   const config = {

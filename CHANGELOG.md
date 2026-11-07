@@ -8,6 +8,7 @@ Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 
 - crates.io wird über den Sparse-Index abgefragt.
 - `GET /api/sources` und `GET /llms.txt`.
+- Browser-Suche: `GET /opensearch.xml` (OpenSearch-Beschreibung), `<link rel="search">` auf jeder Seite; Markenfrei lässt sich als Suchmaschine hinzufügen und öffnet dann `/?q=…`.
 - `RateLimit`-Header (Limit, Remaining, Reset) bei `/api/check` und `/api/mcp`, auch bei 429.
 - Playwright-E2E-Tests mit axe, eine Live-Probe und Dependabot.
 - Deutsche Fehlerseiten (404, Segmentfehler, globaler Fehler).
