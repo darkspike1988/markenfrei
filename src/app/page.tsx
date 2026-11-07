@@ -30,7 +30,7 @@ export default function Home() {
         {GUIDES.map((g, i) => (
           <span key={g.href}>
             {i > 0 && " · "}
-            <Link href={g.href} className="whitespace-nowrap underline hover:text-ink">
+            <Link href={g.href} className="inline-block whitespace-nowrap py-1 underline hover:text-ink">
               {g.nav}
             </Link>
           </span>

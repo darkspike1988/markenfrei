@@ -57,18 +57,18 @@ export default function QuellenPage() {
       </div>
 
       <nav aria-label="Abschnitte" className="mt-6 flex flex-wrap gap-x-4 gap-y-1 text-sm">
-        <a href="#ampel" className="underline">
+        <a href="#ampel" className="inline-block py-1 underline">
           Ampel
         </a>
-        <a href="#domains" className="underline">
+        <a href="#domains" className="inline-block py-1 underline">
           Domains
         </a>
         {groups.map((g) => (
-          <a key={g.ns} href={`#${g.ns}`} className="underline">
+          <a key={g.ns} href={`#${g.ns}`} className="inline-block py-1 underline">
             {NAMESPACE_LABEL[g.ns]}
           </a>
         ))}
-        <a href="#marke" className="underline">
+        <a href="#marke" className="inline-block py-1 underline">
           Marke
         </a>
       </nav>
