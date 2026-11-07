@@ -265,3 +265,9 @@ details[open] > summary .chevron {
     color: #000000;
   }
 }
+
+/* Balken im Urteilsfeld: „unbekannt“ als Schraffur, damit es nicht wie Grün wirkt (Muster, nicht nur Farbe) */
+.bar-hatch {
+  background-image: repeating-linear-gradient(135deg, var(--muted) 0 2px, transparent 2px 6px);
+  background-color: var(--surface);
+}

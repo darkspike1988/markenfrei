@@ -7,6 +7,8 @@ import { NAMESPACE_LABEL, NAMESPACES } from "@/lib/engine/types";
 import { rankReports, STATUS_LABEL } from "@/lib/engine/verdict";
 import { Chevron } from "@/components/chevron";
 import { StatusText, VerdictBadge } from "@/components/status-badge";
+import { MatchList } from "@/components/match-list";
+import { VerdictPanel } from "@/components/verdict-panel";
 import { NameInsights } from "@/components/name-insights";
 import { TrademarkBlock } from "@/components/trademark-block";
 import { groupNotes, hiddenNoteLead, shortlistSummary, type GroupNotes } from "@/components/verdict-text";
@@ -26,7 +28,7 @@ function SourceRow({ r, name, note }: { r: SourceResult; name: string; note?: st
   return (
     <li className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 py-1.5">
       <div className="min-w-0">
-        <span className="whitespace-nowrap font-medium text-ink">{r.label}</span>
+        <span className="font-medium text-ink [overflow-wrap:anywhere]">{r.label}</span>
         {r.weak && (
           <span className="ml-2 inline-block whitespace-nowrap rounded border border-line px-1.5 py-px text-xs text-muted">
             schwaches Signal
@@ -54,6 +56,7 @@ function SourceRow({ r, name, note }: { r: SourceResult; name: string; note?: st
         )}
       </div>
       {note && <p className="col-span-2 text-[13px] leading-snug text-muted">{note}</p>}
+      {r.matches && r.matches.length > 0 && <MatchList matches={r.matches} name={name} />}
     </li>
   );
 }
@@ -181,6 +184,8 @@ export function ReportEntry({
       </summary>
 
       <div className="space-y-4 pb-5">
+        <VerdictPanel report={report} />
+
         {(report.input.trim().toLowerCase() !== report.name || report.incomplete.length > 0 || waiting || retryError) && (
           <div className="space-y-1.5 text-sm">
             {report.input.trim().toLowerCase() !== report.name && (

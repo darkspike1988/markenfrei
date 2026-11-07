@@ -9,7 +9,7 @@ import { z } from "zod";
 import type { NameReport } from "@/lib/engine/check";
 import type { TrademarkPrep } from "@/lib/engine/trademark-prep";
 import type { Namespace, SourceResult, Status } from "@/lib/engine/types";
-import { NAMESPACES } from "@/lib/engine/types";
+import { MATCH_KINDS, NAMESPACES } from "@/lib/engine/types";
 import type { ShortlistEntry, Verdict } from "@/lib/engine/verdict";
 
 const STATUSES = ["taken", "not_found", "similar", "invalid", "unknown"] as const satisfies readonly Status[];
@@ -27,6 +27,14 @@ export const VerdictSchema = z
   .enum(VERDICTS)
   .describe("green = keine Treffer in den geprüften Quellen (keine Markenfreigabe); yellow = Treffer oder Lücken prüfen; red = vergeben");
 
+export const SourceMatchSchema = z.object({
+  label: z.string().describe("Name der ähnlichen Marke"),
+  kind: z
+    .enum(MATCH_KINDS)
+    .describe("gleich, klanggleich, schreibaehnlich oder enthalten; nur ein Hinweis, kein Rechtsbefund"),
+  id: z.string().optional().describe("Kennung des Eintrags in der Quelle, z. B. Wikidata-ID"),
+});
+
 export const SourceResultSchema = z.object({
   sourceId: z.string().describe("Stabile ID der Quelle, z. B. npm oder rdap:de"),
   namespace: NamespaceSchema,
@@ -41,6 +49,10 @@ export const SourceResultSchema = z.object({
     .boolean()
     .optional()
     .describe("Nur bei unknown: vorübergehender Grund (Abfragelimit, Zeitüberschreitung). Nach einigen Sekunden erneut prüfen lohnt sich"),
+  matches: z
+    .array(SourceMatchSchema)
+    .optional()
+    .describe("Optional: bis zu 5 Vergleichstreffer einer Ähnlichkeitsquelle (wikidata_brands, known_brands). Nur ein Hinweis, kein Rechtsbefund; kein Treffer ist keine Freigabe"),
 });
 
 export const TrademarkLinkSchema = z.object({

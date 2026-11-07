@@ -1,6 +1,15 @@
-import type { CheckContext, HttpResponse, Source, SourceResult, Status } from "@/lib/engine/types";
+import {
+  MAX_MATCHES,
+  type CheckContext,
+  type HttpResponse,
+  type Source,
+  type SourceMatch,
+  type SourceResult,
+  type Status,
+} from "@/lib/engine/types";
 import { foldToAscii } from "@/lib/name";
-import { koelnerPhonetik, levenshtein, PROTECTED_TECH_BRANDS } from "@/lib/phonetics";
+import { containsAtBoundary, matchKnownBrands, type BrandMatch } from "@/lib/brand-match";
+import { PROTECTED_TECH_BRANDS } from "@/lib/phonetics";
 
 /**
  * Quellen im Namensraum "known_names": bekannte Marken (Heuristik ohne Netz), Wikidata, GLEIF,
@@ -78,55 +87,9 @@ function tmviewUrl(term: string): string {
   return `https://www.tmdn.org/tmview/#/tmview/results?page=1&pageSize=30&criteria=C&basicSearch=${encodeURIComponent(term)}`;
 }
 
-/** Marke steht am Anfang oder Ende des Namens oder grenzt an einen Bindestrich. */
-function containsAtBoundary(name: string, brand: string): boolean {
-  let from = 0;
-  for (;;) {
-    const i = name.indexOf(brand, from);
-    if (i < 0) return false;
-    const end = i + brand.length;
-    const leftBoundary = i === 0 || name[i - 1] === "-";
-    const rightBoundary = end === name.length || name[end] === "-";
-    if (leftBoundary || rightBoundary) return true;
-    from = i + 1;
-  }
-}
-
-export type BrandMatch = {
-  brand: string;
-  kind: "identisch" | "klanggleich" | "enthalten";
-  detail: string;
-};
-
-/** Alle Treffer gegen PROTECTED_TECH_BRANDS, stärkste zuerst. Exportiert für Tests. */
-export function matchKnownBrands(name: string, brands: readonly string[] = PROTECTED_TECH_BRANDS): BrandMatch[] {
-  const compact = name.replace(/-/g, "");
-  const code = koelnerPhonetik(compact);
-  const identical: BrandMatch[] = [];
-  const sound: BrandMatch[] = [];
-  const contained: BrandMatch[] = [];
-
-  for (const brand of brands) {
-    if (name === brand || compact === brand) {
-      identical.push({ brand, kind: "identisch", detail: `identisch mit ${brand}` });
-      continue;
-    }
-    const brandCode = koelnerPhonetik(brand);
-    const distance = levenshtein(compact, brand);
-    if (code.length >= 4 && code === brandCode && distance <= 2) {
-      sound.push({
-        brand,
-        kind: "klanggleich",
-        detail: `klanggleich mit ${brand} (Kölner Phonetik ${code}, Levenshtein ${distance})`,
-      });
-      continue;
-    }
-    if (brand.length >= 5 && containsAtBoundary(name, brand)) {
-      contained.push({ brand, kind: "enthalten", detail: `enthält ${brand} an einer Wortgrenze` });
-    }
-  }
-  return [...identical, ...sound, ...contained];
-}
+// containsAtBoundary und matchKnownBrands liegen in brand-match.ts (Browser-sicher) und werden hier re-exportiert.
+export { containsAtBoundary, matchKnownBrands };
+export type { BrandMatch };
 
 const knownBrands: Source = {
   id: "known_brands",
@@ -159,6 +122,9 @@ const knownBrands: Source = {
           .slice(0, 4)
           .map((m) => m.detail)
           .join("; ") + (matches.length > 4 ? `; ${matches.length - 4} weitere` : ""),
+        matches: matches.slice(0, MAX_MATCHES).map(
+          (m): SourceMatch => ({ label: m.brand, kind: m.kind === "identisch" ? "gleich" : m.kind }),
+        ),
       });
     } catch {
       return unexpected(base, "interner Fehler");

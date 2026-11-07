@@ -45,6 +45,10 @@ Bot-Abwehr zu umgehen. Der Bericht enthält nur einen Link zur Suche: einen Eint
   zählen als schwache Signale: Ein Treffer ergibt dort höchstens Gelb. Markenregister gehen
   nicht in die Ampel ein, die Marke steht immer auf „nicht geprüft“. **Die Ampel ersetzt
   keine Registerrecherche.** Texte in der Oberfläche und in der MCP-Beschreibung sagen das.
+- Die Quelle `wikidata_brands` (nur auf Wunsch) vergleicht ohne Netz gegen einen Schnappschuss
+  von Marken aus Wikidata (CC0, mit Abrufdatum im Dateikopf, von Hand erneuert). Die Liste ist
+  unvollständig, weil viele bekannte Marken in Wikidata nicht als Marke geführt sind; ein
+  Treffer ergibt höchstens Gelb, ein fehlender Treffer ist keine Freigabe.
 - Ähnlichkeitsrecherchen (Klang, Schrift, Bild) bieten die Ämter selbst nicht kostenlos an
   (Hinweis des DPMA). Kommerzielle Recherchedienste oder eine anwaltliche Prüfung bleiben
   der Weg vor einer Anmeldung.
