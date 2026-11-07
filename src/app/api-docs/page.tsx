@@ -133,13 +133,13 @@ export default function ApiDocsPage() {
       </div>
 
       <nav aria-label="Abschnitte" className="mt-6 flex flex-wrap gap-x-4 gap-y-1 text-sm">
-        <a href="#ueberblick" className="underline">Überblick</a>
-        <a href="#grenzen" className="underline">Grenzen</a>
-        <a href="#beispiele" className="underline">Beispiele</a>
-        <a href="#antwort" className="underline">Antwort</a>
-        <a href="#werte" className="underline">Werte</a>
-        <a href="#fehler" className="underline">Fehler</a>
-        <a href="#agenten" className="underline">Maschinenlesbar</a>
+        <a href="#ueberblick" className="inline-block py-1 underline">Überblick</a>
+        <a href="#grenzen" className="inline-block py-1 underline">Grenzen</a>
+        <a href="#beispiele" className="inline-block py-1 underline">Beispiele</a>
+        <a href="#antwort" className="inline-block py-1 underline">Antwort</a>
+        <a href="#werte" className="inline-block py-1 underline">Werte</a>
+        <a href="#fehler" className="inline-block py-1 underline">Fehler</a>
+        <a href="#agenten" className="inline-block py-1 underline">Maschinenlesbar</a>
       </nav>
 
       <section aria-labelledby="ueberblick">
