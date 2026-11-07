@@ -8,8 +8,22 @@ export type Waiting = { attempt: number; max: number };
 
 export type Item =
   | { state: "loading" }
-  | { state: "done"; report: NameReport; waiting?: Waiting; rechecking?: boolean }
+  | { state: "done"; report: NameReport; waiting?: Waiting; rechecking?: boolean; retryError?: string }
   | { state: "error"; message: string };
+
+/** Ergebnis einer Anfrage an /api/check für einen Namen. */
+export type Outcome = { ok: true; report: NameReport } | { ok: false; message: string };
+
+/**
+ * Was aus dem Eintrag eines Namens nach einer Antwort oder einem Fehler wird. Scheitert eine Wiederholung,
+ * bleibt der letzte fertige Bericht stehen (mit `retryError`), statt durch eine Fehlermeldung ersetzt zu werden.
+ * Ohne vorhandenen Bericht wird ein Fehler zum Zustand "error". Ein Erfolg ersetzt den Bericht und löscht `retryError`.
+ */
+export function nextItem(previous: Item | undefined, outcome: Outcome): Item {
+  if (outcome.ok) return { state: "done", report: outcome.report };
+  if (previous?.state === "done") return { state: "done", report: previous.report, retryError: outcome.message };
+  return { state: "error", message: outcome.message };
+}
 
 export type Run = { id: number; sel: Selection; items: Record<string, Item> };
 

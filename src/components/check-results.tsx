@@ -120,6 +120,7 @@ export function CheckResults({
                   settled={finished}
                   waiting={it.waiting}
                   rechecking={it.rechecking}
+                  retryError={it.retryError}
                   onRecheck={() => recheck(key)}
                   onCheckVariants={checkTypoVariants}
                 />

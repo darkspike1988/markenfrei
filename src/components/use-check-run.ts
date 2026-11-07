@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { NameReport } from "@/lib/engine/check";
 import { trackEvent } from "@/lib/analytics";
 import { buildQuery, buildRequestBody, type CheckerConfig, type Selection } from "@/components/checker-config";
-import type { Item, Run } from "@/components/check-run";
+import { nextItem, type Item, type Outcome, type Run, type Waiting } from "@/components/check-run";
 
 const CONCURRENCY = 3;
 
@@ -34,7 +34,8 @@ export function useCheckRun(config: CheckerConfig) {
   }
 
   async function checkOne(name: string, sel: Selection, signal: AbortSignal, id: number) {
-    let item: Item;
+    let outcome: Outcome;
+    let waiting: Waiting | undefined;
     try {
       const res = await fetch("/api/check", {
         method: "POST",
@@ -44,14 +45,15 @@ export function useCheckRun(config: CheckerConfig) {
       });
       const json = (await res.json().catch(() => null)) as { error?: string; reports?: NameReport[] } | null;
       if (!res.ok || !json?.reports?.[0]) {
-        item = { state: "error", message: json?.error ?? `Die Prüfung ist fehlgeschlagen (HTTP ${res.status}).` };
+        outcome = { ok: false, message: json?.error ?? `Die Prüfung ist fehlgeschlagen (HTTP ${res.status}).` };
       } else {
-        item = { state: "done", report: json.reports[0] };
-        const retryable = json.reports[0].results.some((r) => r.retryable);
+        const report = json.reports[0];
+        outcome = { ok: true, report };
+        const retryable = report.results.some((r) => r.retryable);
         const attempt = (retryAttempts.current.get(name) ?? 0) + 1;
         if (retryable && attempt <= MAX_AUTO_RETRIES) {
           retryAttempts.current.set(name, attempt);
-          item = { ...item, waiting: { attempt, max: MAX_AUTO_RETRIES } };
+          waiting = { attempt, max: MAX_AUTO_RETRIES };
           const t = setTimeout(() => {
             retryTimers.current.delete(t);
             if (runId.current === id && !signal.aborted) void checkOne(name, sel, signal, id);
@@ -59,15 +61,20 @@ export function useCheckRun(config: CheckerConfig) {
           retryTimers.current.add(t);
         } else {
           retryAttempts.current.delete(name);
-          trackEvent(`ergebnis/${json.reports[0].verdict}`);
+          trackEvent(`ergebnis/${report.verdict}`);
         }
       }
     } catch {
       if (signal.aborted) return;
-      item = { state: "error", message: "Keine Verbindung zum Server. Bitte erneut versuchen." };
+      outcome = { ok: false, message: "Keine Verbindung zum Server. Bitte erneut versuchen." };
     }
     if (runId.current !== id) return;
-    setRun((r) => (r && r.id === id ? { ...r, items: { ...r.items, [name]: item } } : r));
+    setRun((r) => {
+      if (!r || r.id !== id) return r;
+      const next = nextItem(r.items[name], outcome);
+      const item = waiting && next.state === "done" ? { ...next, waiting } : next;
+      return { ...r, items: { ...r.items, [name]: item } };
+    });
   }
 
   /** Startet einen neuen Lauf und gibt dessen ID zurück. */
