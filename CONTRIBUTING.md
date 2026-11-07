@@ -40,7 +40,7 @@ tsx). Das veröffentlichbare Bündel entsteht mit `npm run build:mcp` in `mcp/di
 | `src/lib/cache.ts`, `src/lib/rate-limit.ts` | Cache im Arbeitsspeicher; Rate-Limit pro IP |
 | `src/lib/opendata.ts` | Wortfeld und regelbasierte Vorschläge für „Keine Idee?“ und `markenfrei_suggest_names` |
 | `src/app/` | Oberfläche (`page.tsx`, `/quellen`, `/mcp`) und Routen unter `api/` |
-| `src/components/` | Komponenten der Oberfläche; `checker.tsx` ist die Client-Komponente |
+| `src/components/` | Komponenten der Oberfläche; `checker.tsx` ist die Client-Komponente (Formular `check-form.tsx`, Prüflauf `use-check-run.ts`, Ergebnisse `check-results.tsx`) |
 | `src/mcp/` | MCP-Server (`server.ts`) und stdio-Start (`cli.ts`) |
 | `mcp/` | npm-Paket `markenfrei-mcp`: Build-Skript, Pakettest, `server.json` |
 

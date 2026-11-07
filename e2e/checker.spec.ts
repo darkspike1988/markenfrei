@@ -59,6 +59,52 @@ test.describe("Prüfer", () => {
     await expect(page.getByText("Keine Treffer").first()).toBeVisible({ timeout: 10_000 });
   });
 
+  test("Vergleich → Name anklicken wechselt zur Liste und klappt die Berichtszeile auf", async ({ page }) => {
+    await stubCheckApi(page);
+    await page.goto("/");
+    await page.getByRole("textbox").first().fill("react, wachwerk");
+    await page.getByRole("button", { name: "Prüfen", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Ergebnisse" })).toBeVisible();
+    await page.getByRole("button", { name: "Vergleich" }).click();
+    await page.getByRole("table").getByRole("link", { name: /^react/ }).first().click();
+    await expect(page.getByRole("table")).toBeHidden();
+    await expect(page.locator("details#bericht-react")).toHaveAttribute("open", "");
+  });
+
+  test("Drucken klappt alle Berichtszeilen auf und danach wieder zu", async ({ page }) => {
+    await stubCheckApi(page);
+    await page.goto("/");
+    await page.getByRole("textbox").first().fill("react, wachwerk, schichtflux");
+    await page.getByRole("button", { name: "Prüfen", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Ergebnisse" })).toBeVisible();
+    const rows = page.locator("details[id^='bericht-']");
+    await expect(rows).toHaveCount(3);
+    const openCount = () => rows.evaluateAll((els) => els.filter((e) => (e as HTMLDetailsElement).open).length);
+    const before = await openCount();
+    expect(before).toBeLessThan(3);
+    await page.emulateMedia({ media: "print" });
+    await expect.poll(openCount).toBe(3);
+    await page.emulateMedia({ media: "screen" });
+    await expect.poll(openCount).toBe(before);
+  });
+
+  test("Zusatzquelle wählen: Anfrage enthält sie und der Link merkt sie sich", async ({ page }) => {
+    const bodies: { names: string[]; sources?: string[] }[] = [];
+    await stubCheckApi(page);
+    page.on("request", (req) => {
+      if (req.url().endsWith("/api/check")) bodies.push(req.postDataJSON());
+    });
+    await page.goto("/");
+    await page.getByText("Anpassen").click();
+    await page.getByText(/^Pakete\s*\+\d+/).click();
+    await page.getByRole("button", { name: "NuGet", exact: true }).click();
+    await page.getByRole("textbox").first().fill("wachwerk");
+    await page.getByRole("button", { name: "Prüfen", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Ergebnis" })).toBeVisible();
+    expect(bodies.at(-1)?.sources).toContain("nuget");
+    expect(page.url()).toMatch(/src=[^&]*nuget/);
+  });
+
   test("Exporte: CSV, Markdown und JSON laden eine Datei", async ({ page }) => {
     await stubCheckApi(page);
     await page.goto("/");
