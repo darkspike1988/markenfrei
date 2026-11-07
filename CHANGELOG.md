@@ -23,7 +23,7 @@ Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 
 - Eine fehlgeschlagene Wiederholung ersetzt keinen fertigen Bericht mehr.
 - Kontaktversand läuft wieder auf Node 20 (`Promise.withResolvers` ersetzt).
-- Die Live-Probe schlägt bei Fehlern fehl (pipefail).
+- Die Live-Probe schlägt bei Fehlern fehl (pipefail); der NuGet-Kanarienname ist jetzt `serilog` (`newtonsoft-json` gibt es dort nicht, die ID lautet `Newtonsoft.Json`).
 - Dokumentation: Ampel-Regel an `verdict.ts` angeglichen, falsche Zusage „Link zu jeder Quelle“ entfernt, `llms.txt` ohne falsche Zusagen.
 
 ## [2.0.0]

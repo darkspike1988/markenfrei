@@ -21,7 +21,8 @@ const CANARIES: Record<string, Canary> = {
   crates: { name: "serde", level: "gate" },
   github: { name: "torvalds", level: "advisory" },
   homebrew: { name: "wget", level: "advisory" },
-  nuget: { name: "newtonsoft-json", level: "advisory" },
+  // NuGet-IDs enthalten Punkte (Newtonsoft.Json); mit Bindestrich gibt es 404. Darum ein Name ohne Trennzeichen.
+  nuget: { name: "serilog", level: "advisory" },
   rubygems: { name: "rails", level: "advisory" },
   packagist: { name: "symfony", level: "advisory" },
   hex: { name: "phoenix", level: "advisory" },
