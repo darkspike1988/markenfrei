@@ -28,7 +28,7 @@ function SourceRow({ r, name, note }: { r: SourceResult; name: string; note?: st
   return (
     <li className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 py-1.5">
       <div className="min-w-0">
-        <span className="whitespace-nowrap font-medium text-ink">{r.label}</span>
+        <span className="font-medium text-ink [overflow-wrap:anywhere]">{r.label}</span>
         {r.weak && (
           <span className="ml-2 inline-block whitespace-nowrap rounded border border-line px-1.5 py-px text-xs text-muted">
             schwaches Signal

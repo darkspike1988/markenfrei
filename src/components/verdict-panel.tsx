@@ -62,7 +62,15 @@ export function VerdictPanel({ report }: { report: NameReport }) {
         </span>
       </p>
       <p className="mt-1 text-sm text-ink">{reason}</p>
-      <p className="mt-2 text-sm text-ink">{bar.countText}</p>
+      <p className="mt-2 text-sm text-ink">
+        {bar.countText.split(" · ").map((part, i, all) => (
+          // Das Trennzeichen hängt am Ende der vorigen Angabe, damit keine Zeile mit „·“ beginnt.
+          <span key={i} className="whitespace-nowrap">
+            {part}
+            {i < all.length - 1 ? " ·" : ""}{" "}
+          </span>
+        ))}
+      </p>
       <div className="mt-2">
         <VerdictBarView results={report.results} />
       </div>

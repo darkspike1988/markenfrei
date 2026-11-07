@@ -38,7 +38,10 @@ test("Urteilsfeld rot: Symbol, Wort und Zählung, nicht nur Farbe", () => {
   assert.match(html, /✕/);
   assert.match(html, /Ampel Rot/);
   assert.match(html, /Vergeben/);
-  assert.match(html, /2 vergeben · 0 Treffer prüfen · 1 nicht gefunden · 1 unbekannt/);
+  // Sichtbarer Text ohne Markup: Jede Angabe steht in einer eigenen Hülle, damit sie nicht mitten im Wort umbricht.
+  assert.match(html.replace(/<[^>]+>/g, "").replace(/\s+/g, " "), /2 vergeben · 0 Treffer prüfen · 1 nicht gefunden · 1 unbekannt/);
+  assert.equal((html.match(/whitespace-nowrap">\d+ [^<]+</g) ?? []).length, 4, "vier unteilbare Angaben");
+  assert.doesNotMatch(html, />\s*·\s*<span/, "kein Trennzeichen am Anfang einer Angabe");
   assert.match(html, /role="img" aria-label="Quellen: 2 vergeben, 0 Treffer prüfen, 1 nicht gefunden, 1 unbekannt"/);
   assert.match(html, /bar-hatch/);
 });
