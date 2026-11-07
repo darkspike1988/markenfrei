@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import {
   PACKAGE_SOURCES,
   cranSpellings,
+  cratesIndexPath,
+  cratesVariants,
   githubBlockedUntilMs,
   mailtoContact,
   pep503,
@@ -70,7 +72,6 @@ const simple: Simple[] = [
   { id: "npm", name: "wachwerk", api: "https://registry.npmjs.org/wachwerk", human: "https://www.npmjs.com/package/wachwerk" },
   { id: "pypi", name: "wachwerk", api: "https://pypi.org/pypi/wachwerk/json", human: "https://pypi.org/project/wachwerk/" },
   { id: "github", name: "wachwerk", api: "https://api.github.com/users/wachwerk", human: "https://github.com/wachwerk" },
-  { id: "crates", name: "wachwerk", api: "https://crates.io/api/v1/crates/wachwerk", human: "https://crates.io/crates/wachwerk" },
   { id: "nuget", name: "wachwerk", api: "https://api.nuget.org/v3-flatcontainer/wachwerk/index.json", human: "https://www.nuget.org/packages/wachwerk" },
   {
     id: "rubygems",
@@ -234,6 +235,66 @@ test("github: 403 ohne Rate-Limit-Header sperrt nicht", async () => {
   const second = ctxWith({ "https://api.github.com/users/wachwerk": { status: 404 } });
   assert.equal((await src("github").check("wachwerk", second.ctx)).status, "not_found");
   assert.equal(second.calls.length, 1);
+});
+
+test("crates: Sparse-Index-Pfade nach Namenslänge", () => {
+  assert.equal(cratesIndexPath("a"), "1/a");
+  assert.equal(cratesIndexPath("ab"), "2/ab");
+  assert.equal(cratesIndexPath("abc"), "3/a/abc");
+  assert.equal(cratesIndexPath("serde"), "se/rd/serde");
+});
+
+test("crates: Schreibweisen mit - und _ (höchstens zwei Trennzeichen, sonst null)", () => {
+  assert.deepEqual(cratesVariants("wachwerk"), ["wachwerk"]);
+  assert.deepEqual(cratesVariants("a-b"), ["a-b", "a_b"]);
+  assert.deepEqual(cratesVariants("a-b-c")!.sort(), ["a-b-c", "a-b_c", "a_b-c", "a_b_c"]);
+  assert.equal(cratesVariants("a-b-c-d"), null);
+});
+
+const CI = "https://index.crates.io/wa/ch/wachwerk";
+
+test("crates: Index 200 => taken ohne Abfrage der API (kein Abfragebudget nötig)", async () => {
+  const { ctx, calls } = ctxWith({ [CI]: { status: 200 } });
+  const r = await src("crates").check("wachwerk", ctx);
+  assert.equal(r.status, "taken");
+  assert.equal(r.url, "https://crates.io/crates/wachwerk");
+  assert.equal(r.evidence, "Index HTTP 200");
+  assert.deepEqual(calls.map((c) => c.url), [CI]);
+});
+
+test("crates: Index 404 => not_found", async () => {
+  const { ctx } = ctxWith({ [CI]: { status: 404 } });
+  const r = await src("crates").check("wachwerk", ctx);
+  assert.equal(r.status, "not_found");
+  assert.equal(r.evidence, "Index HTTP 404");
+});
+
+test("crates: Name mit Bindestrich findet das Crate mit Unterstrich", async () => {
+  const { ctx, calls } = ctxWith({
+    "https://index.crates.io/se/rd/serde-json": { status: 404 },
+    "https://index.crates.io/se/rd/serde_json": { status: 200 },
+  });
+  const r = await src("crates").check("serde-json", ctx);
+  assert.equal(r.status, "taken");
+  assert.equal(r.url, "https://crates.io/crates/serde_json");
+  assert.match(r.note ?? "", /serde_json/);
+  assert.equal(calls.length, 2);
+});
+
+test("crates: ein Fehler bei einer Schreibweise ohne Treffer ergibt unknown, nie frei", async () => {
+  const { ctx } = ctxWith({
+    "https://index.crates.io/se/rd/serde-json": { status: 404 },
+    "https://index.crates.io/se/rd/serde_json": { status: 503 },
+  });
+  assert.equal((await src("crates").check("serde-json", ctx)).status, "unknown");
+});
+
+test("crates: zu viele Trennzeichen => Abfrage der API", async () => {
+  const api = "https://crates.io/api/v1/crates/a-b-c-d";
+  const { ctx, calls } = ctxWith({ [api]: { status: 404 } });
+  const r = await src("crates").check("a-b-c-d", ctx);
+  assert.equal(r.status, "not_found");
+  assert.deepEqual(calls.map((c) => c.url), [api]);
 });
 
 test("crates: muss mit Buchstabe beginnen", async () => {

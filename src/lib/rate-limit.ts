@@ -1,9 +1,8 @@
 /**
  * Einfaches Rate-Limit pro Schlüssel (Festes Zeitfenster, im Arbeitsspeicher).
  *
- * Grenzen: Der Zähler gilt pro Serverprozess. Laufen mehrere Instanzen oder eine
- * serverlose Plattform, begrenzt jede für sich. Dort zusätzlich am Reverse-Proxy
- * begrenzen. Der Schlüssel ist die IP aus x-forwarded-for; ohne vertrauenswürdigen
+ * Grenzen: Der Zähler gilt pro Serverprozess. Mehrere Prozesse auf derselben ausgehenden IP
+ * und serverlose Plattformen werden nicht unterstützt (docs/design.md, Option A+). Der Schlüssel ist die IP aus x-forwarded-for; ohne vertrauenswürdigen
  * Proxy davor lässt sich dieser Header fälschen.
  */
 

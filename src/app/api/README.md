@@ -28,6 +28,7 @@ sowie `localhost`, `127.0.0.1` und `[::1]` mit beliebigem Port. Ein fehlender Or
 | `POST /api/opendata-words` | Wortfeld und regelbasierte Vorschläge für „Keine Idee?“ | 1 |
 | `POST /api/contact` | Kontaktformular: sendet eine Nachricht per E-Mail an den Betreiber | 1 (allgemeines Limit) plus eigenes Limit nur für gesendete Nachrichten |
 | `GET /api/openapi.json` | OpenAPI-3.1-Beschreibung der öffentlichen Routen | keine (kein Rate-Limit, keine Abfragen) |
+| `GET /api/sources` | Katalog der Quellen, Namensräume und Endungen als JSON | keine (kein Rate-Limit, keine Abfragen) |
 | `GET /api/health` | Lebenszeichen für Monitoring | keine |
 
 ```mermaid
@@ -162,7 +163,7 @@ Eingaben des Besuchers; Name, Adresse und Text werden weder gespeichert noch pro
 
 ## `GET /api/openapi.json` (`openapi.json/route.ts`, Aufbau in `src/lib/openapi.ts`)
 
-OpenAPI 3.1 für `POST /api/check`, `POST /api/mcp` und `GET /api/health`. `/api/contact` und
+OpenAPI 3.1 für `POST /api/check`, `POST /api/mcp`, `GET /api/sources` und `GET /api/health`. `/api/contact` und
 `/api/opendata-words` stehen bewusst nicht darin (interne Routen der Oberfläche). Das Dokument
 entsteht aus dem Code und kann deshalb nicht davon abweichen:
 
@@ -184,6 +185,17 @@ entsteht aus dem Code und kann deshalb nicht davon abweichen:
 `tests/openapi.test.ts` prüft Aufbau, dass alle `$ref` auflösen, dass die Aufzählungen den Konstanten
 entsprechen, dass die Beispiele zu den Schemas passen und dass die dokumentierten Fehlermeldungen
 die der Route sind.
+
+---
+
+## `GET /api/sources` (`sources/route.ts`, Aufbau in `src/lib/sources-catalog.ts`)
+
+Antwort: `{ schemaVersion: 2, namespaces, tlds, sources, limits }` aus denselben Konstanten wie die Seite
+`/quellen` und die Prüfung (`STATIC_SOURCES`, `DOMAIN_TLDS`). Jede Quelle hat `id`, `namespace`, `label`,
+`default`, `description` und `endpoint`. `Cache-Control: public, max-age=3600`. Kein Rate-Limit, keine Abfragen
+bei Dritten. Wer `sources` für `/api/check` setzt, nimmt die IDs von hier; Quellen mit `default: true` gehören zur
+Standardprüfung und müssen mitgeschickt werden, wenn sie bleiben sollen. `GET /llms.txt` (`src/app/llms.txt/route.ts`)
+ist die Kurzfassung für Sprachmodelle.
 
 ---
 

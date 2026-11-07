@@ -20,12 +20,14 @@ const PER_HOST_LIMIT = 4;
  * Abfragebudget je Zieldienst, prozessweit. Es gilt zusätzlich zur Zahl gleichzeitiger Anfragen
  * und hält dokumentierte Grenzen der Anbieter ein. Ist es erschöpft, wartet die Anfrage kurz oder
  * gibt auf (error "budget"), statt den Dienst zu überlasten oder die Server-IP sperren zu lassen.
- * Gilt pro Prozess: Bei mehreren Instanzen teilt sich das Budget nicht, dort entsprechend senken.
+ * Gilt pro Prozess; ein Betrieb mit mehreren Prozessen auf derselben ausgehenden IP wird nicht unterstützt (docs/design.md).
  *
  * Belege (Stand 4. November 2026):
  * - itunes.apple.com: Apple nennt "approximately 20 calls per minute" (iTunes Search API) und empfiehlt
  *   Caching. Wir nehmen 18 pro Minute.
- * - crates.io: Crawler-Richtlinie, höchstens 1 Anfrage pro Sekunde.
+ * - crates.io (API): Crawler-Richtlinie, höchstens 1 Anfrage pro Sekunde. Die Quelle "crates" nutzt
+ *   stattdessen den Sparse-Index (index.crates.io, CDN ohne dieses Limit) und braucht die API nur
+ *   für Namen mit mehr als zwei Bindestrichen.
  * - hex.pm: 100 Anfragen pro Minute ohne Anmeldung. Wir nehmen 90.
  * - mastodon.social: 300 Anfragen je 5 Minuten und IP. Wir nehmen 250.
  * - huggingface.co: API-Abfragen je 5 Minuten anonym 500, mit Free-Konto 1.000 (offizielle Tabelle,

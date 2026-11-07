@@ -2,6 +2,9 @@
   "name": "markenfrei",
   "version": "2.0.0",
   "private": true,
+  "engines": {
+    "node": ">=20.9"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -11,30 +14,37 @@
     "build:mcp": "node mcp/build.mjs",
     "test": "tsx --test tests/*.test.ts",
     "test:mcp-package": "node mcp/test-package.mjs",
-    "indexnow": "node scripts/indexnow.mjs"
+    "indexnow": "node scripts/indexnow.mjs",
+    "e2e": "playwright test",
+    "probe:live": "tsx scripts/live-probe.ts"
   },
   "bin": {
     "markenfrei-mcp": "./bin/markenfrei-mcp.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
-    "next": "16.4.4",
+    "next": "16.4.5",
     "nodemailer": "^10.3.1",
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@tailwindcss/turbopack": "^4",
+    "@axe-core/playwright": "4.14.0",
+    "@playwright/test": "1.63.0",
+    "@tailwindcss/turbopack": "^4.3.5",
     "@types/node": "^20",
     "@types/nodemailer": "^8.0.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "esbuild": "^0.28.2",
     "eslint": "^9",
-    "eslint-config-next": "16.4.4",
-    "tailwindcss": "^4",
+    "eslint-config-next": "16.4.5",
+    "tailwindcss": "^4.3.5",
     "tsx": "^4.23.15",
     "typescript": "^5"
+  },
+  "overrides": {
+    "playwright-core": "1.63.0"
   }
 }

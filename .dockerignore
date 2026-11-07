@@ -6,3 +6,5 @@ mcp/dist
 !.env.example
 .git
 .claude
+test-results
+playwright-report

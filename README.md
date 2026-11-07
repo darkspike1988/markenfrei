@@ -148,7 +148,10 @@ einzeln fürs Rate-Limit. Details: [src/app/api/README.md](src/app/api/README.md
 - **API-Dokumentation:** Die Seite `/api-docs` beschreibt die Schnittstelle für Entwickler (curl-,
   JavaScript- und Python-Beispiele, Antwortformat, Grenzen, Fehler). `GET /api/openapi.json` liefert
   eine OpenAPI-3.1-Beschreibung, die aus denselben Konstanten und Schemas wie der Code entsteht;
-  `GET /api/health` meldet `{ "status": "ok", "version": "…" }` fürs Monitoring.
+  `GET /api/sources` listet alle Quellen-IDs, Namensräume und Endungen als JSON (die gültigen Werte
+  für `sources`, `namespaces` und `tlds`, mit Kennzeichnung der Standardauswahl). `GET /llms.txt` fasst
+  Schnittstellen und Grenzen für Sprachmodelle zusammen. `GET /api/health` meldet
+  `{ "status": "ok", "version": "…" }` fürs Monitoring.
 
 ## MCP-Server für Agenten
 
@@ -217,7 +220,7 @@ Markenfrei braucht keine API-Schlüssel. Außer den Betreiberangaben (siehe unte
 | `HF_TOKEN` | Optionales Lese-Token für Hugging Face (nur für die optionale Quelle „Hugging Face“). Hebt das Limit von 500 auf 1.000 API-Abfragen je 5 Minuten (Free-Konto, Stand September 2025). Geht nur an huggingface.co. |
 | `GITHUB_TOKEN` | Token für die GitHub-Abfrage (Nutzer und Organisationen). Ohne Token gilt das Limit von 60 Anfragen pro Stunde und IP. Das Token braucht keine Berechtigungen. |
 | `MARKENFREI_TRUSTED_PROXIES` | Anzahl vertrauenswürdiger Proxys vor der App (Standard 1). `x-forwarded-for` wird von rechts gelesen, damit Clients ihre Adresse nicht fälschen können. `0` ignoriert den Header. |
-| `MARKENFREI_RATE_LIMIT` | Anfragen pro Minute und IP für alle öffentlichen Routen (Standard 60). Bei `/api/check` und `markenfrei_check_names` zählt jeder Name einzeln. Der Zähler gilt pro Serverprozess; bei mehreren Instanzen zusätzlich am Reverse-Proxy begrenzen. |
+| `MARKENFREI_RATE_LIMIT` | Anfragen pro Minute und IP für alle öffentlichen Routen (Standard 60). Bei `/api/check` und `markenfrei_check_names` zählt jeder Name einzeln. Der Zähler gilt pro Serverprozess; mehrere Prozesse hinter einer ausgehenden IP werden nicht unterstützt (siehe „Vor dem Livegang“, Punkt 4). |
 | `MARKENFREI_CACHE_TTL_SEC` | Lebensdauer des Zwischenspeichers für eindeutige Quellenantworten im Arbeitsspeicher, Standard 600 Sekunden, `0` schaltet ihn aus. `unknown` wird nie zwischengespeichert, nichts wird auf die Platte geschrieben. |
 
 ## Vor dem Livegang
@@ -235,11 +238,14 @@ der Code allein reicht nicht:
    `Referrer-Policy`, `Permissions-Policy`, HSTS). HSTS wirkt nur über HTTPS.
 3. **Kontakt und Token.** `MARKENFREI_CONTACT` setzen (Wikidata verlangt Kontakt im User-Agent, Packagist
    auch) und möglichst `GITHUB_TOKEN`.
-4. **Mehrere Instanzen:** Rate-Limit und Cache gelten pro Prozess. Bei mehr als einer Instanz zusätzlich am
-   Proxy begrenzen.
-5. **Node 22 oder neuer** (CI testet mit 22).
+4. **Ein Prozess.** Rate-Limit, Cache und Abfragebudgets gelten pro Prozess. Mehrere Prozesse auf derselben
+   ausgehenden IP-Adresse werden nicht unterstützt: Sie teilen sich die Grenzen der Zieldienste und überschreiten
+   sie eher. Bei einem Neustart mit kurzer Überlappung können bis zu doppelt so viele Abfragen eintreffen, solange
+   der Zieldienst die des alten Prozesses noch zählt (höchstens eine Fensterlänge). Begründung und Optionen:
+   [docs/design.md](docs/design.md).
+5. **Node.js 20.9 oder neuer** (`engines` in `package.json`; die CI testet 20 und 22, das Docker-Image nutzt 22).
 6. **Nutzungsbedingungen der Quellen.** Die App fragt Dienste Dritter ab. Eingehalten bzw. geprüft:
-   Rate-Limits mit Abfragebudget je Dienst (Apple etwa 20 pro Minute, crates.io 1 pro Sekunde, Hex,
+   Rate-Limits mit Abfragebudget je Dienst (Apple etwa 20 pro Minute, crates.io-API 1 pro Sekunde, Hex,
    Mastodon, Repology 1 pro Sekunde, ecosyste.ms, AUR; `HOST_BUDGETS` in `src/lib/engine/http.ts`),
    identifizierbarer User-Agent (für Repology der geforderte mit Link zum Quellcode), Pfade nicht
    durch `robots.txt` gesperrt. Die Quellen docker, conda und clojars fragen den
@@ -266,8 +272,7 @@ der Code allein reicht nicht:
      **GitHub ohne Token 60 neue Namen pro Stunde** je Server-IP (mit Token 5.000). Wiederholte Namen kommen aus dem
      Zwischenspeicher (10 Minuten) und zählen nicht. Setze `GITHUB_TOKEN`, sonst ist die GitHub-Zeile nach 60 neuen
      Namen pro Stunde für alle Nutzer „unbekannt“.
-   - Mehr Instanzen auf derselben IP erhöhen diese Grenzen nicht, sie teilen sie sich und überschreiten sie
-     eher (Budgets gelten pro Prozess).
+   - Mehr Prozesse auf derselben IP erhöhen diese Grenzen nicht (Betriebsgrenze, siehe Punkt 4).
 9. **Optional:** npm-Paket veröffentlichen (`cd mcp && npm publish`), damit `npx -y markenfrei-mcp` geht.
 
 ## Entwicklung
@@ -278,6 +283,8 @@ npm run lint           # ESLint
 npm run build          # Next.js-Build
 npm run build:mcp      # MCP-Bündel nach mcp/dist/
 npm run test:mcp-package  # npm pack und Start aus dem entpackten Paket
+npm run e2e            # Playwright-Tests der Oberfläche inkl. axe (nach npm run build)
+npm run probe:live     # Live-Probe der Quellen mit echtem Netz
 ```
 
 Aufbau und Beitragsregeln: [CONTRIBUTING.md](CONTRIBUTING.md). Weitere Dokumentation:

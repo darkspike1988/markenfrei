@@ -166,6 +166,13 @@ export default function ApiDocsPage() {
                 </td>
               </tr>
               <tr>
+                <td className="py-2 pr-4 align-top font-mono text-[13px] text-ink">GET /api/sources</td>
+                <td className="py-2 text-soft">
+                  Alle Quellen-IDs, Namensräume und Endungen als JSON, mit Kennzeichnung der Standardauswahl (die
+                  gültigen Werte für <Mono>sources</Mono>, <Mono>namespaces</Mono> und <Mono>tlds</Mono>)
+                </td>
+              </tr>
+              <tr>
                 <td className="py-2 pr-4 align-top font-mono text-[13px] text-ink">GET /api/health</td>
                 <td className="py-2 text-soft">Lebenszeichen für Monitoring: <Mono>{`{ "status": "ok", "version": "…" }`}</Mono></td>
               </tr>

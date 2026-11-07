@@ -46,7 +46,6 @@ keine Rechtsberatung.
 | Status | Thema | Frage |
 |---|---|---|
 | 🟡 | Veröffentlichung des MCP-Pakets | `markenfrei-mcp` ist gebaut und getestet, aber nicht auf npm. Der Registry-Name `app.markenfrei/mcp` setzt eine Domain-Verifizierung für markenfrei.app voraus. Die Versionen sind nach dem Schema unten angeglichen. |
-| 🟡 | Name und Anspruch | „Markenfrei“ verspricht mehr als die Vorprüfung leistet. Soll der Name bleiben? |
 | 🟡 | Echte Registerabfrage | EUIPO (Registrierung, Sandbox) und USPTO (API-Schlüssel) wären die einzigen Wege. Möglich als optionale Quelle mit eigenem Schlüssel des Betreibers, nach Prüfung der Nutzungsbedingungen. |
 | 🟡 | GitHub-Token | Ein Token beim Betreiber hebt das Limit von 60 auf 5.000 Anfragen pro Stunde, ist aber ein Geheimnis in der Server-Umgebung. |
 | 🟡 | Origin-Prüfung für `/api/mcp` | Der Abgleich mit dem eigenen Host schützt nicht vor DNS-Rebinding. Für eine strengere Prüfung `MARKENFREI_ALLOWED_ORIGINS` setzen und den Host-Abgleich entfernen. |
@@ -63,7 +62,7 @@ Code, Tests, Sicherheits- und Code-Review sind abgeschlossen; offen ist nur der 
 | ✅ | `www.markenfrei.app` | DNS zeigt auf den Server, Caddy leitet per 301 auf `markenfrei.app` weiter (Zertifikat von Let's Encrypt). |
 | ⬜ | `GITHUB_TOKEN` | Token ohne Berechtigungen in `.env`; sonst gilt für GitHub 60 Anfragen pro Stunde für alle Nutzer zusammen. |
 | ⬜ | Proxy-Limits | Je-IP-Limit, Body-Größe und Timeouts zusätzlich am Reverse-Proxy. |
-| 🟡 | Name „Markenfrei“ | Eigene Markenrecherche (DPMA, EUIPO) vor öffentlichem Start; `markenfrei.com` und `markenfrei.de` sind registriert (Inhaber nicht geprüft). |
+| ✅ | Name „Markenfrei“ | Entschieden: Der Name ist ein beschreibender Begriff (Gattungsbegriff) und als Marke nicht eintragungsfähig; eine Anmeldung ist nicht vorgesehen. Der Name bleibt als Arbeitsname, Kennzeichen ist die Domain `markenfrei.app` (`markenfrei.com` und `markenfrei.de` sind registriert, Inhaber nicht geprüft). Der Anspruch bleibt auf „Vorprüfung“ begrenzt: Grün heißt nur „nichts gefunden“. |
 
 ### Versionsschema
 
@@ -89,7 +88,7 @@ Version.
 
 | Status | Idee | Voraussetzung |
 |---|---|---|
-| ⬜ | Rate-Limit über mehrere Instanzen (gemeinsamer Speicher) | Betrieb mit mehr als einer Instanz; Optionen und Entscheidung: [docs/design.md](docs/design.md) |
+| ⬜ | Rate-Limit und Budgets über mehrere Prozesse (gemeinsamer Speicher) | Heute nicht unterstützt (Betriebsgrenze, ein Prozess); nur falls ein Bedarf für mehr als einen Prozess entsteht, Optionen: [docs/design.md](docs/design.md) |
 
 ---
 

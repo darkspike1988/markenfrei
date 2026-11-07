@@ -49,7 +49,7 @@ test("OpenAPI-Dokument: Version, Pfade, Info, Server", () => {
   assert.match(doc.info.version, /^\d+\.\d+\.\d+$/);
   assert.equal(doc.info.license.identifier, "MIT");
   assert.deepEqual(doc.servers, [{ url: DEFAULT_PUBLIC_URL, description: "Diese Instanz" }]);
-  assert.deepEqual(Object.keys(doc.paths).sort(), ["/api/check", "/api/health", "/api/mcp"]);
+  assert.deepEqual(Object.keys(doc.paths).sort(), ["/api/check", "/api/health", "/api/mcp", "/api/sources"]);
   assert.deepEqual(Object.keys(doc.paths["/api/check"]), ["post"]);
   assert.deepEqual(Object.keys(doc.paths["/api/health"]), ["get"]);
   // interne Routen bleiben draußen
@@ -227,4 +227,46 @@ test("Die Seite /api-docs steht in der Sitemap und hat eigenen Titel und Beschre
   assert.ok(String(apiDocsMeta.description).length > 0 && String(apiDocsMeta.description).length < 160);
   assert.notEqual(apiDocsMeta.title, mcpMeta.title);
   assert.notEqual(apiDocsMeta.description, mcpMeta.description);
+});
+
+// --- GET /api/sources -------------------------------------------------------
+
+import { GET as sourcesGET } from "@/app/api/sources/route";
+import { buildSourcesCatalog, SourcesCatalogSchema } from "@/lib/sources-catalog";
+
+test("GET /api/sources: Katalog passt zum Schema, enthält jede Quelle und Endung, fragt nichts ab", async () => {
+  const res = sourcesGET(new Request("http://localhost/api/sources"));
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get("cache-control") ?? "", /public, max-age=\d+/);
+  const json = SourcesCatalogSchema.parse(await res.json());
+  assert.deepEqual(json.sources.map((s) => s.id), STATIC_SOURCES.map((s) => s.id));
+  assert.deepEqual(json.tlds.map((t) => t.tld), [...DOMAIN_TLDS]);
+  assert.deepEqual(json.tlds.filter((t) => t.default).map((t) => t.tld), [...DEFAULT_DOMAIN_TLDS]);
+  assert.deepEqual(json.namespaces.filter((n) => n.default).map((n) => n.id), [...DEFAULT_NAMESPACES]);
+  assert.deepEqual(json.limits, { maxNames: MAX_NAMES, maxTlds: MAX_TLDS });
+  // jede ID aus dem Katalog ist für /api/check gültig
+  resolveSources({ sources: json.sources.map((s) => s.id) });
+});
+
+test("OpenAPI: /api/sources ist beschrieben und das Beispiel entspricht dem Katalog", () => {
+  assert.ok(schemas.SourcesCatalog);
+  const example = doc.paths["/api/sources"].get.responses["200"].content["application/json"].example;
+  assert.deepEqual(example, buildSourcesCatalog());
+});
+
+// --- /llms.txt --------------------------------------------------------------
+
+import { GET as llmsGET } from "@/app/llms.txt/route";
+
+test("/llms.txt: Text mit Standardquellen aus dem Code, Warnhinweis zu Grün, nur Links auf die eigene Adresse", async () => {
+  const res = llmsGET(new Request("http://localhost/llms.txt"));
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get("content-type") ?? "", /^text\/plain/);
+  const text = await res.text();
+  assert.match(text, /^# Markenfrei\n/);
+  assert.match(text, /Grün heißt nur/);
+  for (const s of STATIC_SOURCES.filter((x) => x.defaultEnabled)) assert.ok(text.includes(s.id), s.id);
+  assert.ok(text.includes(`${DEFAULT_PUBLIC_URL.replace(/\/+$/, "")}/api/sources`));
+  const hosts = new Set([...text.matchAll(/\]\((https?:\/\/[^/)]+)/g)].map((m) => m[1]));
+  assert.deepEqual([...hosts], [DEFAULT_PUBLIC_URL.replace(/\/+$/, "")]);
 });

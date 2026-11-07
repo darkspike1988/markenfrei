@@ -1,0 +1,24 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      next-react:
+        patterns: ["next", "eslint-config-next", "react", "react-dom", "@types/react", "@types/react-dom"]
+      tailwind:
+        patterns: ["tailwindcss", "@tailwindcss/*"]
+      dev-tools:
+        dependency-type: development
+        exclude-patterns: ["eslint-config-next", "@types/react", "@types/react-dom", "tailwindcss", "@tailwindcss/*"]
+    ignore:
+      # Node 20 bleibt unterstützt (engines), @types/node folgt der Mindestversion
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

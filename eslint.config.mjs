@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Gebündeltes MCP-Paket (npm run build:mcp), enthält fremden Code
     "mcp/dist/**",
+    "playwright-report/**",
+    "test-results/**",
   ]),
 ]);
 

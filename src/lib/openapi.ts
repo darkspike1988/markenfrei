@@ -15,6 +15,7 @@ import { computeVerdict, countStatuses, rankReports, STATUS_LABEL, VERDICT_LABEL
 import { DEFAULT_CACHE_TTL_MS } from "@/lib/cache";
 import { DEFAULT_RATE_LIMIT, RATE_LIMIT_WINDOW_MS, rateLimitMessage } from "@/lib/rate-limit";
 import { DEFAULT_PUBLIC_URL } from "@/lib/site";
+import { buildSourcesCatalog, SourcesCatalogSchema, SOURCES_MAX_AGE_SECONDS } from "@/lib/sources-catalog";
 import { APP_VERSION } from "@/lib/version";
 
 /**
@@ -208,6 +209,7 @@ function schemas(): JsonObject {
       },
       required: ["jsonrpc"],
     },
+    SourcesCatalog: jsonSchema(SourcesCatalogSchema, "output"),
     Health: {
       type: "object",
       properties: {
@@ -353,6 +355,25 @@ function healthOperation(): JsonObject {
   };
 }
 
+function sourcesOperation(): JsonObject {
+  return {
+    operationId: "listSources",
+    tags: ["Prüfung"],
+    summary: "Quellen, Namensräume und Endungen auflisten",
+    description:
+      "Die gültigen Werte für `sources`, `namespaces` und `tlds` von POST /api/check, dazu welche zur Standardprüfung gehören. Keine Abfragen bei Dritten, kein Rate-Limit. Achtung: `sources` ersetzt die Standardquellen außerhalb von Domains; wer Zusatzquellen will, schickt die Quellen mit `default: true` mit.",
+    responses: {
+      "200": {
+        description: "Der Katalog.",
+        headers: {
+          "Cache-Control": { description: `Eine Stunde zwischenspeicherbar.`, schema: { type: "string", const: `public, max-age=${SOURCES_MAX_AGE_SECONDS}` } },
+        },
+        content: { "application/json": { schema: ref("SourcesCatalog"), example: buildSourcesCatalog() } },
+      },
+    },
+  };
+}
+
 /** Das vollständige OpenAPI-3.1-Dokument. serverUrl ist die öffentliche Adresse der Instanz. */
 export function buildOpenApiDocument(serverUrl: string = DEFAULT_PUBLIC_URL): JsonObject {
   const base = serverUrl.replace(/\/+$/, "");
@@ -382,6 +403,7 @@ export function buildOpenApiDocument(serverUrl: string = DEFAULT_PUBLIC_URL): Js
     externalDocs: { description: "API für Entwickler", url: `${base}/api-docs` },
     paths: {
       "/api/check": { post: checkOperation() },
+      "/api/sources": { get: sourcesOperation() },
       "/api/mcp": { post: mcpOperation(base) },
       "/api/health": { get: healthOperation() },
     },

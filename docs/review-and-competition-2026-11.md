@@ -1,5 +1,9 @@
 # Markenfrei: Synthese aus Reviews, Konkurrenzanalyse und Quellenprüfung
 
+> **Historisch, Stand vor v2.** Dieses Dokument beschreibt den Zustand vom 4. November 2026 (Score /100, Go-Proxy,
+> nicht startbares `npx`, Phonetik-Fehler). Die dort genannten Befunde H1 bis H7 sind in v2 behoben; maßgeblich sind
+> [v2-spec.md](v2-spec.md) und die [ROADMAP](../ROADMAP.md). Die Konkurrenzanalyse (Abschnitt 1 und 2) bleibt als Hintergrund gültig.
+
 Stand der Eingaben: 04.11.2026. Alle Aussagen stammen aus den gelieferten Reviews und Recherchen. Unsicheres ist mit **(nicht geprüft)** oder **(unsicher)** markiert.
 
 ---
