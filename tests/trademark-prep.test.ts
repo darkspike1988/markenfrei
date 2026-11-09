@@ -37,7 +37,7 @@ test("kommt ohne Netzwerk aus", () => {
 test("Links: alle Ämter, https, Name korrekt eingesetzt", () => {
   const { links } = trademarkPrep("wach-werk");
   const offices = links.map((l) => l.office);
-  for (const o of ["DPMA", "TMview", "EUIPO", "WIPO", "TMDB", "USPTO"]) {
+  for (const o of ["DPMA", "TMview", "EUIPO", "WIPO", "TMDB", "USPTO", "Zefix", "Handelsregister"]) {
     assert.ok(offices.includes(o), `fehlt: ${o}`);
   }
   for (const l of links) {
@@ -61,6 +61,14 @@ test("Links: alle Ämter, https, Name korrekt eingesetzt", () => {
   assert.equal(byLabel["TMDB"], "https://tmdb.eu/de/suche/marken?q=wach-werk&mode%5B%5D=fts");
   assert.equal(byLabel["WIPO Global Brand Database"], "https://branddb.wipo.int/en/quicksearch");
   assert.equal(byLabel["USPTO Trademark Search"], "https://tmsearch.uspto.gov/");
+  assert.equal(
+    byLabel["Zefix (Schweizer Handelsregister)"],
+    "https://www.zefix.admin.ch/de/search/entity/welcome",
+  );
+  assert.equal(
+    byLabel["handelsregister.de (Gemeinsames Registerportal)"],
+    "https://www.handelsregister.de/rp_web/welcome.xhtml",
+  );
 });
 
 test("EUIPO nutzt die Namenssuche, keine Detailroute", () => {
@@ -72,7 +80,13 @@ test("EUIPO nutzt die Namenssuche, keine Detailroute", () => {
 
 test("Links ohne nachweisbares Vorausfüllen sagen, dass man den Begriff einträgt", () => {
   const { links } = trademarkPrep("wachwerk");
-  for (const label of ["DPMAregister Expertenrecherche", "WIPO Global Brand Database", "USPTO Trademark Search"]) {
+  for (const label of [
+    "DPMAregister Expertenrecherche",
+    "WIPO Global Brand Database",
+    "USPTO Trademark Search",
+    "Zefix (Schweizer Handelsregister)",
+    "handelsregister.de (Gemeinsames Registerportal)",
+  ]) {
     const l = links.find((x) => x.label === label);
     assert.ok(l, label);
     assert.doesNotMatch(l.url, /wachwerk/);

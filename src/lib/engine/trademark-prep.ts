@@ -37,6 +37,16 @@
  *   "Just a moment..."), auch ohne Query. Das Format ist eine serverseitige GET-Suche, belegt durch
  *   eine frühere Aufzeichnung im normalen Browser (docs/trademark-registers.md). Keine
  *   automatisierte Abfrage, kein Umgehen der Bot-Abwehr.
+ * ## Firmenregister-Links (9. November 2026, je ein Aufruf ohne Login, Status 200)
+ *
+ * - Zefix `https://www.zefix.admin.ch/de/search/entity/welcome`: 200, Suchanwendung. Ein Vorausfüllen
+ *   per Query-Parameter ist nicht dokumentiert und nicht nachweisbar, daher nur die Suchseite.
+ *   Die zugehörige REST-Schnittstelle braucht ein (kostenloses) Konto und ist in der robots.txt
+ *   gesperrt (Begründung gegen eine automatische Abfrage: docs/companies-register.md).
+ * - handelsregister.de `https://www.handelsregister.de/rp_web/welcome.xhtml`: 200, kein Vorausfüllen
+ *   per Link möglich (POST-Formular). Eine automatische Abfrage verbieten die Nutzungsbedingungen
+ *   (Begründung: docs/companies-register.md).
+ *
  * - USPTO `https://tmsearch.uspto.gov/`: 200, Angular-App mit AWS-WAF-Skript. Das Bundle `main.js`
  *   liest aus der URL nur `page` und `serial`; `text`, `field` und `search_type` kommen darin nicht
  *   vor. Ein Vorausfüllen ist nicht nachweisbar; verlinkt wird die Suchseite.
@@ -85,8 +95,8 @@ export type TrademarkPrep = {
 export const TRADEMARK_PREP_NOTE =
   "Markenregister wurden nicht abgefragt. Eine leere Trefferliste hier heißt nicht, dass der Name als Marke frei ist.";
 
-/** Datum der letzten Link-Prüfung (siehe Kommentar oben) */
-export const TRADEMARK_LINKS_CHECKED = "2026-11-04";
+/** Datum der letzten Link-Prüfung (siehe Kommentar oben; Firmenregister-Links dazu am 9. November 2026) */
+export const TRADEMARK_LINKS_CHECKED = "2026-11-09";
 
 const MAX_VARIANTS = 12;
 
@@ -304,6 +314,18 @@ function buildLinks(name: string): TrademarkLink[] {
       label: "USPTO Trademark Search",
       url: "https://tmsearch.uspto.gov/",
       what: "US-Marken. Nicht vorausgefüllt: den Namen selbst eintragen.",
+    },
+    {
+      office: "Zefix",
+      label: "Zefix (Schweizer Handelsregister)",
+      url: "https://www.zefix.admin.ch/de/search/entity/welcome",
+      what: "Firmennamen im Schweizer Handelsregister, kein Markenregister. Nicht vorausgefüllt: den Namen selbst eintragen.",
+    },
+    {
+      office: "Handelsregister",
+      label: "handelsregister.de (Gemeinsames Registerportal)",
+      url: "https://www.handelsregister.de/rp_web/welcome.xhtml",
+      what: "Deutsche Firmennamen (Handels- und Unternehmensregister), kein Markenregister. Nicht vorausgefüllt: den Namen selbst eintragen; die erweiterte Suche findet auch ähnliche Firmennamen.",
     },
   ];
 }

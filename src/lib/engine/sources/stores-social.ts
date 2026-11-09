@@ -256,6 +256,7 @@ const fdroid: Source = {
     const res = await ctx.http.request(`https://search.f-droid.org/api/search_apps?q=${enc(name)}`, {
       read: "json",
       maxBytes: 256_000,
+      retry: true,
     });
     if (res.error || res.status !== 200) return unknownFrom(base, res, searchUrl);
     const apps = isObject(res.json) ? res.json.apps : undefined;
@@ -301,7 +302,7 @@ const firefox: Source = {
   check: safe({ id: "firefox", namespace: "stores", label: "Firefox Add-ons" }, async (name, ctx, base) => {
     const searchUrl = `https://addons.mozilla.org/de/firefox/search/?q=${enc(name)}`;
     const api = `https://addons.mozilla.org/api/v5/addons/search/?q=${enc(name)}&page_size=10&lang=de`;
-    const res = await ctx.http.request(api, { read: "json", maxBytes: 400_000 });
+    const res = await ctx.http.request(api, { read: "json", maxBytes: 400_000, retry: true });
     if (res.error || res.status !== 200) return unknownFrom(base, res, searchUrl);
     const results = isObject(res.json) ? res.json.results : undefined;
     if (!Array.isArray(results)) {
@@ -353,7 +354,7 @@ const bluesky: Source = {
       return make(t, "invalid", { url: `https://bsky.app/search?q=${enc(name)}`, note: "Auf bsky.social sind 3 bis 18 Zeichen ohne Bindestrich am Rand erlaubt" });
     }
     const api = `https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle?handle=${enc(handle)}`;
-    const res = await ctx.http.request(api, { read: "json", maxBytes: 4096 });
+    const res = await ctx.http.request(api, { read: "json", maxBytes: 4096, retry: true });
     const body = isObject(res.json) ? res.json : undefined;
     if (!res.error && res.status === 200 && typeof body?.did === "string" && body.did.startsWith("did:")) {
       return make(t, "taken", { url: profileUrl, note: "Handle ist vergeben", evidence: `HTTP 200, ${body.did}` });
@@ -392,7 +393,7 @@ const mastodon: Source = {
       return make(t, "invalid", { url: `https://mastodon.social/search?q=${enc(name)}`, note: "Mastodon erlaubt nur Buchstaben, Ziffern und Unterstrich (nur mastodon.social)" });
     }
     const api = `https://mastodon.social/.well-known/webfinger?resource=acct:${name}@mastodon.social`;
-    const res = await ctx.http.request(api, { read: "none" });
+    const res = await ctx.http.request(api, { read: "none", retry: true });
     if (!res.error && res.status === 200) {
       return make(t, "taken", { url: profileUrl, note: "Konto vorhanden (nur mastodon.social)", evidence: "HTTP 200" });
     }
@@ -434,6 +435,7 @@ const hackernews: Source = {
     const res = await ctx.http.request(`https://hacker-news.firebaseio.com/v0/user/${enc(name)}.json`, {
       read: "json",
       maxBytes: HN_MAX_BYTES,
+      retry: true,
     });
     // Eine 200-Antwort über maxBytes kann nur ein Nutzerobjekt sein ("null" hat 4 Bytes).
     if (res.status === 200 && res.error === "too_large") {

@@ -94,6 +94,7 @@ function statusSource(def: {
         const res = await ctx.http.request(def.apiUrl(name), {
           method: "GET",
           read: "none",
+          retry: true,
           ...(def.headers ? { headers: def.headers() } : {}),
         });
         return byStatus(b, res, { notFound: def.notFound, taken: def.taken });
@@ -440,7 +441,7 @@ const crates: Source = {
       const variants = cratesVariants(name);
       if (!variants) return cratesApi.check(name, ctx);
       const replies = await Promise.all(
-        variants.map((v) => ctx.http.request(`https://index.crates.io/${cratesIndexPath(v)}`, { method: "GET", read: "none", redirect: "manual" })),
+        variants.map((v) => ctx.http.request(`https://index.crates.io/${cratesIndexPath(v)}`, { method: "GET", read: "none", redirect: "manual", retry: true })),
       );
       const hit = replies.findIndex((r) => r.status === 200 && !r.error);
       if (hit >= 0) {
@@ -488,8 +489,8 @@ const homebrew: Source = {
       if (problem) return invalidResult(b, problem);
 
       const [formula, cask] = await Promise.all([
-        ctx.http.request(`https://formulae.brew.sh/api/formula/${enc(name)}.json`, { method: "GET", read: "none" }),
-        ctx.http.request(`https://formulae.brew.sh/api/cask/${enc(name)}.json`, { method: "GET", read: "none" }),
+        ctx.http.request(`https://formulae.brew.sh/api/formula/${enc(name)}.json`, { method: "GET", read: "none", retry: true }),
+        ctx.http.request(`https://formulae.brew.sh/api/cask/${enc(name)}.json`, { method: "GET", read: "none", retry: true }),
       ]);
       const evidence = `Formula ${evidenceOf(formula)}, Cask ${evidenceOf(cask)}`;
       const fTaken = !formula.error && formula.status === 200;
@@ -556,6 +557,7 @@ const rubygems: Source = {
       const exact = await ctx.http.request(`https://rubygems.org/api/v1/gems/${enc(name)}.json`, {
         method: "GET",
         read: "none",
+        retry: true,
       });
       if (exact.error || exact.status !== 404) return byStatus(b, exact, { notFound: "" });
 
@@ -563,6 +565,7 @@ const rubygems: Source = {
         method: "GET",
         read: "json",
         maxBytes: RUBYGEMS_SEARCH_MAX_BYTES,
+        retry: true,
       });
       const evidence = `HTTP 404, Suche ${evidenceOf(search)}`;
       if (search.error || search.status !== 200 || !Array.isArray(search.json)) {
@@ -609,6 +612,7 @@ const maven: Source = {
         method: "GET",
         read: "json",
         maxBytes: 32 * 1024,
+        retry: true,
       });
       if (res.error || res.status !== 200) return unknownResult(b, res);
       const response = (res.json as { response?: { numFound?: unknown; docs?: unknown } } | null)?.response;
@@ -671,6 +675,7 @@ const packagist: Source = {
         method: "GET",
         read: "json",
         maxBytes: PACKAGIST_MAX_BYTES,
+        retry: true,
         headers: { "User-Agent": buildUserAgent(mail) },
       });
       if (res.status === 200 && res.error === "too_large") {
@@ -764,7 +769,7 @@ const cran: Source = {
       if (problem) return invalidResult(b, problem);
 
       const [first, ...variants] = cranSpellings(name);
-      const ask = (n: string) => ctx.http.request(`https://crandb.r-pkg.org/${enc(n)}`, { method: "GET", read: "none" });
+      const ask = (n: string) => ctx.http.request(`https://crandb.r-pkg.org/${enc(n)}`, { method: "GET", read: "none", retry: true });
 
       const res = await ask(first);
       if (res.error || res.status !== 404) return byStatus(b, res, { notFound: "" });
@@ -988,6 +993,108 @@ const hackage: Source = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// NuGet-v2-Feeds: Chocolatey und PowerShell Gallery
+
+/**
+ * NuGet-v2-Feed (OData): FindPackagesById() antwortet mit 200 und je Version einem <entry>-Element,
+ * wenn das Paket existiert, und mit 200 ohne <entry>, wenn nicht (live gegengeprüft 9. November 2026
+ * mit „git“/„pester“ und „zzqxkvjwabc“). Zu große Antworten bedeuten viele Versionen, das Paket
+ * existiert also. Der Feed ist in der robots.txt für alle offengelegt.
+ */
+function nugetV2Source(def: {
+  id: string;
+  label: string;
+  description: string;
+  host: string;
+  humanUrl: (n: string) => string;
+  notFound: string;
+}): Source {
+  return {
+    id: def.id,
+    namespace: "packages",
+    label: def.label,
+    defaultEnabled: false,
+    description: def.description,
+    endpoint: `https://${def.host}/api/v2/FindPackagesById()?id='{name}'`,
+    async check(name: string, ctx: CheckContext): Promise<SourceResult> {
+      const b = base(def.id, def.label, name, def.humanUrl(name));
+      try {
+        const problem = nugetProblem(name);
+        if (problem) return invalidResult(b, problem);
+        const res = await ctx.http.request(`https://${def.host}/api/v2/FindPackagesById()?id='${enc(name)}'`, {
+          method: "GET",
+          read: "text",
+          retry: true,
+          headers: { Accept: "application/atom+xml" },
+        });
+        if (res.error === "too_large") {
+          return { ...b, status: "taken", note: "Paket mit sehr vielen Versionen", evidence: "Antwort größer als erwartet" };
+        }
+        if (res.error || res.status !== 200) return unknownResult(b, res);
+        if (res.text?.includes("<entry")) return { ...b, status: "taken", evidence: evidenceOf(res) };
+        return { ...b, status: "not_found", note: def.notFound, evidence: evidenceOf(res) };
+      } catch (err) {
+        return crashResult(b, err);
+      }
+    },
+  };
+}
+
+const chocolatey = nugetV2Source({
+  id: "chocolatey",
+  label: "Chocolatey",
+  description: "Chocolatey Community Repository (Windows): existiert ein Paket mit dieser ID?",
+  host: "community.chocolatey.org",
+  humanUrl: (n) => `https://community.chocolatey.org/packages/${enc(n)}`,
+  notFound: "kein Paket mit dieser ID; Chocolatey kann ähnliche IDs trotzdem ablehnen",
+});
+
+const psgallery = nugetV2Source({
+  id: "psgallery",
+  label: "PowerShell Gallery",
+  description: "PowerShell Gallery (Microsoft): existiert ein Paket mit dieser ID?",
+  host: "www.powershellgallery.com",
+  humanUrl: (n) => `https://www.powershellgallery.com/packages/${enc(n)}`,
+  notFound: "kein Paket mit dieser ID; die Gallery kann gesperrte oder ähnliche IDs ablehnen",
+});
+
+// ---------------------------------------------------------------------------
+// Launchpad
+
+/**
+ * Launchpad (Ubuntu): Projekte (ohne ~) und Nutzer (~name) haben getrennte Adressen, aber
+ * gemeinsam erscheint der Name in launchpad.net-Links. Beide prüfen, sonst wäre „ubuntu“ nur
+ * als Projekt vorhanden. Live gegengeprüft 9. November 2026 mit „ubuntu“/„launchpad“ und
+ * „zzqxkvjwabc“ (200/404). api.launchpad.net hat keine robots.txt-Einschränkung.
+ */
+const launchpad: Source = {
+  id: "launchpad",
+  namespace: "packages",
+  label: "Launchpad",
+  defaultEnabled: false,
+  description: "Launchpad (Ubuntu): gibt es ein Projekt oder einen Nutzer mit diesem Namen?",
+  endpoint: "https://api.launchpad.net/1.0/{name} und https://api.launchpad.net/1.0/~{name}",
+  async check(name, ctx) {
+    const b = base("launchpad", "Launchpad", name, `https://launchpad.net/${enc(name)}`);
+    try {
+      const problem = basicProblem(name);
+      if (problem) return invalidResult(b, problem);
+      return await anyTaken(
+        b,
+        ctx,
+        [
+          { url: `https://api.launchpad.net/1.0/${enc(name)}`, what: "Projekt" },
+          { url: `https://api.launchpad.net/1.0/~${enc(name)}`, what: "Nutzer" },
+        ],
+        "kein Projekt und kein Nutzer mit diesem Namen",
+      );
+    } catch (err) {
+      return crashResult(b, err);
+    }
+  },
+};
+
 export const PACKAGE_SOURCES: Source[] = [
   npm,
   pypi,
@@ -1007,4 +1114,7 @@ export const PACKAGE_SOURCES: Source[] = [
   hackage,
   terraform,
   devto,
+  chocolatey,
+  psgallery,
+  launchpad,
 ];

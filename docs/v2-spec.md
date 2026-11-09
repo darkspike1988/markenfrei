@@ -67,7 +67,9 @@ Standard aktiv (Web und MCP gleich):
 Optional (auf Auswahl): NuGet, RubyGems, Maven Central (`similar` statt `taken`),
 Packagist (nur mit Kontakt im User-Agent), pub.dev, JSR, Hex.pm, CRAN (crandb), Open VSX,
 Hugging Face (Organisation und Nutzer), Hackage (Suche für andere Schreibweisen), Terraform
-Registry (Modul- und Provider-Namespaces), DEV (Nutzer und Organisation)
+Registry (Modul- und Provider-Namespaces), DEV (Nutzer und Organisation), Chocolatey und
+PowerShell Gallery (NuGet-v2-Feed `FindPackagesById`, `<entry>` je Version), Launchpad
+(Projekt und Nutzer, beide Adressen)
 (Namespace), Firefox Add-ons (exakter Name), F-Droid (exakter Name), Bluesky,
 Mastodon (mastodon.social WebFinger), Hacker News (Nutzer, Show-HN-Suche als schwaches
 Signal), Wikipedia (schwaches Signal). Seit 5. November 2026 außerdem AUR (aurweb-RPC),

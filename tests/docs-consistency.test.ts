@@ -138,7 +138,7 @@ test("Live-Probe-Workflow bricht bei einem Fehler der Probe ab (pipefail) und ha
   assert.match(wf, /timeout-minutes:\s*\d+/, "Job braucht ein Zeitlimit");
 });
 
-test("Live-Probe lädt probe-status.json als Artefakt hoch (if: always) und bleibt bei contents: read", () => {
+test("Live-Probe lädt probe-status.json als Artefakt hoch (if: always) und schreibt nur Issues", () => {
   const wf = read(".github/workflows/live-probe.yml");
   assert.match(wf, /npm run probe:live -- --json probe-status\.json/);
   const upload = wf.split(/\n\s+- /).find((s) => s.includes("actions/upload-artifact@v4")) ?? "";
@@ -146,8 +146,14 @@ test("Live-Probe lädt probe-status.json als Artefakt hoch (if: always) und blei
   assert.match(upload, /path: probe-status\.json/);
   assert.match(upload, /if-no-files-found: warn/);
   assert.match(upload, /retention-days: 90/);
-  assert.match(wf, /^permissions:\n\s+contents: read\s*$/m, "Der Workflow darf nichts schreiben");
-  assert.doesNotMatch(wf, /:\s*write\b/, "keine Schreibrechte");
+  assert.match(
+    wf,
+    /^permissions:\n\s+contents: read\n\s+issues: write\s*$/m,
+    "Der Workflow darf nur Issues schreiben, keine Inhalte",
+  );
+  const issue = wf.split(/\n\s+- /).find((s) => s.includes("Bei Ausfall ein Issue")) ?? "";
+  assert.match(issue, /if: failure\(\)/, "Issue-Schritt läuft nur bei Ausfall");
+  assert.match(issue, /gh issue (create|comment)/, "Issue wird angelegt oder ergänzt, nicht dupliziert");
 });
 
 test("llms.txt verspricht nichts, was nicht überall gilt", () => {
@@ -166,4 +172,18 @@ test("Origin-Doku sagt nicht, der eigene Host genüge (der Code vergleicht nur k
 test("Der Grundsatz „nur Einzelabfragen“ nennt die wöchentliche Funktionsprobe als Ausnahme", () => {
   assert.match(read("README.md"), /Ausnahme: die wöchentliche Funktionsprobe `live-probe\.yml`/);
   assert.match(read(".github/workflows/live-probe.yml"), /cron:/, "Wenn der Zeitplan entfällt, die Ausnahme in README und docs/v2-spec.md streichen");
+});
+
+test("docs/companies-register.md begründet die fehlende Firmenregister-Abfrage, README verlinkt es", () => {
+  const doc = read("docs/companies-register.md");
+  assert.match(doc, /Zefix/);
+  assert.match(doc, /robots\.txt/);
+  assert.match(doc, /handelsregister\.de/);
+  const readme = read("README.md");
+  assert.match(readme, /docs\/companies-register\.md/);
+  assert.match(readme, /Keine Firmenregister-Abfrage/);
+  const p = trademarkPrep("beispiel");
+  for (const office of ["Zefix", "Handelsregister"]) {
+    assert.ok(p.links.some((l) => l.office === office), `Link fehlt: ${office}`);
+  }
 });

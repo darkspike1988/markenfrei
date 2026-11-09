@@ -45,6 +45,7 @@ const aur: Source = {
       const res = await ctx.http.request(`https://aur.archlinux.org/rpc/v5/info?arg[]=${enc(name)}`, {
         method: "GET",
         read: "json",
+        retry: true,
       });
       if (res.error || res.status !== 200) return unknownResult(b, res);
       const json = res.json;
@@ -101,6 +102,7 @@ const repology: Source = {
         method: "GET",
         read: "json",
         maxBytes: REPOLOGY_MAX_BYTES,
+        retry: true,
         headers: { "User-Agent": REPOLOGY_USER_AGENT },
       });
       if (res.status === 200 && res.error === "too_large") {
@@ -184,7 +186,7 @@ function ecosystemsSource(def: {
         if (problem) return invalidResult(b, problem);
         const res = await ctx.http.request(
           `https://packages.ecosyste.ms/api/v1/registries/${def.registry}/packages/${enc(name)}`,
-          { method: "GET", read: "none" },
+          { method: "GET", read: "none", retry: true },
         );
         return byStatus(b, res, {
           taken: `${def.taken} (ecosyste.ms-Index)`,

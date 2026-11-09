@@ -452,6 +452,7 @@ const wikipedia: Source = {
         headers: { Accept: "application/json" },
         read: "json",
         maxBytes: 16 * 1024,
+        retry: true,
       });
       const fail = failure(base, res, searchUrl);
       if (fail) return { ...fail, weak: true };
@@ -550,7 +551,7 @@ const hnShow: Source = {
     const searchUrl = hnSearchUrl(name);
     try {
       if (!NAME_RE.test(name)) return { ...invalidName(base), weak: true };
-      const res = await ctx.http.request(hnApiUrl(name), { read: "json", maxBytes: 32 * 1024 });
+      const res = await ctx.http.request(hnApiUrl(name), { read: "json", maxBytes: 32 * 1024, retry: true });
       const fail = failure(base, res, searchUrl);
       if (fail) return { ...fail, weak: true };
       if (res.status !== 200) return { ...unexpected(base, `HTTP ${res.status}`, searchUrl), weak: true };

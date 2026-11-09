@@ -37,7 +37,8 @@ Standardmäßig aktiv (Web und MCP gleich):
 Auf Wunsch („Weitere Quellen“ in der Oberfläche, `sources` in API und MCP): NuGet,
 RubyGems, Maven Central, Packagist, pub.dev, JSR, Hex.pm, CRAN, Open VSX, Hugging Face
 (Organisationen und Nutzer), Hackage (auch bei anderer Schreibweise), Terraform Registry
-(Namespaces), DEV (dev.to, Nutzer und Organisationen), AUR, Repology (Projektname in rund 300
+(Namespaces), DEV (dev.to, Nutzer und Organisationen), Chocolatey und PowerShell Gallery
+(beide NuGet-v2-Feed), Launchpad (Projekte und Nutzer), AUR, Repology (Projektname in rund 300
 Paketquellen von Distributionen, Homebrew, winget und weiteren), Docker Hub (nur offizielle
 Images), conda-forge und Clojars (diese drei über den Index von ecosyste.ms, nicht live aus dem
 Register; CocoaPods, CPAN und Julia fehlen bewusst, weil ihre Namen die Schreibweise brauchen),
@@ -53,7 +54,7 @@ hinzufügen will, schickt die Standardquellen-IDs mit: `npm`, `pypi`, `github`, 
 `homebrew`, `appstore`, `googleplay`, `known_brands`, `wikidata`, `gleif`, dazu die
 gewünschten Zusatzquellen. Alle IDs stehen auf der Seite `/quellen`.
 
-Die 33 einzeln geprüften Endungen und alle Quellen mit Endpunkt stehen auf der Seite `/quellen`, die vollständige Endungsliste unter `GET /api/sources`. Den Schnappschuss erneuert man von Hand mit `npx tsx scripts/update-rdap-tlds.ts` (braucht Netz) und spielt ihn per Pull Request ein.
+Die 33 einzeln geprüften Endungen und alle Quellen mit Endpunkt stehen auf der Seite `/quellen`, die vollständige Endungsliste unter `GET /api/sources`. Den Schnappschuss erneuert man von Hand mit `npx tsx scripts/update-rdap-tlds.ts` (braucht Netz) und spielt ihn per Pull Request ein; der wöchentliche Workflow `update-snapshots.yml` macht das ebenfalls und öffnet bei Änderungen selbst einen Pull Request (auch für den Wikidata-Marken-Schnappschuss).
 
 Anleitungen mit eingebettetem Prüfer: `/domain-pruefen`, `/paketname-pruefen`, `/app-name-pruefen` und `/markenrecherche-vorbereiten`.
 
@@ -82,6 +83,10 @@ Gelb, dann Rot, innerhalb davon nach Zahl der Treffer und dann der Lücken.
   Die Marke steht immer auf „nicht geprüft“; Markenfrei verlinkt die Register und bereitet
   die Suche vor. Warum keine Registerabfrage möglich ist, steht in
   [docs/trademark-registers.md](docs/trademark-registers.md).
+- **Keine Firmenregister-Abfrage.** Handelsregister (Deutschland, Schweiz) und Firmenbuch
+  (Österreich) werden nicht automatisch abfragt; Zefix und handelsregister.de stehen als
+  Links in der Recherche-Vorbereitung. Warum keine Abfrage möglich ist, steht in
+  [docs/companies-register.md](docs/companies-register.md).
 - **Grün heißt nur „nichts gefunden“** in den gewählten Quellen, nicht „als Marke frei“ und
   nicht „registrierbar“.
 - **Zeitgrenze.** Eine Prüfung dauert höchstens etwa 8 Sekunden (5 Sekunden je Anfrage).

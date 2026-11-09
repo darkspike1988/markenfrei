@@ -11,6 +11,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 jobs:
   probe:
@@ -39,3 +40,21 @@ jobs:
           path: probe-status.json
           if-no-files-found: warn
           retention-days: 90
+      - name: Bei Ausfall ein Issue anlegen oder ergänzen
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          title="Live-Probe fehlgeschlagen"
+          body="Die Live-Probe ist fehlgeschlagen (Lauf: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}).
+
+          Details stehen im Lauf unter \"Live-Probe\" und im Artefakt \`probe-status\` (je Quelle nur ok/Warnung/Fehler, ohne Namen).
+
+          Dieser Hinweis wird automatisch angelegt; das Issue kann geschlossen werden, sobald die Quelle(n) wieder antworten."
+          existing="$(gh issue list --state open --search "in:title ${title}" --json number --jq '.[0].number' || true)"
+          if [ -n "${existing}" ]; then
+            gh issue comment "${existing}" --body "${body}"
+          else
+            gh issue create --title "${title}" --body "${body}"
+          fi

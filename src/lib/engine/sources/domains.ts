@@ -170,6 +170,7 @@ export async function loadRdapBootstrap(
         headers: { Accept: "application/json" },
         read: "json",
         maxBytes: BOOTSTRAP_MAX_BYTES,
+        retry: true,
       });
       if (res.status === 200 && !res.error) parsed = parseBootstrap(res.json);
     } catch {
@@ -366,6 +367,7 @@ function makeSource(tld: string): Source {
           const res = await ctx.http.request(`${server}${encodeURIComponent(domain)}`, {
             headers: { Accept: "application/rdap+json" },
             read: "none",
+            retry: true,
           });
           if (!res.error && res.status === 200) {
             return { ...base, status: "taken", note: "Bei der Registry registriert.", evidence: "RDAP HTTP 200" };
