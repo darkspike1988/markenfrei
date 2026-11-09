@@ -94,6 +94,7 @@ function statusSource(def: {
         const res = await ctx.http.request(def.apiUrl(name), {
           method: "GET",
           read: "none",
+          retry: true,
           ...(def.headers ? { headers: def.headers() } : {}),
         });
         return byStatus(b, res, { notFound: def.notFound, taken: def.taken });
@@ -440,7 +441,7 @@ const crates: Source = {
       const variants = cratesVariants(name);
       if (!variants) return cratesApi.check(name, ctx);
       const replies = await Promise.all(
-        variants.map((v) => ctx.http.request(`https://index.crates.io/${cratesIndexPath(v)}`, { method: "GET", read: "none", redirect: "manual" })),
+        variants.map((v) => ctx.http.request(`https://index.crates.io/${cratesIndexPath(v)}`, { method: "GET", read: "none", redirect: "manual", retry: true })),
       );
       const hit = replies.findIndex((r) => r.status === 200 && !r.error);
       if (hit >= 0) {
@@ -488,8 +489,8 @@ const homebrew: Source = {
       if (problem) return invalidResult(b, problem);
 
       const [formula, cask] = await Promise.all([
-        ctx.http.request(`https://formulae.brew.sh/api/formula/${enc(name)}.json`, { method: "GET", read: "none" }),
-        ctx.http.request(`https://formulae.brew.sh/api/cask/${enc(name)}.json`, { method: "GET", read: "none" }),
+        ctx.http.request(`https://formulae.brew.sh/api/formula/${enc(name)}.json`, { method: "GET", read: "none", retry: true }),
+        ctx.http.request(`https://formulae.brew.sh/api/cask/${enc(name)}.json`, { method: "GET", read: "none", retry: true }),
       ]);
       const evidence = `Formula ${evidenceOf(formula)}, Cask ${evidenceOf(cask)}`;
       const fTaken = !formula.error && formula.status === 200;
@@ -556,6 +557,7 @@ const rubygems: Source = {
       const exact = await ctx.http.request(`https://rubygems.org/api/v1/gems/${enc(name)}.json`, {
         method: "GET",
         read: "none",
+        retry: true,
       });
       if (exact.error || exact.status !== 404) return byStatus(b, exact, { notFound: "" });
 
@@ -563,6 +565,7 @@ const rubygems: Source = {
         method: "GET",
         read: "json",
         maxBytes: RUBYGEMS_SEARCH_MAX_BYTES,
+        retry: true,
       });
       const evidence = `HTTP 404, Suche ${evidenceOf(search)}`;
       if (search.error || search.status !== 200 || !Array.isArray(search.json)) {
@@ -609,6 +612,7 @@ const maven: Source = {
         method: "GET",
         read: "json",
         maxBytes: 32 * 1024,
+        retry: true,
       });
       if (res.error || res.status !== 200) return unknownResult(b, res);
       const response = (res.json as { response?: { numFound?: unknown; docs?: unknown } } | null)?.response;
@@ -671,6 +675,7 @@ const packagist: Source = {
         method: "GET",
         read: "json",
         maxBytes: PACKAGIST_MAX_BYTES,
+        retry: true,
         headers: { "User-Agent": buildUserAgent(mail) },
       });
       if (res.status === 200 && res.error === "too_large") {
@@ -764,7 +769,7 @@ const cran: Source = {
       if (problem) return invalidResult(b, problem);
 
       const [first, ...variants] = cranSpellings(name);
-      const ask = (n: string) => ctx.http.request(`https://crandb.r-pkg.org/${enc(n)}`, { method: "GET", read: "none" });
+      const ask = (n: string) => ctx.http.request(`https://crandb.r-pkg.org/${enc(n)}`, { method: "GET", read: "none", retry: true });
 
       const res = await ask(first);
       if (res.error || res.status !== 404) return byStatus(b, res, { notFound: "" });

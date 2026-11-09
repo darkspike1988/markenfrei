@@ -54,7 +54,7 @@ hinzufügen will, schickt die Standardquellen-IDs mit: `npm`, `pypi`, `github`, 
 `homebrew`, `appstore`, `googleplay`, `known_brands`, `wikidata`, `gleif`, dazu die
 gewünschten Zusatzquellen. Alle IDs stehen auf der Seite `/quellen`.
 
-Die 33 einzeln geprüften Endungen und alle Quellen mit Endpunkt stehen auf der Seite `/quellen`, die vollständige Endungsliste unter `GET /api/sources`. Den Schnappschuss erneuert man von Hand mit `npx tsx scripts/update-rdap-tlds.ts` (braucht Netz) und spielt ihn per Pull Request ein.
+Die 33 einzeln geprüften Endungen und alle Quellen mit Endpunkt stehen auf der Seite `/quellen`, die vollständige Endungsliste unter `GET /api/sources`. Den Schnappschuss erneuert man von Hand mit `npx tsx scripts/update-rdap-tlds.ts` (braucht Netz) und spielt ihn per Pull Request ein; der wöchentliche Workflow `update-snapshots.yml` macht das ebenfalls und öffnet bei Änderungen selbst einen Pull Request (auch für den Wikidata-Marken-Schnappschuss).
 
 Anleitungen mit eingebettetem Prüfer: `/domain-pruefen`, `/paketname-pruefen`, `/app-name-pruefen` und `/markenrecherche-vorbereiten`.
 

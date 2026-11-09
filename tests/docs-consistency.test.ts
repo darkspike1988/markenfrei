@@ -138,7 +138,7 @@ test("Live-Probe-Workflow bricht bei einem Fehler der Probe ab (pipefail) und ha
   assert.match(wf, /timeout-minutes:\s*\d+/, "Job braucht ein Zeitlimit");
 });
 
-test("Live-Probe lädt probe-status.json als Artefakt hoch (if: always) und bleibt bei contents: read", () => {
+test("Live-Probe lädt probe-status.json als Artefakt hoch (if: always) und schreibt nur Issues", () => {
   const wf = read(".github/workflows/live-probe.yml");
   assert.match(wf, /npm run probe:live -- --json probe-status\.json/);
   const upload = wf.split(/\n\s+- /).find((s) => s.includes("actions/upload-artifact@v4")) ?? "";
@@ -146,8 +146,14 @@ test("Live-Probe lädt probe-status.json als Artefakt hoch (if: always) und blei
   assert.match(upload, /path: probe-status\.json/);
   assert.match(upload, /if-no-files-found: warn/);
   assert.match(upload, /retention-days: 90/);
-  assert.match(wf, /^permissions:\n\s+contents: read\s*$/m, "Der Workflow darf nichts schreiben");
-  assert.doesNotMatch(wf, /:\s*write\b/, "keine Schreibrechte");
+  assert.match(
+    wf,
+    /^permissions:\n\s+contents: read\n\s+issues: write\s*$/m,
+    "Der Workflow darf nur Issues schreiben, keine Inhalte",
+  );
+  const issue = wf.split(/\n\s+- /).find((s) => s.includes("Bei Ausfall ein Issue")) ?? "";
+  assert.match(issue, /if: failure\(\)/, "Issue-Schritt läuft nur bei Ausfall");
+  assert.match(issue, /gh issue (create|comment)/, "Issue wird angelegt oder ergänzt, nicht dupliziert");
 });
 
 test("llms.txt verspricht nichts, was nicht überall gilt", () => {
