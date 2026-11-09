@@ -83,6 +83,10 @@ Gelb, dann Rot, innerhalb davon nach Zahl der Treffer und dann der Lücken.
   Die Marke steht immer auf „nicht geprüft“; Markenfrei verlinkt die Register und bereitet
   die Suche vor. Warum keine Registerabfrage möglich ist, steht in
   [docs/trademark-registers.md](docs/trademark-registers.md).
+- **Keine Firmenregister-Abfrage.** Handelsregister (Deutschland, Schweiz) und Firmenbuch
+  (Österreich) werden nicht automatisch abfragt; Zefix und handelsregister.de stehen als
+  Links in der Recherche-Vorbereitung. Warum keine Abfrage möglich ist, steht in
+  [docs/companies-register.md](docs/companies-register.md).
 - **Grün heißt nur „nichts gefunden“** in den gewählten Quellen, nicht „als Marke frei“ und
   nicht „registrierbar“.
 - **Zeitgrenze.** Eine Prüfung dauert höchstens etwa 8 Sekunden (5 Sekunden je Anfrage).
