@@ -37,7 +37,8 @@ Standardmäßig aktiv (Web und MCP gleich):
 Auf Wunsch („Weitere Quellen“ in der Oberfläche, `sources` in API und MCP): NuGet,
 RubyGems, Maven Central, Packagist, pub.dev, JSR, Hex.pm, CRAN, Open VSX, Hugging Face
 (Organisationen und Nutzer), Hackage (auch bei anderer Schreibweise), Terraform Registry
-(Namespaces), DEV (dev.to, Nutzer und Organisationen), AUR, Repology (Projektname in rund 300
+(Namespaces), DEV (dev.to, Nutzer und Organisationen), Chocolatey und PowerShell Gallery
+(beide NuGet-v2-Feed), Launchpad (Projekte und Nutzer), AUR, Repology (Projektname in rund 300
 Paketquellen von Distributionen, Homebrew, winget und weiteren), Docker Hub (nur offizielle
 Images), conda-forge und Clojars (diese drei über den Index von ecosyste.ms, nicht live aus dem
 Register; CocoaPods, CPAN und Julia fehlen bewusst, weil ihre Namen die Schreibweise brauchen),

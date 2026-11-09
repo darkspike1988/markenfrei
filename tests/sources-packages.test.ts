@@ -12,7 +12,7 @@ import {
 } from "@/lib/engine/sources/packages";
 import type { CheckContext, HttpClient, HttpRequest, HttpResponse, Source } from "@/lib/engine/types";
 
-type Reply = { status: number; headers?: Record<string, string>; json?: unknown; error?: HttpResponse["error"] };
+type Reply = { status: number; headers?: Record<string, string>; json?: unknown; text?: string; error?: HttpResponse["error"] };
 
 function fakeHttp(routes: Record<string, Reply> | ((url: string) => Reply)) {
   const calls: { url: string; req: HttpRequest }[] = [];
@@ -21,7 +21,7 @@ function fakeHttp(routes: Record<string, Reply> | ((url: string) => Reply)) {
       calls.push({ url, req });
       const r = typeof routes === "function" ? routes(url) : routes[url];
       if (!r) throw new Error(`unerwartete URL im Test: ${url}`);
-      return { status: r.status, headers: new Headers(r.headers ?? {}), json: r.json, error: r.error };
+      return { status: r.status, headers: new Headers(r.headers ?? {}), json: r.json, text: r.text, error: r.error };
     },
   };
   return { http, calls };
@@ -44,7 +44,7 @@ beforeEach(() => resetGithubRateLimit());
 test("Liste enthält alle Quellen mit Beschreibung und Endpunkt", () => {
   assert.deepEqual(
     PACKAGE_SOURCES.map((s) => s.id),
-    ["npm", "pypi", "github", "crates", "homebrew", "nuget", "rubygems", "maven", "packagist", "pub", "jsr", "hex", "cran", "openvsx", "huggingface", "hackage", "terraform", "devto"],
+    ["npm", "pypi", "github", "crates", "homebrew", "nuget", "rubygems", "maven", "packagist", "pub", "jsr", "hex", "cran", "openvsx", "huggingface", "hackage", "terraform", "devto", "chocolatey", "psgallery", "launchpad"],
   );
   assert.deepEqual(
     PACKAGE_SOURCES.filter((s) => s.defaultEnabled).map((s) => s.id),
@@ -609,4 +609,77 @@ test("rubygems: exakter Treffer 200 => taken ohne Suche", async () => {
   const { ctx, calls } = ctxWith({ "https://rubygems.org/api/v1/gems/rails.json": { status: 200 } });
   assert.equal((await src("rubygems").check("rails", ctx)).status, "taken");
   assert.equal(calls.length, 1);
+});
+
+// Chocolatey und PowerShell Gallery (NuGet-v2-Feed, FindPackagesById)
+const V2_FEEDS = [
+  { id: "chocolatey", api: "https://community.chocolatey.org/api/v2/FindPackagesById()?id='wachwerk'", human: "https://community.chocolatey.org/packages/wachwerk" },
+  { id: "psgallery", api: "https://www.powershellgallery.com/api/v2/FindPackagesById()?id='wachwerk'", human: "https://www.powershellgallery.com/packages/wachwerk" },
+];
+
+for (const c of V2_FEEDS) {
+  test(`${c.id}: Feed mit <entry> => taken, Body wird als Text gelesen`, async () => {
+    const { ctx, calls } = ctxWith({ [c.api]: { status: 200, text: "<feed><entry><title>7zip</title></entry></feed>" } });
+    const r = await src(c.id).check("wachwerk", ctx);
+    assert.equal(r.status, "taken");
+    assert.equal(r.url, c.human);
+    assert.equal(r.evidence, "HTTP 200");
+    assert.equal(calls[0].req.read, "text");
+  });
+
+  test(`${c.id}: Feed ohne <entry> => not_found mit Hinweis`, async () => {
+    const { ctx } = ctxWith({ [c.api]: { status: 200, text: "<feed></feed>" } });
+    const r = await src(c.id).check("wachwerk", ctx);
+    assert.equal(r.status, "not_found");
+    assert.ok(r.note && r.note.length > 0);
+    assert.doesNotMatch(r.note ?? "", /registrierbar|verfügbar|frei/i);
+  });
+
+  test(`${c.id}: zu große Antwort => taken (viele Versionen)`, async () => {
+    const { ctx } = ctxWith({ [c.api]: { status: 200, error: "too_large" } });
+    assert.equal((await src(c.id).check("wachwerk", ctx)).status, "taken");
+  });
+
+  test(`${c.id}: 429, 503 und Timeout => unknown`, async () => {
+    for (const reply of [{ status: 429 }, { status: 503 }, { status: 0, error: "timeout" as const }]) {
+      const { ctx } = ctxWith({ [c.api]: reply });
+      const r = await src(c.id).check("wachwerk", ctx);
+      assert.equal(r.status, "unknown", `${c.id} ${JSON.stringify(reply)}`);
+    }
+  });
+}
+
+test("chocolatey und psgallery: NuGet-Syntaxregeln => invalid ohne Abfrage", async () => {
+  const { ctx, calls } = ctxWith({});
+  for (const id of ["chocolatey", "psgallery"]) {
+    const r = await src(id).check("-wachwerk", ctx);
+    assert.equal(r.status, "invalid", id);
+  }
+  assert.equal(calls.length, 0);
+});
+
+// Launchpad (Projekt und Nutzer)
+const LP_PROJECT = "https://api.launchpad.net/1.0/wachwerk";
+const LP_USER = "https://api.launchpad.net/1.0/~wachwerk";
+
+test("launchpad: Projekt 200 => taken", async () => {
+  const { ctx } = ctxWith({ [LP_PROJECT]: { status: 200 }, [LP_USER]: { status: 404 } });
+  const r = await src("launchpad").check("wachwerk", ctx);
+  assert.equal(r.status, "taken");
+  assert.equal(r.note, "Projekt vorhanden");
+  assert.equal(r.url, "https://launchpad.net/wachwerk");
+});
+
+test("launchpad: Nutzer 200 => taken", async () => {
+  const { ctx } = ctxWith({ [LP_PROJECT]: { status: 404 }, [LP_USER]: { status: 200 } });
+  const r = await src("launchpad").check("wachwerk", ctx);
+  assert.equal(r.status, "taken");
+  assert.equal(r.note, "Nutzer vorhanden");
+});
+
+test("launchpad: beide 404 => not_found, ein Fehler => unknown", async () => {
+  const free = ctxWith({ [LP_PROJECT]: { status: 404 }, [LP_USER]: { status: 404 } });
+  assert.equal((await src("launchpad").check("wachwerk", free.ctx)).status, "not_found");
+  const bad = ctxWith({ [LP_PROJECT]: { status: 404 }, [LP_USER]: { status: 429 } });
+  assert.equal((await src("launchpad").check("wachwerk", bad.ctx)).status, "unknown");
 });

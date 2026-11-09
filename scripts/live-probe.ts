@@ -34,6 +34,9 @@ const CANARIES: Record<string, Canary> = {
   hackage: { name: "aeson", level: "advisory" },
   wikidata: { name: "microsoft", level: "advisory" },
   gleif: { name: "siemens", level: "advisory" },
+  chocolatey: { name: "git", level: "advisory" },
+  psgallery: { name: "pester", level: "advisory" },
+  launchpad: { name: "ubuntu", level: "advisory" },
   known_brands: { name: "github", level: "gate" },
 };
 
