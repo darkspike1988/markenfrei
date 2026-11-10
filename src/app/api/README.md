@@ -72,7 +72,8 @@ Eingabe (mit zod geprüft):
   "names": ["wachwerk", "fokusnova"],
   "tlds": ["de", "com"],
   "namespaces": ["domains", "packages"],
-  "sources": ["npm", "nuget"]
+  "sources": ["npm", "nuget"],
+  "profile": "python"
 }
 ```
 
@@ -82,6 +83,14 @@ Eingabe (mit zod geprüft):
   `known_names`).
 - `sources` ersetzt die Standardauswahl außerhalb von Domains. Wer Zusatzquellen will, schickt
   die gewünschten Standardquellen mit (so macht es die Oberfläche).
+- `profile`: optional, höchstens 40 Zeichen, eine ID aus `profiles` von `GET /api/sources` (z. B. `allgemein`,
+  `web-app`, `python`). Das Profil setzt Namensräume, Quellen und Endungen auf eine fertige Auswahl. Ausdrückliche
+  Angaben gehen vor (`selectSources` in `src/lib/engine/format.ts`): `sources` und `tlds` ersetzen jeweils den
+  Teil des Profils; `namespaces` ersetzt die Namensräume, dann bleiben die Quellen des Profils nur in den
+  gewählten Namensräumen, die Endungen nur, wenn `domains` dabei ist, und Namensräume, in denen das Profil keine
+  Quelle hat, bekommen ihre Standardquellen. Anders als bei MCP und CLI kommen keine Social-Quellen automatisch
+  dazu. Ein unbekanntes Profil ergibt `400` („Unbekanntes Profil … Erlaubt: …“). Die Kosten fürs Rate-Limit
+  richten sich nach der sich ergebenden Auswahl.
 
 Nur mit `Content-Type: application/json` (fremde Seiten lösen damit immer einen Preflight aus,
 den die Route nicht beantwortet). Ein Origin muss konfiguriert sein (siehe oben) oder der Browser
@@ -91,6 +100,11 @@ nicht eingetragen ist.
 Ausgabe: `{ "ranking": ShortlistEntry[], "reports": NameReport[] }` aus `checkNames`.
 `NameReport` hat `schemaVersion: 2`, `verdict`, `results` (ein `SourceResult` je Quelle),
 `incomplete`, `trademark` und `manualLinks`. Die Antwort trägt `Cache-Control: no-store`.
+Eine Domain-Zeile (`SourceResult` einer Quelle `rdap:<tld>`) trägt das optionale Feld `register`
+(`{ label, url, notice }`, Typ `RegisterLink`), wenn der Betreiber einen Registrierungsdienst eingestellt hat
+(`MARKENFREI_REGISTER_URL`, `MARKENFREI_REGISTER_NAME`, siehe `src/lib/register.ts`), die Endung einzeln geprüft ist
+und der Status `not_found` lautet. Das Feld wird erst nach dem Zwischenspeicher gesetzt und ist ein eigenes, möglicherweise
+vergütetes Angebot des Betreibers, keine Zusage, dass die Domain bestellbar ist (`notice`). Ohne Einstellung fehlt es.
 
 Fehler, jeweils `{ "error": "<deutsche Meldung>" }`:
 
@@ -203,13 +217,16 @@ die der Route sind.
 
 ## `GET /api/sources` (`sources/route.ts`, Aufbau in `src/lib/sources-catalog.ts`)
 
-Antwort: `{ schemaVersion: 2, namespaces, tlds, sources, limits }` aus denselben Konstanten wie die Seite
+Antwort: `{ schemaVersion: 2, namespaces, tlds, sources, profiles, register, limits }` aus denselben Konstanten wie die Seite
 `/quellen` und die Prüfung (`STATIC_SOURCES`, `DOMAIN_TLDS`). Jede Endung hat `tld`, `default` und `checked`
 (`false`: nicht einzeln geprüft, RDAP-404 ergibt dort `unknown`, nie `not_found`). Jede Quelle hat `id`, `namespace`, `label`,
 `default`, `description` und `endpoint`. `Cache-Control: public, max-age=3600`. Kein Rate-Limit, keine Abfragen
 bei Dritten. Wer `sources` für `/api/check` setzt, nimmt die IDs von hier; Quellen mit `default: true` gehören zur
 Standardprüfung und müssen mitgeschickt werden, wenn sie bleiben sollen. `GET /llms.txt` (`src/app/llms.txt/route.ts`)
-ist die Kurzfassung für Sprachmodelle.
+ist die Kurzfassung für Sprachmodelle. `profiles` listet die Profile für das Feld `profile` von `/api/check`: je `id`,
+`label`, `namespaces`, `sources` und, nur bei Profilen mit Domains, `tlds`. `register` ist `{ configured: false }`
+oder `{ configured: true, name }`, je nachdem, ob der Betreiber einen Registrierungsdienst eingestellt hat; die
+Link-Vorlage wird nie ausgegeben.
 
 ---
 

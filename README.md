@@ -31,7 +31,7 @@ Standardmäßig aktiv (Web und MCP gleich):
 |---|---|
 | Domains | RDAP für die gewählten Endungen (Standard `.de`, `.com`, `.dev`, `.app`, `.io`, höchstens 8 je Prüfung). Der RDAP-Server kommt aus dem IANA-Bootstrap (ersatzweise aus einem Schnappschuss im Repository), für `.de`, `.io`, `.ch` und `.li` aus festen Einträgen. Einzeln geprüft sind 33 Endungen; die übrigen Endungen des Schnappschusses sind über ein Suchfeld wählbar, dort ergibt RDAP-404 nie „nicht gefunden“, sondern „unbekannt“. `.at` und `.eu` laufen nur über DNS und können deshalb nie „nicht gefunden“ ergeben. DNS über HTTPS bestätigt nur „vergeben“. |
 | Pakete | npm, PyPI, GitHub (Nutzer oder Organisation), crates.io, Homebrew (Formula und Cask) |
-| App Stores | Apple App Store Deutschland (Suche, vergeben nur bei exakt gleichem Haupttitel), Google Play (nur die Bundle-IDs `com.<name>.app` und `de.<name>.app`) |
+| App Stores | Apple App Store Deutschland (Suche, vergeben nur bei exakt gleichem Haupttitel; Österreich, Schweiz und USA auf Wunsch), Google Play (nur die Bundle-IDs `com.<name>.app` und `de.<name>.app`) |
 | Bekannte Namen | Liste bekannter Tech-Marken (Heuristik ohne Netz: identisch, klanggleich nach Kölner Phonetik, enthalten), Wikidata (exaktes Label mit Typ Unternehmen, Marke, Software oder App), GLEIF (aktive Rechtsträger mit LEI, Namensstamm ohne Rechtsform) |
 
 Auf Wunsch („Weitere Quellen“ in der Oberfläche, `sources` in API und MCP): NuGet,
@@ -41,6 +41,8 @@ RubyGems, Maven Central, Packagist, pub.dev, JSR, Hex.pm, CRAN, Open VSX, Huggin
 Paketquellen von Distributionen, Homebrew, winget und weiteren), Docker Hub (nur offizielle
 Images), conda-forge und Clojars (diese drei über den Index von ecosyste.ms, nicht live aus dem
 Register; CocoaPods, CPAN und Julia fehlen bewusst, weil ihre Namen die Schreibweise brauchen),
+der Apple App Store für Österreich, die Schweiz und die USA (`appstore_at`, `appstore_ch`,
+`appstore_us`; dieselbe Suche wie für Deutschland, mit demselben Abfragelimit von Apple),
 F-Droid, Firefox Add-ons, Bluesky, Mastodon (mastodon.social), Hacker News sowie Wikipedia und
 Show HN als schwache Signale, außerdem `wikidata_brands` (Ähnlichkeitsvergleich ohne Netz gegen
 einen Schnappschuss von Wikidata-Marken, CC0, Stand und Anzahl stehen auf `/quellen`; Treffer
@@ -149,15 +151,17 @@ Markenfrei lässt sich als Suchmaschine im Browser hinzufügen. Die Beschreibung
 
 ### HTTP-Schnittstelle
 
-`POST /api/check` mit `{ "names": ["wachwerk"], "tlds"?: [...], "namespaces"?: [...], "sources"?: [...] }`
+`POST /api/check` mit `{ "names": ["wachwerk"], "profile"?: "npm", "tlds"?: [...], "namespaces"?: [...], "sources"?: [...] }`
 liefert `{ ranking, reports }`. Höchstens 10 Namen, Body höchstens 16 KB, jeder Name zählt
-einzeln fürs Rate-Limit. Details: [src/app/api/README.md](src/app/api/README.md).
+einzeln fürs Rate-Limit. `profile` wählt Namensräume, Quellen und Endungen für ein Vorhaben
+(`allgemein`, `web-app`, `mobile-app`, `npm`, `python`, `rust`, `dart`, `php`, `ruby`, `dotnet`, `java`, `cli`);
+ausdrücklich angegebene Felder ersetzen den jeweiligen Teil. Details: [src/app/api/README.md](src/app/api/README.md).
 
 - **API-Dokumentation:** Die Seite `/api-docs` beschreibt die Schnittstelle für Entwickler (curl-,
   JavaScript- und Python-Beispiele, Antwortformat, Grenzen, Fehler). `GET /api/openapi.json` liefert
   eine OpenAPI-3.1-Beschreibung, die aus denselben Konstanten und Schemas wie der Code entsteht;
-  `GET /api/sources` listet alle Quellen-IDs, Namensräume und Endungen als JSON (die gültigen Werte
-  für `sources`, `namespaces` und `tlds`, mit Kennzeichnung der Standardauswahl). `GET /llms.txt` fasst
+  `GET /api/sources` listet alle Quellen-IDs, Namensräume, Endungen und Profile als JSON (die gültigen Werte
+  für `sources`, `namespaces`, `tlds` und `profile`, mit Kennzeichnung der Standardauswahl). `GET /llms.txt` fasst
   Schnittstellen und Grenzen für Sprachmodelle zusammen. `GET /api/health` meldet
   `{ "status": "ok", "version": "…" }` fürs Monitoring.
 
@@ -167,10 +171,17 @@ Vier Tools, alle schreibgeschützt und mit `outputSchema`:
 
 | Tool | Eingabe | Ergebnis |
 |---|---|---|
-| `markenfrei_check_name` | `name`, optional `namespaces`, `tlds`, `sources` | Ampel, Status je Quelle, Lücken, Markenvorbereitung |
+| `markenfrei_check_name` | `name`, optional `profile`, `namespaces`, `tlds`, `sources` | Ampel, Status je Quelle, Lücken, Markenvorbereitung |
 | `markenfrei_check_names` | `names` (1 bis 10), sonst wie oben | Rangliste und ein Bericht je Name |
 | `markenfrei_trademark_prep` | `name`, optional `classes` (1 bis 45) | Registerlinks, DPMA-Expertensuchstring, Varianten, Klassen, Checkliste; ohne Netzabfrage |
 | `markenfrei_suggest_names` | `keywords` (1 bis 6), optional `count` (1 bis 20) | ungeprüfte Kandidaten zum Weiterreichen an `markenfrei_check_names` |
+
+Die Server-Anweisungen sagen einem Coding-Agenten, wann er prüft (bevor er ein Projekt, Paket, eine
+App, ein Repository oder eine Domain anlegt oder benennt) und wie: 5 bis 10 Kandidaten sammeln, mit
+`markenfrei_check_names` und dem passenden `profile` prüfen, Namen ohne Treffer bevorzugen, Gelb und
+`unknown` als nicht geklärt behandeln, keinen Namen „frei“ nennen, auf die nicht geprüfte Marke
+hinweisen. Einen Abschnitt für `AGENTS.md` oder `CLAUDE.md` eines Projekts (Deutsch und Englisch)
+gibt es auf der Seite `/mcp` und in [mcp/README.md](mcp/README.md).
 
 ### Über HTTP
 
@@ -222,11 +233,12 @@ Dieselbe Prüfung ohne Server und ohne MCP-Client, direkt aus dem Repo (noch nic
 npm run cli -- check wachwerk
 npm run cli -- check wachwerk nordlicht --json
 npm run cli -- check wachwerk --namespaces domains,packages --tlds de,com
+npm run cli -- check wachwerk fokusnova --profile npm
 npm run cli -- --help
 ```
 
 - Ein Name ergibt den Bericht, mehrere (bis 10) eine Rangliste. `--json` gibt den `NameReport` bzw. `{ ranking, reports }` aus, wie die HTTP-Schnittstelle.
-- `--namespaces`, `--tlds` und `--sources` nehmen Kommalisten und gelten wie in der API; die Engine meldet unbekannte Werte.
+- `--namespaces`, `--tlds` und `--sources` nehmen Kommalisten und gelten wie in der API; die Engine meldet unbekannte Werte. `--profile` nimmt eine Profil-ID wie `profile` in der API.
 - **Exit-Code:** 0 grün, 1 gelb, 2 rot; bei mehreren Namen zählt die schlechteste Ampel. 64 bei falschem Aufruf oder Eingabe, 70 bei einem internen Fehler. Ohne Netz kommt Gelb (Exit 1) mit dem Hinweis auf Lücken, nie Grün.
 - Die Abfragen gehen vom eigenen Rechner aus, mit dem User-Agent `Markenfrei/2.0 (+https://markenfrei.app; <kontakt>)`. Der Kontakt steht nur darin, wenn `MARKENFREI_CONTACT` gesetzt ist; sonst weist die CLI auf stderr darauf hin.
 - **Nicht in Schleifen aufrufen.** Die Abfragebudgets je Dienst (z. B. GitHub ohne Token, crates.io, iTunes) gelten nur innerhalb eines Aufrufs; jeder neue Prozess beginnt von vorn. Die Ratgrenze des Servers (`MARKENFREI_RATE_LIMIT`) gilt hier nicht, weil die CLI den Server nicht aufruft. Alle Namen gehören in einen Aufruf (höchstens 10 Namen und 8 Endungen). Das gilt ebenso für den stdio-MCP.
@@ -248,8 +260,26 @@ Markenfrei braucht keine API-Schlüssel. Außer den Betreiberangaben (siehe unte
 | `MARKENFREI_TRUSTED_PROXIES` | Anzahl vertrauenswürdiger Proxys vor der App (Standard 1). `x-forwarded-for` wird von rechts gelesen, damit Clients ihre Adresse nicht fälschen können. `0` ignoriert den Header. |
 | `MARKENFREI_RATE_LIMIT` | Anfragen pro Minute und IP für alle öffentlichen Routen (Standard 60). Bei `/api/check` und `markenfrei_check_names` zählt jeder Name einzeln. Der Zähler gilt pro Serverprozess; mehrere Prozesse hinter einer ausgehenden IP werden nicht unterstützt (siehe „Vor dem Livegang“, Punkt 4). |
 | `MARKENFREI_CACHE_TTL_SEC` | Lebensdauer des Zwischenspeichers für eindeutige Quellenantworten im Arbeitsspeicher, Standard 600 Sekunden, `0` schaltet ihn aus. `unknown` wird nie zwischengespeichert, nichts wird auf die Platte geschrieben. |
+| `MARKENFREI_REGISTER_URL`, `MARKENFREI_REGISTER_NAME` | Optional, standardmäßig aus: **Registrierungs-Link** zum eigenen Dienst des Betreibers (siehe unten). `…_URL` ist eine `https://`-Vorlage mit `{domain}` (optional `{name}` und `{tld}`), z. B. `https://example.org/bestellen?domain={domain}`; `…_NAME` ist der Anzeigename (Pflicht, sobald die URL gesetzt ist, höchstens 60 Zeichen). Ungültige oder unvollständige Angaben schalten den Link ab. |
 
 `/.well-known/security.txt` (RFC 9116) wird nur ausgeliefert, wenn `MARKENFREI_OPERATOR_EMAIL` gesetzt und gültig ist; sonst antwortet die Route mit 404. Sicherheitsmeldungen gehen an die Adresse aus dem Impressum. Das Ablaufdatum wird bei jedem Abruf auf 180 Tage ab dann gesetzt.
+
+### Registrierungs-Link
+
+Standardmäßig aus. Sind `MARKENFREI_REGISTER_URL` und `MARKENFREI_REGISTER_NAME` gesetzt, zeigen
+Domain-Zeilen einzeln geprüfter Endungen mit „nicht gefunden“ einen beschrifteten Link
+`Registrieren über <Name>` zum Dienst des Betreibers, mit dem Hinweis „Angebot des Betreibers dieser
+Seite; er kann dafür eine Vergütung erhalten. „Nicht gefunden“ ist keine Zusage, dass die Domain
+bestellbar ist.“ Das gilt für `/api/check` (Feld `register` am Ergebnis), den MCP-Server (Text und
+`structuredContent`), den Markdown-Export und die Kommandozeile; `GET /api/sources` nennt nur, ob ein
+Dienst eingestellt ist, und seinen Namen. Andere Status und nicht einzeln geprüfte Endungen bekommen
+nie einen Link.
+
+- Der Betreiber kann an diesem Link verdienen; deshalb ist er immer als Angebot des Betreibers gekennzeichnet.
+- Markenfrei überträgt nichts an den Dienst. Der Domainname steht nur im Link, den der Nutzer selbst öffnet.
+- Vor einem kommerziellen Betrieb die Bedingungen jeder abgefragten Quelle prüfen, wie unter „Vor dem
+  Livegang“, Punkt 6, für kostenpflichtige Angebote beschrieben, insbesondere die Acceptable Use Policy
+  von SWITCH für .ch und .li.
 
 ## Vor dem Livegang
 

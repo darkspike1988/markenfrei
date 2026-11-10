@@ -37,6 +37,13 @@ Nutzungsbedingungen respektieren, nur Einzelabfragen, die ein Nutzer auslöst (e
   `{ label, kind, id? }` mit `kind` = `gleich`, `klanggleich`, `schreibaehnlich` oder `enthalten`.
   Nur ein Hinweis, kein Rechtsbefund; kein Punktwert, keine Prozentzahl. `note` und `evidence` bleiben
   unverändert. Fehlt das Feld, gibt es keine Treffer zum Anzeigen; das ist keine Freigabe.
+- Optional und additiv: `SourceResult.register` = `{ label, url, notice }`, der Registrierungs-Link
+  des Betreibers (`MARKENFREI_REGISTER_URL`, `MARKENFREI_REGISTER_NAME`, `src/lib/register.ts`). Nur
+  wenn der Betreiber ihn eingestellt hat, nur an Domain-Zeilen einzeln geprüfter Endungen und nur bei
+  `not_found`. Angehängt nach dem Zwischenspeicher, damit eine geänderte Einstellung sofort gilt.
+  `label` = „Registrieren über <Name>“, `notice` kennzeichnet das Angebot als eigenes, möglicherweise
+  vergütetes Angebot des Betreibers und sagt, dass „nicht gefunden“ keine Zusage der Bestellbarkeit ist.
+  Markenfrei überträgt nichts an den Dienst.
 - Namensräume (`Namespace`): `domains`, `packages`, `stores`, `social`, `known_names`.
 - **Marke** ist kein Namensraum mit Ampel. Sie ist immer „nicht geprüft“ und wird durch
   die Recherche-Vorbereitung ersetzt.
@@ -61,7 +68,7 @@ Standard aktiv (Web und MCP gleich):
 |---|---|
 | domains | RDAP für gewählte Endungen (Standard `de`, `com`, `dev`, `app`, `io`), dynamisch aus dem IANA-Bootstrap (Rückfall: Schnappschuss `rdap-tlds.json`, von Hand erneuert) plus feste Overrides für `de`, `io`, `ch`, `li` (Bootstrap fehlt dort); alle Endungen des Schnappschusses wählbar, einzeln geprüft nur die 33 kuratierten (nur dort ergibt RDAP-404 „nicht gefunden“, sonst „unbekannt“); DoH nur als Bestätigung von „vergeben“ |
 | packages | npm, PyPI, GitHub (Nutzer/Organisation), crates.io, Homebrew (Formula UND Cask) |
-| stores | Apple App Store (Suche, exakter Titel), Google Play (Bundle-IDs `com.{name}.app`, `de.{name}.app` per HEAD) |
+| stores | Apple App Store Deutschland (Suche, exakter Titel), Google Play (Bundle-IDs `com.{name}.app`, `de.{name}.app` per HEAD) |
 | known_names | bekannte Marken (Heuristik), Wikidata (SPARQL, exaktes Label mit Typ Unternehmen/Marke/Software), GLEIF (aktive Rechtsträger, exakter Name) |
 
 Optional (auf Auswahl): NuGet, RubyGems, Maven Central (`similar` statt `taken`),
@@ -74,7 +81,10 @@ Signal), Wikipedia (schwaches Signal). Seit 5. November 2026 außerdem AUR (aurw
 Repology (Projektname in rund 300 Paketquellen, eigener User-Agent mit Quellcode-Link) und
 über den Index von ecosyste.ms (`packages.ecosyste.ms`, nicht live aus dem Register): Docker
 Hub (offizielle Images), conda-forge, Clojars; alle mit
-`defaultEnabled: false` im Namensraum `packages`.
+`defaultEnabled: false` im Namensraum `packages`. Ebenfalls optional im Namensraum `stores`:
+der Apple App Store für Österreich, die Schweiz und die USA (`appstore_at`, `appstore_ch`,
+`appstore_us`), gebaut aus derselben Fabrik wie der deutsche Store; alle vier teilen sich
+das Budget des Hosts `itunes.apple.com`.
 
 Entfernt: Go-Proxy (liefert für bloße Namen immer 404), DuckDuckGo (keine Unterscheidung
 zwischen „nichts gefunden“ und Fehler), PyPI bleibt. Nicht aufgenommen (Gründe im Review):
@@ -123,13 +133,20 @@ Tools (alle mit `registerTool`, `title`, `outputSchema`, `annotations`):
 
 | Tool | Eingabe | Ausgabe |
 |---|---|---|
-| `markenfrei_check_name` | `name`, `namespaces?`, `tlds?`, `sources?` | `NameReport` (kompakter Text + `structuredContent`) |
+| `markenfrei_check_name` | `name`, `profile?`, `namespaces?`, `tlds?`, `sources?` | `NameReport` (kompakter Text + `structuredContent`) |
 | `markenfrei_check_names` | `names` (1–10), sonst wie oben | Rangliste mit Bericht je Name |
 | `markenfrei_trademark_prep` | `name`, `classes?` | Links, DPMA-Expertenstring, Varianten, Klassen, Checkliste (ohne Netz) |
 | `markenfrei_suggest_names` | `keywords` | deterministische Kandidaten aus dem Wortfeld (ungeprüft, zum Weiterreichen an `check_names`) |
 
-Server-`instructions`: grün heißt nicht markenrechtlich frei, `unknown` nie als frei
-werten, Marke mit `trademark_prep` vorbereiten.
+`profile` (IDs aus `src/lib/profiles.ts`, auch in `POST /api/check`, `GET /api/sources` und der CLI)
+setzt Namensräume, Quellen und Endungen; ausdrückliche Felder ersetzen den jeweiligen Teil
+(`selectSources` in `src/lib/engine/format.ts`, auch für die Kosten fürs Rate-Limit).
+
+Server-`instructions`: wann prüfen (vor dem Anlegen oder Benennen von Projekt, Paket, App, Repository,
+Domain; bei Namensideen), Ablauf (5 bis 10 Kandidaten, `check_names` mit passendem `profile`, Namen
+ohne Treffer bevorzugen), grün heißt nicht markenrechtlich frei, Gelb und `unknown` nicht geklärt,
+nie „frei“ sagen, Marke mit `trademark_prep` vorbereiten, Registrierungs-Link weitergeben und nichts
+selbst bestellen.
 
 HTTP: Batch-Anfragen mit mehr als einem Element ablehnen, Origin prüfen (fehlend erlaubt,
 sonst nur eigene Domain und localhost), Body höchstens 64 KB, Rate-Limit.

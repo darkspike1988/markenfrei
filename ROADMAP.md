@@ -4,8 +4,12 @@ Stand: 4. November 2026, Version 2. Grundlage ist [docs/v2-spec.md](docs/v2-spec
 dem [Review und der Konkurrenzanalyse](docs/review-and-competition-2026-11.md) entstanden ist.
 
 Markenfrei beantwortet eine Frage: „Kann ich diesen Namen in den gängigen Namensräumen nutzen,
-und wo muss ich für Marken selbst nachsehen?“ Ohne LLM, ohne Konto, ohne Personen-Tracking. Agenten nutzen Markenfrei
-über den [MCP-Server](README.md#mcp-server-für-agenten).
+und wo muss ich für Marken selbst nachsehen?“ Ohne LLM, ohne Konto, ohne Personen-Tracking.
+
+**Hauptzweck:** Coding-Agenten wissen nicht, welche Programm-, Paket- und App-Namen schon vergeben
+sind, und können es ohne Hilfe nicht prüfen. Über den [MCP-Server](README.md#mcp-server-für-agenten)
+prüfen sie Kandidaten, bevor sie etwas anlegen, und geben bei einer Domain ohne Fund den
+Registrierungs-Link des Betreibers an den Nutzer weiter. Die Webseite bietet dieselbe Prüfung für Menschen.
 
 **Legende:** ✅ gebaut und mit Tests abgedeckt · 🔗 nur Link, keine Abfrage ·
 🟡 Entscheidung offen · ⬜ geplant
@@ -31,7 +35,8 @@ und wo muss ich für Marken selbst nachsehen?“ Ohne LLM, ohne Konto, ohne Pers
 | Kontakt | ✅ Kontaktformular `/kontakt` und `POST /api/contact` (zod-Prüfung, 8 KB, Honigfalle, signierte Zeitmarke, 3 Nachrichten pro Stunde und IP, 30 pro Stunde und Prozess). Versand per SMTP über den Mailserver des Betreibers (`MARKENFREI_SMTP_URL`), ohne Speicherung und ohne Dienste Dritter. |
 | HTTP | ✅ `POST /api/check` (zod-Prüfung, 16 KB, Rate-Limit je Name), `POST /api/mcp` (Origin-Prüfung, 64 KB, keine Batches, Rate-Limit je Name). |
 | API-Dokumentation | ✅ Seite `/api-docs` (Beispiele in curl, JavaScript, Python; Antwortformat, Grenzen, Fehler), `GET /api/openapi.json` (OpenAPI 3.1, aus den Code-Konstanten und zod-Schemas erzeugt, Test gegen Drift), `GET /api/health` (Version, ohne Netz und Geheimnisse). |
-| MCP | ✅ Vier Tools mit `outputSchema` und `annotations`, Server-`instructions`. Eigenes Paket `markenfrei-mcp` in `mcp/`, mit esbuild zu einer Datei gebündelt, `npm pack` und Start aus fremdem Verzeichnis in der CI getestet. |
+| MCP | ✅ Vier Tools mit `outputSchema` und `annotations`, Server-`instructions` mit Arbeitsablauf für Coding-Agenten, Parameter `profile` (Vorhaben wie `npm`, `python`, `web-app`), kopierbarer Abschnitt für `AGENTS.md`/`CLAUDE.md`. Eigenes Paket `markenfrei-mcp` in `mcp/`, mit esbuild zu einer Datei gebündelt, `npm pack` und Start aus fremdem Verzeichnis in der CI getestet. |
+| Registrierung | ✅ Optionaler Registrierungs-Link des Betreibers für Domains (`MARKENFREI_REGISTER_URL`, `MARKENFREI_REGISTER_NAME`, standardmäßig aus): bei „nicht gefunden“ einzeln geprüfter Endungen ein als Anzeige gekennzeichneter Link in Oberfläche, API, MCP, Markdown-Export und Kommandozeile. Markenfrei überträgt nichts an den Dienst und bestellt nichts. |
 | Entfernt | Score /100, Preisvergleich, Bundle-ID-Modus, REA-Route, Phonetik-Codes in der Oberfläche, Zufallsbeispiele, Go-Proxy, DuckDuckGo, alte MCP-Tools. |
 
 **Wichtig:** Grün heißt „in den gewählten Quellen nichts gefunden“. Es heißt nicht „als Marke
@@ -46,7 +51,8 @@ keine Rechtsberatung.
 | Status | Thema | Frage |
 |---|---|---|
 | 🟡 | Veröffentlichung des MCP-Pakets | `markenfrei-mcp` ist gebaut und getestet, aber nicht auf npm. Der Registry-Name `app.markenfrei/mcp` setzt eine Domain-Verifizierung für markenfrei.app voraus. Die Versionen sind nach dem Schema unten angeglichen. |
-| 🟡 | Echte Registerabfrage | EUIPO (Registrierung, Sandbox) und USPTO (API-Schlüssel) wären die einzigen Wege. Möglich als optionale Quelle mit eigenem Schlüssel des Betreibers, nach Prüfung der Nutzungsbedingungen. |
+| 🟡 | Echte Registerabfrage | Recherchiert am 10. November 2026 ([docs/trademark-registers.md](docs/trademark-registers.md), Abschnitt „Registerabfrage: Stand der Recherche“): Realistisch ist nur die EUIPO-API „Trademark search“ (Konto, App, Abo mit Identitätsnachweis, 6000 Aufrufe pro Tag). Weitergabe an Endnutzer und kommerzielle Nutzung sind in den Bedingungen nicht ausdrücklich geregelt; Empfehlung: vor dem Bau schriftlich beim EUIPO anfragen. Gebaut ist nichts. |
+| 🟡 | Betrieb mit Vergütung | Mit dem Registrierungs-Link verdient der Betreiber an Vermittlungen. Vor dem Einschalten zu klären: Nutzungsbedingungen der abgefragten Quellen bei kommerziellem Betrieb (README, „Vor dem Livegang“, Punkt 6; insbesondere SWITCH für .ch/.li) und die Texte in Impressum und Haftungshinweis („kostenloses, privat betriebenes Open-Source-Projekt“). |
 | 🟡 | GitHub-Token | Ein Token beim Betreiber hebt das Limit von 60 auf 5.000 Anfragen pro Stunde, ist aber ein Geheimnis in der Server-Umgebung. |
 | ✅ | Origin-Prüfung für `/api/mcp` | Verglichen wird nur mit `MARKENFREI_PUBLIC_URL`, `MARKENFREI_ALLOWED_ORIGINS` und localhost, nie mit `Host`, `X-Forwarded-Host` oder `Sec-Fetch-Site`; so schützt sie auch vor DNS-Rebinding. Belegt durch `tests/api-guard.test.ts` und `tests/api-routes-guard.test.ts`. |
 
