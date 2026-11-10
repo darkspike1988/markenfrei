@@ -137,10 +137,12 @@ const DEFINITIVE: Status[] = ["taken", "not_found", "similar", "invalid"];
 
 /**
  * Vorübergehende Gründe für "unknown", erkennbar am Beleg der Quelle: Abfragebudget, Zeitüberschreitung,
- * Ablauf der Gesamtzeit oder HTTP 429. Dauerhafte Fehler (Netzwerk, 5xx, unerwartetes Format) zählen nicht.
+ * Ablauf der Gesamtzeit oder HTTP 429. Dauerhafte Fehler (Netzwerk, 5xx, unerwartetes Format) zählen nicht,
+ * ebenso wenig ein Abfragebudget, das erst viel später wieder frei ist ("budget_long", siehe http.ts):
+ * das Wort muss als Ganzes dastehen, "budget_long" passt deshalb nicht auf "budget".
  */
 export function isTransient(evidence: string | undefined): boolean {
-  return !!evidence && /(^|[\s,;])(budget|timeout|deadline|HTTP 429)(\b|$)/.test(evidence);
+  return !!evidence && /(^|[\s,;])(budget|timeout|deadline|HTTP 429)(?!\w)/.test(evidence);
 }
 
 function failed(source: Source, name: string, note: string): SourceResult {

@@ -11,6 +11,8 @@ import {
   resetGithubRateLimit,
 } from "@/lib/engine/sources/packages";
 import type { CheckContext, HttpClient, HttpRequest, HttpResponse, Source } from "@/lib/engine/types";
+import { REGISTRY_SOURCES } from "@/lib/engine/sources/registries";
+import { isTransient } from "@/lib/engine/check";
 
 type Reply = { status: number; headers?: Record<string, string>; json?: unknown; error?: HttpResponse["error"] };
 
@@ -147,6 +149,35 @@ test("check wirft nie, auch wenn der Client wirft", async () => {
     const r = await s.check("wachwerk", ctx);
     assert.equal(r.status, "unknown", s.id);
   }
+});
+
+test("Ausnahme im Client: Beleg nennt nur den Fehlertyp, nie den Text, und ist nicht wiederholbar", async () => {
+  class InternalError extends Error {
+    name = "InternalError";
+  }
+  const ctx: CheckContext = {
+    contact: "mailto:a@b.de",
+    http: {
+      request: async () => {
+        throw new InternalError("timeout bei /srv/geheim/pfad?token=abc");
+      },
+    },
+  };
+  for (const s of [...PACKAGE_SOURCES, ...REGISTRY_SOURCES]) {
+    const r = await s.check("wachwerk", ctx);
+    assert.equal(r.status, "unknown", s.id);
+    assert.doesNotMatch(r.evidence ?? "", /geheim|token|timeout/, s.id);
+    assert.equal(isTransient(r.evidence), false, `${s.id}: ${r.evidence}`);
+  }
+  const plain = await src("npm").check("wachwerk", {
+    contact: "",
+    http: {
+      request: async () => {
+        throw new Error("timeout");
+      },
+    },
+  });
+  assert.equal(plain.evidence, "Error");
 });
 
 test("npm: Accept-Header für das kurze Format", async () => {

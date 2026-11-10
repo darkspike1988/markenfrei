@@ -41,11 +41,13 @@ function failure(base: Base, res: HttpResponse, url?: string): SourceResult | nu
         ? "Zeitüberschreitung, nicht geprüft"
         : res.error === "budget"
           ? "Abfragelimit des Dienstes erreicht, später erneut prüfen"
-          : res.error === "too_large"
-          ? "Antwort zu groß, nicht geprüft"
-          : res.error === "parse"
-            ? "Antwort nicht lesbar, nicht geprüft"
-            : "Netzwerkfehler, nicht geprüft";
+          : res.error === "budget_long"
+            ? "Abfragelimit des Dienstes für längere Zeit erreicht, später erneut prüfen"
+            : res.error === "too_large"
+              ? "Antwort zu groß, nicht geprüft"
+              : res.error === "parse"
+                ? "Antwort nicht lesbar, nicht geprüft"
+                : "Netzwerkfehler, nicht geprüft";
     const evidence = res.status ? `HTTP ${res.status}, ${res.error}` : res.error;
     return result(base, "unknown", { url, note, evidence });
   }
@@ -542,7 +544,7 @@ const hnShow: Source = {
   label: "Show HN",
   defaultEnabled: false,
   description:
-    "Hacker News (Algolia-Suche): gab es eine Produktvorstellung „Show HN: Name“? Schwaches Signal.",
+    "Hacker News (Algolia-Suche): gab es eine Produktvorstellung „Show HN: Name“? Schwaches Signal. Mehr Treffer als die ersten 20 ohne Vorstellung ergeben ähnlich (nicht alle geprüft).",
   endpoint:
     'https://hn.algolia.com/api/v1/search?query="{name}"&tags=show_hn&hitsPerPage=20&attributesToRetrieve=title,objectID&attributesToHighlight=none',
   async check(name, ctx: CheckContext) {
@@ -571,6 +573,15 @@ const hnShow: Source = {
             weak: true,
           });
         }
+      }
+      // Mehr Treffer als geliefert: eine Vorstellung unter diesem Namen kann auf einer späteren Seite stehen
+      if (nbHits > body.hits.length) {
+        return result(base, "similar", {
+          url: searchUrl,
+          note: `Nicht alle ${nbHits} Erwähnungen geprüft (nur die ersten ${body.hits.length}), eine Vorstellung unter diesem Namen ist nicht ausgeschlossen`,
+          evidence: `HTTP 200, nbHits ${nbHits}, ${body.hits.length} geprüft`,
+          weak: true,
+        });
       }
       return result(base, "not_found", {
         url: searchUrl,

@@ -28,6 +28,8 @@ export type WikidataBrandsOptions = {
   load?: () => LoadedBrands | null | undefined;
   /** Untergrenze der Einträge (Standard: MIN_SNAPSHOT_ENTRIES). */
   minEntries?: number;
+  /** Baut den Vergleichsindex (Standard: buildBrandIndex; für Tests ersetzbar, z. B. zum Zählen). */
+  buildIndex?: (marken: readonly BrandEntry[]) => BrandIndex;
 };
 
 /** Prüft den Kopf der echten Datei und liefert sie, oder wirft mit dem Grund. */
@@ -39,7 +41,26 @@ export function loadSnapshotFile(raw: unknown, minEntries = MIN_SNAPSHOT_ENTRIES
   return { marken: s.marken, abgerufen: s.abgerufen, enthaelt: s.enthaelt };
 }
 
-const loadReal = (): LoadedBrands => loadSnapshotFile(snapshotFile);
+/**
+ * Die echte Datei ändert sich zur Laufzeit nicht: Kopf und Liste werden einmal geprüft, danach
+ * liefert jeder Aufruf dasselbe Objekt (oder denselben Fehler). So wird der Schnappschuss nicht je
+ * Abfrage neu serialisiert und geprüft.
+ */
+let realSnapshot: { ok: LoadedBrands } | { error: unknown } | undefined;
+
+export function loadRealSnapshot(): LoadedBrands {
+  let s = realSnapshot;
+  if (!s) {
+    try {
+      s = { ok: loadSnapshotFile(snapshotFile) };
+    } catch (error) {
+      s = { error };
+    }
+    realSnapshot = s;
+  }
+  if ("error" in s) throw s.error;
+  return s.ok;
+}
 
 /** Deutsche Tausendergruppen ohne Intl (4742 -> "4.742"). */
 function groupThousands(n: number): string {
@@ -72,19 +93,22 @@ function describe(): string {
 }
 
 export function createWikidataBrandsSource(opts: WikidataBrandsOptions = {}): Source {
-  const load = opts.load ?? loadReal;
+  const load = opts.load ?? loadRealSnapshot;
   const minEntries = opts.minEntries ?? MIN_SNAPSHOT_ENTRIES;
-  let cache: { loaded: LoadedBrands; index: BrandIndex } | undefined;
+  const buildIndex = opts.buildIndex ?? buildBrandIndex;
+  // Der Index hängt nur an der Liste: gebunden an deren Identität, damit auch ein Lader, der je Aufruf
+  // ein neues Objekt um dieselbe Liste liefert, nicht jedes Mal einen neuen Index bauen lässt.
+  let cache: { marken: readonly BrandEntry[]; index: BrandIndex } | undefined;
 
   function prepare(): { loaded: LoadedBrands; index: BrandIndex } | null {
     const loaded = load();
     if (!loaded || !Array.isArray(loaded.marken) || loaded.marken.length < minEntries) return null;
     if (typeof loaded.abgerufen !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(loaded.abgerufen)) return null;
-    if (cache && cache.loaded === loaded) return cache;
-    const index = buildBrandIndex(loaded.marken);
+    if (cache && cache.marken === loaded.marken) return { loaded, index: cache.index };
+    const index = buildIndex(loaded.marken);
     if (index.size < minEntries) return null;
-    cache = { loaded, index };
-    return cache;
+    cache = { marken: loaded.marken, index };
+    return { loaded, index };
   }
 
   return {

@@ -19,7 +19,8 @@ const PER_HOST_LIMIT = 4;
 /**
  * Abfragebudget je Zieldienst, prozessweit. Es gilt zusätzlich zur Zahl gleichzeitiger Anfragen
  * und hält dokumentierte Grenzen der Anbieter ein. Ist es erschöpft, wartet die Anfrage kurz oder
- * gibt auf (error "budget"), statt den Dienst zu überlasten oder die Server-IP sperren zu lassen.
+ * gibt auf (error "budget", bei einem weit entfernten nächsten Platz "budget_long", siehe
+ * LONG_BUDGET_WAIT_MS), statt den Dienst zu überlasten oder die Server-IP sperren zu lassen.
  * Gilt pro Prozess; ein Betrieb mit mehreren Prozessen auf derselben ausgehenden IP wird nicht unterstützt (docs/design.md).
  *
  * Belege (Stand 4. November 2026):
@@ -47,6 +48,12 @@ const PER_HOST_LIMIT = 4;
  *   5. November 2026 5000 für Anonyme). Wir nehmen 4.500 je Stunde, also unter dem Wert ohne Adresse.
  * - aur.archlinux.org: höchstens 4000 Anfragen pro Tag und IP für die RPC-Schnittstelle (Arch Wiki,
  *   Aurweb RPC interface). Wir nehmen 3600 je 24 Stunden.
+ * - www.openthesaurus.de: höchstens 60 Anfragen pro Minute und IP (OpenThesaurus, API-Seite
+ *   https://www.openthesaurus.de/about/api). Wir nehmen 50 pro Minute. Gilt für die Wortfeld-Suche
+ *   (src/lib/opendata.ts), die je Aufruf bis zu 4 Anfragen stellt.
+ * - api.datamuse.com: Datamuse nennt 100.000 Anfragen pro Tag ohne Schlüssel, aber keine Grenze je
+ *   Minute. 60 pro Minute ist eine vorsichtige eigene Grenze, keine Angabe des Dienstes; die
+ *   Wortfeld-Suche stellt je Aufruf 2 Anfragen.
  */
 export type HostBudget = { max: number; windowMs: number };
 
@@ -72,9 +79,20 @@ export const HOST_BUDGETS: Record<string, HostBudget> = {
   "repology.org": { max: 1, windowMs: 1_000 },
   "packages.ecosyste.ms": { max: 4500, windowMs: 3_600_000 },
   "aur.archlinux.org": { max: 3600, windowMs: 86_400_000 },
+  "www.openthesaurus.de": { max: 50, windowMs: 60_000 },
+  "api.datamuse.com": { max: 60, windowMs: 60_000 },
 };
-/** Längste Wartezeit auf ein freies Budget, danach error "budget" */
+/** Längste Wartezeit auf ein freies Budget, danach error "budget" oder "budget_long" */
 const MAX_BUDGET_WAIT_MS = 1500;
+
+/**
+ * Liegt der nächste freie Platz eines erschöpften Budgets weiter weg als das, meldet die Anfrage
+ * "budget_long" statt "budget". Eine Wiederholung nach Sekunden (automatisch in der Weboberfläche,
+ * Hinweis im MCP-Text) hilft dann nicht; typisch für Fenster von einer Stunde oder einem Tag (GitHub
+ * ohne Token, ecosyste.ms, AUR). 60 s deckt jedes Minutenfenster (Apple, GLEIF, hex.pm, Wikidata) und
+ * etwa die Spanne der automatischen Wiederholungen der Weboberfläche ab; solche Lücken bleiben wiederholbar.
+ */
+export const LONG_BUDGET_WAIT_MS = 60_000;
 
 const budgetLog = new Map<string, number[]>();
 
@@ -227,7 +245,12 @@ export function queuedForHost(host: string): number {
   return hostSlots.get(host)?.queue.length ?? 0;
 }
 
-const inflight = new Map<string, Promise<HttpResponse>>();
+/**
+ * Gleiche gleichzeitige Anfragen laufen nur einmal, auch über Clients hinweg. `deadlineAt` ist die
+ * Deadline des Clients, der die Anfrage gestartet hat; ein Client mit späterer Deadline läuft selbst,
+ * wenn das geteilte Ergebnis nur an dieser früheren Deadline gescheitert ist (siehe request).
+ */
+const inflight = new Map<string, { promise: Promise<HttpResponse>; deadlineAt: number }>();
 
 async function readBody(res: Response, maxBytes: number): Promise<string | "too_large"> {
   if (!res.body) return "";
@@ -308,7 +331,9 @@ export function createHttpClient(opts: {
         // Warten nur, wenn es sich lohnt: kurz genug und mit Luft bis zur Deadline.
         const maxWait = Math.min(MAX_BUDGET_WAIT_MS, opts.deadlineAt - now() - 1000);
         const wait = takeBudget(host, budget, now(), maxWait);
-        if (wait > maxWait) return { status: 0, headers: empty, error: "budget" };
+        if (wait > maxWait) {
+          return { status: 0, headers: empty, error: wait > LONG_BUDGET_WAIT_MS ? "budget_long" : "budget" };
+        }
         if (wait > 0) await new Promise((r) => setTimeout(r, wait));
       }
       const left = opts.deadlineAt - now();
@@ -341,7 +366,12 @@ export function createHttpClient(opts: {
       let body: string | "too_large";
       try {
         body = await readBody(res, req.maxBytes ?? DEFAULT_MAX_BYTES);
-      } catch {
+      } catch (err) {
+        // Abbruch beim Lesen des Körpers durch dasselbe Zeitsignal wie beim Verbindungsaufbau
+        const name = err instanceof Error ? err.name : "";
+        if (name === "TimeoutError" || name === "AbortError") {
+          return { status: res.status, headers: res.headers, error: byDeadline ? "deadline" : "timeout" };
+        }
         return { status: res.status, headers: res.headers, error: "network" };
       }
       if (body === "too_large") return { status: res.status, headers: res.headers, error: "too_large" };
@@ -375,10 +405,18 @@ export function createHttpClient(opts: {
     request(url, req = {}) {
       const key = `${req.method ?? "GET"} ${req.read ?? "none"} ${req.redirect ?? "follow"}${JSON.stringify(req.headers ?? {})} ${url}`;
       const existing = inflight.get(key);
-      if (existing) return existing;
-      const p = runWithRetry(url, req).finally(() => inflight.delete(key));
-      inflight.set(key, p);
-      return p;
+      if (existing) {
+        // Wer sich anhängt, steht nie schlechter da als mit einer eigenen Anfrage: Lag die Deadline des
+        // Startenden früher und ist das Ergebnis daran gescheitert (Deadline, zu knappe Wartezeit aufs
+        // Budget), läuft die Anfrage noch einmal mit der eigenen Deadline.
+        if (existing.deadlineAt >= opts.deadlineAt) return existing.promise;
+        return existing.promise.then((r) =>
+          (r.error === "deadline" || r.error === "budget") && now() < opts.deadlineAt ? runWithRetry(url, req) : r,
+        );
+      }
+      const promise = runWithRetry(url, req).finally(() => inflight.delete(key));
+      inflight.set(key, { promise, deadlineAt: opts.deadlineAt });
+      return promise;
     },
   };
 }

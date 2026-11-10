@@ -25,6 +25,7 @@ function unknownFrom(base: Base, res: HttpResponse, url?: string): SourceResult 
   let note = "Keine verwertbare Antwort, bitte manuell prüfen";
   if (res.error === "timeout" || res.error === "deadline") note = "Zeitüberschreitung, bitte manuell prüfen";
   else if (res.error === "budget") note = "Abfragelimit des Dienstes erreicht (Apple nennt etwa 20 Anfragen pro Minute), später oder manuell prüfen";
+  else if (res.error === "budget_long") note = "Abfragelimit des Dienstes für längere Zeit erreicht, später erneut oder manuell prüfen";
   else if (res.error === "network") note = "Dienst nicht erreichbar, bitte manuell prüfen";
   else if (res.status === 429) note = "Zu viele Anfragen, bitte später oder manuell prüfen";
   else if (res.status >= 500) note = "Dienst gestört, bitte manuell prüfen";
@@ -63,6 +64,9 @@ const enc = encodeURIComponent;
 // Apple App Store (iTunes Search API)
 // ---------------------------------------------------------------------------
 
+/** Treffer je Suche; 25 passen mit Puffer in maxBytes (600 KB). Eine volle Seite ist nie "nicht gefunden". */
+const APPSTORE_LIMIT = 25;
+
 /**
  * Haupttitel vor ":", "–", "—", "|" oder "-" in kompakter Form. Weil ein Bindestrich auch Teil
  * des Namens sein kann ("my-app"), gibt es zwei Kandidaten: einmal bis zum ersten Bindestrich,
@@ -96,11 +100,11 @@ const appstore: Source = {
   label: "App Store",
   defaultEnabled: true,
   description:
-    "Apple App Store (Deutschland), Suche über die iTunes Search API. Vergeben nur bei exakt gleichem Haupttitel. Titel, die mit dem Namen als ganzem Wort beginnen, oder klanggleiche Titel (Kölner Phonetik) ergeben ähnlich.",
-  endpoint: "https://itunes.apple.com/search?term={name}&country=de&entity=software&limit=25",
+    "Apple App Store (Deutschland), Suche über die iTunes Search API. Vergeben nur bei exakt gleichem Haupttitel. Titel, die mit dem Namen als ganzem Wort beginnen, oder klanggleiche Titel (Kölner Phonetik) ergeben ähnlich, ebenso eine volle Trefferseite ohne exakten Titel (nicht alle Treffer geprüft).",
+  endpoint: `https://itunes.apple.com/search?term={name}&country=de&entity=software&limit=${APPSTORE_LIMIT}`,
   check: safe({ id: "appstore", namespace: "stores", label: "App Store" }, async (name, ctx, base) => {
     const searchUrl = `https://apps.apple.com/de/iphone/search?term=${enc(name)}`;
-    const api = `https://itunes.apple.com/search?term=${enc(name)}&country=de&entity=software&limit=25`;
+    const api = `https://itunes.apple.com/search?term=${enc(name)}&country=de&entity=software&limit=${APPSTORE_LIMIT}`;
     const res = await ctx.http.request(api, { read: "json", maxBytes: 600_000, retry: true });
     if (res.error || res.status !== 200) return unknownFrom(base, res, searchUrl);
     const results = isObject(res.json) ? res.json.results : undefined;
@@ -150,9 +154,17 @@ const appstore: Source = {
         evidence: `HTTP 200, Kölner Phonetik ${targetKp}`,
       });
     }
+    // Die iTunes-Suche nennt keine Gesamtzahl; eine volle Seite heißt: es kann weitere Treffer geben
+    if (results.length >= APPSTORE_LIMIT) {
+      return make(base, "similar", {
+        url: searchUrl,
+        note: `Nicht alle Treffer geprüft (Suche liefert höchstens ${APPSTORE_LIMIT}), ein App-Titel mit diesem Namen ist nicht ausgeschlossen`,
+        evidence: `HTTP 200, ${results.length} Treffer ohne exakten Titel, Seite voll`,
+      });
+    }
     return make(base, "not_found", {
       url: searchUrl,
-      note: "Kein App-Titel mit diesem Namen in der Suche (deutscher Store, 25 Treffer). Andere Länder nicht geprüft",
+      note: `Kein App-Titel mit diesem Namen in der Suche (deutscher Store, ${results.length} Treffer). Andere Länder nicht geprüft`,
       evidence: `HTTP 200, ${results.length} Treffer ohne exakten Titel`,
     });
   }),
@@ -244,12 +256,20 @@ const googleplay: Source = {
 // F-Droid (Volltextsuche, nur exakter App-Name zählt)
 // ---------------------------------------------------------------------------
 
+/**
+ * Treffer je Antwort. Die API nennt weder Gesamtzahl noch Seitengröße und kennt keinen Seitenparameter;
+ * beobachtet (10. November 2026): bei häufigen Suchwörtern immer genau 10 Treffer. Eine volle Seite ist
+ * deshalb nie "nicht gefunden".
+ */
+const FDROID_PAGE_SIZE = 10;
+
 const fdroid: Source = {
   id: "fdroid",
   namespace: "stores",
   label: "F-Droid",
   defaultEnabled: false,
-  description: "F-Droid, offizielle Such-API. Die Suche ist unscharf, vergeben nur bei exakt gleichem App-Namen.",
+  description:
+    "F-Droid, offizielle Such-API. Die Suche ist unscharf, vergeben nur bei exakt gleichem App-Namen; eine volle Trefferseite ohne exakten Namen ergibt ähnlich (nicht alle Treffer geprüft).",
   endpoint: "https://search.f-droid.org/api/search_apps?q={name}",
   check: safe({ id: "fdroid", namespace: "stores", label: "F-Droid" }, async (name, ctx, base) => {
     const searchUrl = `https://search.f-droid.org/?q=${enc(name)}&lang=de`;
@@ -269,6 +289,13 @@ const fdroid: Source = {
         const url = typeof app.url === "string" && app.url.startsWith("https://") ? app.url : searchUrl;
         return make(base, "taken", { url, note: `App „${app.name}“`, evidence: `HTTP 200, exakter Name unter ${apps.length} Treffern` });
       }
+    }
+    if (apps.length >= FDROID_PAGE_SIZE) {
+      return make(base, "similar", {
+        url: searchUrl,
+        note: `Nicht alle Treffer geprüft (nur die ersten ${apps.length}), eine App mit genau diesem Namen ist nicht ausgeschlossen`,
+        evidence: `HTTP 200, ${apps.length} Treffer ohne exakten Namen, Seite voll`,
+      });
     }
     return make(base, "not_found", {
       url: searchUrl,
@@ -291,16 +318,20 @@ function addonNames(v: unknown): string[] {
   return [];
 }
 
+/** Treffer je Seite; eine volle Seite oder count darüber ist nie "nicht gefunden". */
+const FIREFOX_PAGE_SIZE = 10;
+
 const firefox: Source = {
   id: "firefox",
   namespace: "stores",
   label: "Firefox Add-ons",
   defaultEnabled: false,
-  description: "Firefox Add-ons (addons.mozilla.org), offizielle Such-API. Die Suche ist unscharf, vergeben nur bei exakt gleichem Namen.",
-  endpoint: "https://addons.mozilla.org/api/v5/addons/search/?q={name}&page_size=10&lang=de",
+  description:
+    "Firefox Add-ons (addons.mozilla.org), offizielle Such-API. Die Suche ist unscharf, vergeben nur bei exakt gleichem Namen; meldet die Suche mehr Treffer als geprüft, ergibt das ähnlich.",
+  endpoint: `https://addons.mozilla.org/api/v5/addons/search/?q={name}&page_size=${FIREFOX_PAGE_SIZE}&lang=de`,
   check: safe({ id: "firefox", namespace: "stores", label: "Firefox Add-ons" }, async (name, ctx, base) => {
     const searchUrl = `https://addons.mozilla.org/de/firefox/search/?q=${enc(name)}`;
-    const api = `https://addons.mozilla.org/api/v5/addons/search/?q=${enc(name)}&page_size=10&lang=de`;
+    const api = `https://addons.mozilla.org/api/v5/addons/search/?q=${enc(name)}&page_size=${FIREFOX_PAGE_SIZE}&lang=de`;
     const res = await ctx.http.request(api, { read: "json", maxBytes: 400_000 });
     if (res.error || res.status !== 200) return unknownFrom(base, res, searchUrl);
     const results = isObject(res.json) ? res.json.results : undefined;
@@ -315,6 +346,17 @@ const firefox: Source = {
         const url = typeof addon.url === "string" && addon.url.startsWith("https://") ? addon.url : searchUrl;
         return make(base, "taken", { url, note: `Add-on „${match}“`, evidence: `HTTP 200, exakter Name unter ${results.length} Treffern` });
       }
+    }
+    // count ist die Gesamtzahl der Treffer; fehlt sie, zeigt eine volle Seite, dass es weitere geben kann
+    const count = isObject(res.json) && typeof res.json.count === "number" ? res.json.count : undefined;
+    const moreThanSeen = count !== undefined && count > results.length;
+    if (moreThanSeen || results.length >= FIREFOX_PAGE_SIZE) {
+      const seen = moreThanSeen ? `${results.length} von ${count}` : `nur die ersten ${results.length}`;
+      return make(base, "similar", {
+        url: searchUrl,
+        note: `Nicht alle Treffer geprüft (${seen}), ein Add-on mit genau diesem Namen ist nicht ausgeschlossen`,
+        evidence: `HTTP 200, count ${count ?? "fehlt"}, ${results.length} geprüft ohne exakten Namen`,
+      });
     }
     return make(base, "not_found", {
       url: searchUrl,

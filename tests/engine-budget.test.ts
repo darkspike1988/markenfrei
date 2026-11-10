@@ -1,6 +1,11 @@
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { HOST_BUDGETS, createHttpClient, githubBudget, huggingfaceBudget, resetHostBudgets, takeBudget } from "@/lib/engine/http";
+import { HOST_BUDGETS, LONG_BUDGET_WAIT_MS, createHttpClient, githubBudget, huggingfaceBudget, resetHostBudgets, takeBudget } from "@/lib/engine/http";
+import { checkName, clearResultCache, isTransient } from "@/lib/engine/check";
+import { formatReport } from "@/lib/engine/format";
+import { PACKAGE_SOURCES } from "@/lib/engine/sources/packages";
+import { KNOWN_NAME_SOURCES } from "@/lib/engine/sources/known-names";
+import type { Source } from "@/lib/engine/types";
 import { STORE_SOURCES } from "@/lib/engine/sources/stores-social";
 
 beforeEach(() => resetHostBudgets());
@@ -159,7 +164,6 @@ test("GLEIF: Budget unter der genannten Grenze von 60 pro Minute", () => {
 });
 
 test("GLEIF: erschöpftes Budget ist unknown mit Hinweis, nie not_found", async () => {
-  const { KNOWN_NAME_SOURCES } = await import("@/lib/engine/sources/known-names");
   const gleif = KNOWN_NAME_SOURCES.find((s) => s.id === "gleif")!;
   const fetchImpl = (async () => Response.json({ data: [], meta: { pagination: { total: 0 } } })) as unknown as typeof fetch;
   const http = createHttpClient({ deadlineAt: far(), userAgent: "t", fetchImpl, hostBudgets: { "api.gleif.org": { max: 1, windowMs: 60_000 } } });
@@ -178,4 +182,78 @@ test("GitHub: Budget liegt unter 60 je Stunde ohne Token und unter 5.000 mit Tok
   const withToken = githubBudget("ghp_x");
   assert.ok(withToken.max < 5000 && withToken.max > anon.max && withToken.windowMs === 3_600_000);
   assert.ok(HOST_BUDGETS["api.github.com"].max === anon.max || HOST_BUDGETS["api.github.com"].max === withToken.max);
+});
+
+test("Budget mit weit entferntem nächsten Platz: error budget_long, kurzes Fenster bleibt budget", async () => {
+  const { urls, fetchImpl } = counting();
+  const http = createHttpClient({
+    deadlineAt: far(),
+    userAgent: "t",
+    fetchImpl,
+    hostBudgets: {
+      "hour.test": { max: 1, windowMs: 3_600_000 },
+      "edge.test": { max: 1, windowMs: LONG_BUDGET_WAIT_MS + 1000 },
+      "minute.test": { max: 1, windowMs: 60_000 },
+    },
+  });
+  for (const host of ["hour.test", "edge.test", "minute.test"]) await http.request(`https://${host}/a`);
+  assert.equal((await http.request("https://hour.test/b")).error, "budget_long");
+  assert.equal((await http.request("https://edge.test/b")).error, "budget_long");
+  assert.equal((await http.request("https://minute.test/b")).error, "budget", "Minutenfenster: in Kürze wieder frei");
+  assert.equal(urls.length, 3, "keine Anfrage über das Budget hinaus");
+});
+
+test("isTransient: budget_long ist nicht vorübergehend, budget schon", () => {
+  assert.equal(isTransient("budget_long"), false);
+  assert.equal(isTransient("HTTP 0, budget_long"), false);
+  assert.equal(isTransient("RDAP: budget_long; DNS: NXDOMAIN"), false);
+  assert.equal(isTransient("Formula budget_long, Cask HTTP 404"), false);
+  assert.equal(isTransient("budget"), true);
+  assert.equal(isTransient("RDAP: budget; DNS: NXDOMAIN"), true);
+});
+
+test("GitHub ohne Token: erschöpftes Stundenbudget ist unknown, nicht retryable, mit eigenem Hinweis, nie not_found", async () => {
+  clearResultCache();
+  const github = PACKAGE_SOURCES.find((s) => s.id === "github")!;
+  const { fetchImpl } = counting(404);
+  const http = createHttpClient({ deadlineAt: far(), userAgent: "t", fetchImpl, hostBudgets: { "api.github.com": githubBudget(undefined) } });
+  const ctx = { http, contact: "" };
+  for (let i = 0; i < githubBudget(undefined).max; i++) assert.equal((await github.check(`frei${i}x`, ctx)).status, "not_found");
+  const late = await github.check("spaetname", ctx);
+  assert.equal(late.status, "unknown");
+  assert.equal(late.evidence, "budget_long");
+  assert.match(late.note ?? "", /für längere Zeit/);
+
+  // Über die Engine: kein retryable, und der MCP-Text rät nicht zum baldigen Wiederholen
+  const wrapped: Source = { ...github, id: "github_long", check: (n) => github.check(n, ctx) };
+  const report = await checkName("spaetname2", { registry: [wrapped] });
+  assert.equal(report.results[0].status, "unknown");
+  assert.equal(report.results[0].retryable, undefined);
+  assert.doesNotMatch(formatReport(report), /wiederholen/);
+});
+
+test("budget_long: App Store, GLEIF und Paketquellen melden unknown mit Hinweis auf längere Zeit", async () => {
+  const longFail = { request: async () => ({ status: 0, headers: new Headers(), error: "budget_long" as const }) };
+  const ctx = { http: longFail, contact: "" };
+  const sources = [
+    STORE_SOURCES.find((s) => s.id === "appstore")!,
+    KNOWN_NAME_SOURCES.find((s) => s.id === "gleif")!,
+    PACKAGE_SOURCES.find((s) => s.id === "npm")!,
+  ];
+  for (const s of sources) {
+    const r = await s.check("langname", ctx);
+    assert.equal(r.status, "unknown", s.id);
+    assert.match(r.note ?? "", /für längere Zeit/, s.id);
+    assert.equal(isTransient(r.evidence), false, `${s.id}: ${r.evidence}`);
+  }
+});
+
+test("kurzes Budget über die Engine: retryable und Hinweis zum Wiederholen bleiben", async () => {
+  clearResultCache();
+  const shortFail = { request: async () => ({ status: 0, headers: new Headers(), error: "budget" as const }) };
+  const npm = PACKAGE_SOURCES.find((s) => s.id === "npm")!;
+  const wrapped: Source = { ...npm, id: "npm_short", check: (n) => npm.check(n, { http: shortFail, contact: "" }) };
+  const report = await checkName("kurzname", { registry: [wrapped] });
+  assert.equal(report.results[0].retryable, true);
+  assert.match(formatReport(report), /wiederholen/);
 });

@@ -96,6 +96,18 @@ test("appstore: nur unscharfe Treffer => not_found mit Suchlink", async () => {
   assert.doesNotMatch(r.note ?? "", /registrierbar|frei/i);
 });
 
+test("appstore: volle Trefferseite ohne exakten Titel => similar (nicht alle geprüft), nie not_found", async () => {
+  const results = Array.from({ length: 25 }, (_, i) => ({ trackName: `Zufallsspiel ${i}`, trackViewUrl: `https://apps.apple.com/de/app/x/id${i}` }));
+  const { ctx } = fakeCtx({ [ITUNES("qzwexr")]: { json: { resultCount: 25, results } } });
+  const r = await byId("appstore").check("qzwexr", ctx);
+  assert.equal(r.status, "similar");
+  assert.match(r.note ?? "", /Nicht alle Treffer geprüft/);
+  assert.equal(r.url, "https://apps.apple.com/de/iphone/search?term=qzwexr");
+  // Eine nicht volle Seite bleibt not_found
+  const few = fakeCtx({ [ITUNES("qzwexr")]: { json: { resultCount: 24, results: results.slice(0, 24) } } });
+  assert.equal((await byId("appstore").check("qzwexr", few.ctx)).status, "not_found");
+});
+
 test("appstore: 429, 503, Timeout und falsches Format => unknown", async () => {
   for (const reply of [{ status: 429 }, { status: 503 }, { status: 0, error: "timeout" as const }, { json: { foo: 1 } }]) {
     const { ctx } = fakeCtx({ [ITUNES("abc")]: reply });
@@ -254,6 +266,17 @@ test("fdroid: nur unscharfe Treffer oder leer => not_found", async () => {
   assert.equal(b.url, "https://search.f-droid.org/?q=zzqxkvjwabc&lang=de");
 });
 
+test("fdroid: volle Trefferseite (10) ohne exakten Namen => similar, nie not_found", async () => {
+  const apps = (n: number) => Array.from({ length: n }, (_, i) => ({ name: `Werkzeug ${i}`, url: `https://f-droid.org/en/packages/w${i}` }));
+  const full = fakeCtx({ [FDROID("qzwexr")]: { json: { apps: apps(10) } } });
+  const r = await byId("fdroid").check("qzwexr", full.ctx);
+  assert.equal(r.status, "similar");
+  assert.match(r.note ?? "", /Nicht alle Treffer geprüft/);
+  assert.equal(r.url, "https://search.f-droid.org/?q=qzwexr&lang=de");
+  const few = fakeCtx({ [FDROID("qzwexr")]: { json: { apps: apps(9) } } });
+  assert.equal((await byId("fdroid").check("qzwexr", few.ctx)).status, "not_found");
+});
+
 test("fdroid: 500 oder Parse-Fehler => unknown", async () => {
   for (const reply of [{ status: 500 }, { error: "parse" as const }, { json: [] }]) {
     const { ctx } = fakeCtx({ [FDROID("abc")]: reply });
@@ -305,6 +328,18 @@ test("firefox: keine exakte Übereinstimmung => not_found, 429 => unknown", asyn
   const u = await byId("firefox").check("abc", b.ctx);
   assert.equal(u.status, "unknown");
   assert.equal(u.evidence, "HTTP 429");
+});
+
+test("firefox: count über den gelieferten Treffern oder volle Seite => similar, nie not_found", async () => {
+  const addons = (n: number) => Array.from({ length: n }, (_, i) => ({ name: { de: `Werkzeug ${i}` }, url: `https://addons.mozilla.org/de/firefox/addon/w${i}/` }));
+  const more = fakeCtx({ [AMO("qzwexr")]: { json: { count: 37, results: addons(3) } } });
+  const a = await byId("firefox").check("qzwexr", more.ctx);
+  assert.equal(a.status, "similar");
+  assert.match(a.note ?? "", /Nicht alle Treffer geprüft \(3 von 37\)/);
+  const full = fakeCtx({ [AMO("qzwexr")]: { json: { results: addons(10) } } });
+  assert.equal((await byId("firefox").check("qzwexr", full.ctx)).status, "similar", "volle Seite ohne count");
+  const all = fakeCtx({ [AMO("qzwexr")]: { json: { count: 3, results: addons(3) } } });
+  assert.equal((await byId("firefox").check("qzwexr", all.ctx)).status, "not_found", "alle Treffer geprüft");
 });
 
 test("firefox: Timeout, 503 und falsches Format => unknown", async () => {

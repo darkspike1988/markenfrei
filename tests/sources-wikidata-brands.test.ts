@@ -8,11 +8,12 @@ import { computeVerdict } from "@/lib/engine/verdict";
 import {
   createWikidataBrandsSource,
   describeSnapshot,
+  loadRealSnapshot,
   loadSnapshotFile,
   wikidataBrands,
   type LoadedBrands,
 } from "@/lib/engine/sources/wikidata-brands";
-import type { BrandEntry } from "@/lib/brand-similarity";
+import { buildBrandIndex, type BrandEntry } from "@/lib/brand-similarity";
 
 const mini = JSON.parse(readFileSync(new URL("./fixtures/brands-mini.json", import.meta.url), "utf8")) as {
   abgerufen: string;
@@ -218,4 +219,47 @@ test("matches: höchstens 5, Art und Label, note/evidence bleiben, kein Treffer 
   const none = await run(s, "zzzzqq");
   assert.equal(none.status, "not_found");
   assert.equal(none.matches, undefined);
+});
+
+test("echte Datei: Kopf wird einmal geprüft, der Index einmal gebaut, auch bei vielen Abfragen", async () => {
+  assert.equal(loadRealSnapshot(), loadRealSnapshot(), "dasselbe geprüfte Objekt bei jedem Aufruf");
+  let builds = 0;
+  const s = createWikidataBrandsSource({
+    buildIndex: (m) => {
+      builds++;
+      return buildBrandIndex(m);
+    },
+  });
+  for (const n of ["doritos", "zzzzqq", "aquorin", "google", "lunabar", "doritos"]) await run(s, n);
+  assert.equal(builds, 1);
+  assert.equal((await run(s, "doritos")).status, "similar");
+});
+
+test("Lader mit neuem Objekt je Aufruf um dieselbe Liste: ein Indexbau für viele Abfragen", async () => {
+  let loads = 0;
+  let builds = 0;
+  const s = createWikidataBrandsSource({
+    load: () => (loads++, { marken: MINI.marken, abgerufen: MINI.abgerufen }),
+    minEntries: 12,
+    buildIndex: (m) => {
+      builds++;
+      return buildBrandIndex(m);
+    },
+  });
+  for (let i = 0; i < 10; i++) await run(s, i % 2 ? "aquorin" : "zzzzqq");
+  assert.equal(loads, 10, "der Lader wird weiter je Abfrage gefragt");
+  assert.equal(builds, 1);
+  assert.equal((await run(s, "aquorin")).status, "similar");
+  // Eine neue Liste baut einen neuen Index
+  const other = createWikidataBrandsSource({
+    load: () => ({ marken: [...MINI.marken], abgerufen: MINI.abgerufen }),
+    minEntries: 12,
+    buildIndex: (m) => {
+      builds++;
+      return buildBrandIndex(m);
+    },
+  });
+  await run(other, "aquorin");
+  await run(other, "aquorin");
+  assert.equal(builds, 3);
 });

@@ -33,7 +33,11 @@ export type OpenDataOptions = {
   now?: () => number;
 };
 
-/** Derselbe HTTP-Client wie bei der Prüfung: gleicher User-Agent, Größenlimit, Deadline. */
+/**
+ * Derselbe HTTP-Client wie bei der Prüfung: gleicher User-Agent, Größenlimit, Deadline und dieselben
+ * Abfragebudgets (HOST_BUDGETS für OpenThesaurus und Datamuse). Ist ein Budget erschöpft, kommt keine
+ * Anfrage zustande und es gibt weniger oder keine Vorschläge aus dieser Quelle, keinen Fehler.
+ */
 function openDataClient(opts: OpenDataOptions): HttpClient {
   const now = opts.now ?? Date.now;
   return createHttpClient({

@@ -27,6 +27,7 @@ const ERROR_NOTE: Record<NonNullable<HttpResponse["error"]>, string> = {
   too_large: "Antwort größer als erwartet",
   parse: "Antwort nicht lesbar",
   budget: "Abfragelimit des Dienstes erreicht, später erneut prüfen",
+  budget_long: "Abfragelimit des Dienstes für längere Zeit erreicht, später erneut prüfen",
 };
 
 export function unknownResult(b: Base, res: HttpResponse, note?: string): SourceResult {
@@ -44,9 +45,10 @@ export function invalidResult(b: Base, note: string): SourceResult {
   return { ...b, status: "invalid", note, evidence: "Syntaxprüfung, keine Abfrage" };
 }
 
+/** Unerwartete Ausnahme: im Beleg nur der Fehlertyp, nie der Text (der kann Interna enthalten). */
 export function crashResult(b: Base, err: unknown): SourceResult {
-  const msg = err instanceof Error ? err.message : String(err);
-  return { ...b, status: "unknown", note: "interner Fehler bei der Abfrage", evidence: msg.slice(0, 120) };
+  const evidence = err instanceof Error ? err.name : "Fehler";
+  return { ...b, status: "unknown", note: "interner Fehler bei der Abfrage", evidence };
 }
 
 /** 200 => taken, 404 => not_found, sonst unknown. */
@@ -395,7 +397,10 @@ export function cratesIndexPath(name: string): string {
   return `${n.slice(0, 2)}/${n.slice(2, 4)}/${n}`;
 }
 
-/** Vorübergehend gescheitert (gleiche Regel wie isTransient in check.ts, dort nicht importierbar: Zyklus). */
+/**
+ * Vorübergehend gescheitert (gleiche Regel wie isTransient in check.ts, dort nicht importierbar: Zyklus).
+ * "budget_long" zählt nicht: der nächste freie Platz liegt zu weit weg.
+ */
 function transientReply(r: HttpResponse): boolean {
   return r.error === "timeout" || r.error === "budget" || r.error === "deadline" || r.status === 429;
 }

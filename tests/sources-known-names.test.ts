@@ -387,19 +387,41 @@ test("hn_show: Vorstellung => taken weak mit Link auf den Beitrag", async () => 
   assert.ok((calls[0].req.maxBytes ?? 0) <= 32 * 1024);
 });
 
-test("hn_show: nur Erwähnungen oder nichts => not_found weak", async () => {
+test("hn_show: nur Erwähnungen (alle geprüft) oder nichts => not_found weak", async () => {
   const mention = await source("hn_show").check(
     "dropbox",
-    fakeCtx({ [hnApiUrl("dropbox")]: { json: { nbHits: 417, hits: [{ title: "Show HN: Hearth – A Dropbox-like publisher", objectID: "9" }] } } }).ctx,
+    fakeCtx({
+      [hnApiUrl("dropbox")]: {
+        json: {
+          nbHits: 2,
+          hits: [
+            { title: "Show HN: Hearth – A Dropbox-like publisher", objectID: "9" },
+            { title: "Show HN: Sync without Dropbox", objectID: "10" },
+          ],
+        },
+      },
+    }).ctx,
   );
   assert.equal(mention.status, "not_found");
-  assert.match(mention.note ?? "", /417 Erwähnungen/);
+  assert.equal(mention.weak, true);
+  assert.match(mention.note ?? "", /2 Erwähnungen/);
   const none = await source("hn_show").check(
     "zzqxkvjwabc",
     fakeCtx({ [hnApiUrl("zzqxkvjwabc")]: { json: { nbHits: 0, hits: [] } } }).ctx,
   );
   assert.equal(none.status, "not_found");
   assert.equal(none.weak, true);
+});
+
+test("hn_show: mehr Treffer als geliefert ohne Vorstellung => similar weak, nie not_found", async () => {
+  const r = await source("hn_show").check(
+    "dropbox",
+    fakeCtx({ [hnApiUrl("dropbox")]: { json: { nbHits: 417, hits: [{ title: "Show HN: Hearth – A Dropbox-like publisher", objectID: "9" }] } } }).ctx,
+  );
+  assert.equal(r.status, "similar");
+  assert.equal(r.weak, true);
+  assert.match(r.note ?? "", /Nicht alle 417 Erwähnungen geprüft/);
+  assert.match(r.evidence ?? "", /nbHits 417/);
 });
 
 test("hn_show: 429, Deadline und falsches Format => unknown weak", async () => {

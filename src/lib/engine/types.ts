@@ -86,12 +86,15 @@ export type HttpResponse = {
   headers: Headers;
   json?: unknown;
   text?: string;
-  /** Gesetzt, wenn keine verwertbare Antwort kam */
   /**
-   * "budget": das Abfragebudget des Zieldienstes ist ausgeschöpft (siehe HOST_BUDGETS in http.ts).
-   * Es wurde keine Anfrage gesendet, das Ergebnis ist "unknown".
+   * Gesetzt, wenn keine verwertbare Antwort kam.
+   * "budget": das Abfragebudget des Zieldienstes ist ausgeschöpft (siehe HOST_BUDGETS in http.ts), der
+   * nächste freie Platz ist aber bald frei; eine Wiederholung in einigen Sekunden lohnt sich.
+   * "budget_long": ausgeschöpft, und der nächste freie Platz liegt weit weg (Stunden- oder Tagesfenster,
+   * siehe LONG_BUDGET_WAIT_MS); eine baldige Wiederholung hilft nicht.
+   * In beiden Fällen wurde keine Anfrage gesendet, das Ergebnis ist "unknown".
    */
-  error?: "timeout" | "network" | "deadline" | "too_large" | "parse" | "budget";
+  error?: "timeout" | "network" | "deadline" | "too_large" | "parse" | "budget" | "budget_long";
 };
 
 export type HttpClient = {

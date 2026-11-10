@@ -130,6 +130,53 @@ test("ungültiges JSON ergibt parse-Fehler mit Text", async () => {
   assert.equal(r.text, "<html>");
 });
 
+/** Fake-fetch: Kopf sofort, der Körper hängt, bis das Signal abbricht (wie fetch beim Lesen). */
+const hangingBodyFetch = (async (_u: string, init?: RequestInit) =>
+  new Response(
+    new ReadableStream<Uint8Array>({
+      start(c) {
+        c.enqueue(new TextEncoder().encode("{"));
+        init?.signal?.addEventListener("abort", () => c.error(init.signal!.reason));
+      },
+    }),
+    { status: 200 },
+  )) as unknown as typeof fetch;
+
+test("Abbruch beim Lesen des Körpers: timeout bzw. deadline, nicht network", async () => {
+  const slow = createHttpClient({ deadlineAt: far(), userAgent: "t", fetchImpl: hangingBodyFetch });
+  const t = await withLoopAlive(() => slow.request("https://x.test/body1", { read: "json", timeoutMs: 30 }));
+  assert.equal(t.error, "timeout");
+  assert.equal(t.status, 200);
+
+  const tight = createHttpClient({ deadlineAt: Date.now() + 80, userAgent: "t", fetchImpl: hangingBodyFetch });
+  const d = await withLoopAlive(() => tight.request("https://x.test/body2", { read: "text" }));
+  assert.equal(d.error, "deadline");
+});
+
+test("gebündelte Anfrage: wer sich mit späterer Deadline anhängt, erbt nicht die Deadline des Startenden", async () => {
+  let calls = 0;
+  const fetchImpl = ((u: string, init?: RequestInit) => {
+    calls++;
+    // Erste Anfrage hängt bis zum Abbruch, jede weitere antwortet sofort
+    return calls === 1 ? abortOnlyFetch(u, init) : Promise.resolve(new Response(null, { status: 404 }));
+  }) as unknown as typeof fetch;
+  const early = createHttpClient({ deadlineAt: Date.now() + 100, userAgent: "t", fetchImpl });
+  const late = createHttpClient({ deadlineAt: far(), userAgent: "t", fetchImpl });
+  const [a, b] = await withLoopAlive(() =>
+    Promise.all([early.request("https://x.test/shared"), late.request("https://x.test/shared")]),
+  );
+  assert.equal(a.error, "deadline");
+  assert.equal(b.error, undefined, "eigene Deadline ist noch fern: eigene Anfrage");
+  assert.equal(b.status, 404);
+  assert.equal(calls, 2);
+
+  // Umgekehrt: wer sich mit früherer Deadline anhängt, bekommt das geteilte Ergebnis ohne eigene Anfrage
+  const [c, d] = await Promise.all([late.request("https://x.test/shared2"), early.request("https://x.test/shared2")]);
+  assert.equal(c.status, 404);
+  assert.equal(d, c);
+  assert.equal(calls, 3, "nur eine Anfrage für beide");
+});
+
 test("eine einzelne Prüfung belegt höchstens drei der vier Slots je Host", async () => {
   let active = 0;
   let peak = 0;

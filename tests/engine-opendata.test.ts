@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildUserAgent } from "@/lib/engine/http";
+import { HOST_BUDGETS, buildUserAgent, resetHostBudgets, takeBudget } from "@/lib/engine/http";
 import { discoverOpenDataWords } from "@/lib/opendata";
 
 function recorder(respond: (url: string) => Response) {
@@ -43,4 +43,31 @@ test("Fehler und Nicht-2xx der Wortquellen ergeben leere Listen statt Ausnahmen"
   const { fetchImpl } = recorder(() => new Response("nope", { status: 503 }));
   const b = await discoverOpenDataWords({ keywords: ["Wache"] }, { fetchImpl });
   assert.deepEqual(b.semanticRelated, []);
+});
+
+test("Wortquellen haben ein Budget: OpenThesaurus unter 60 pro Minute, Datamuse mit eigener Grenze", () => {
+  const ot = HOST_BUDGETS["www.openthesaurus.de"];
+  assert.ok(ot && ot.max < 60 && ot.windowMs === 60_000);
+  const dm = HOST_BUDGETS["api.datamuse.com"];
+  assert.ok(dm && dm.max > 0 && dm.windowMs > 0);
+});
+
+test("erschöpftes OpenThesaurus-Budget: keine Anfrage dorthin, weniger Vorschläge, keine Ausnahme", async () => {
+  resetHostBudgets();
+  try {
+    const ot = HOST_BUDGETS["www.openthesaurus.de"];
+    for (let i = 0; i < ot.max; i++) takeBudget("www.openthesaurus.de", ot, Date.now());
+    const { seen, fetchImpl } = recorder((u) =>
+      u.includes("openthesaurus")
+        ? Response.json({ synsets: [{ terms: [{ term: "Wächter" }] }] })
+        : Response.json([{ word: "guard" }]),
+    );
+    const field = await discoverOpenDataWords({ keywords: ["Wache"] }, { fetchImpl });
+    assert.equal(seen.filter((s) => s.url.includes("openthesaurus")).length, 0, "keine Anfrage über das Budget hinaus");
+    assert.deepEqual(field.germanSynonyms, []);
+    assert.ok(field.semanticRelated.includes("guard"), "Datamuse liefert weiter");
+    assert.ok(field.synthesizedCandidates.length > 0);
+  } finally {
+    resetHostBudgets();
+  }
 });

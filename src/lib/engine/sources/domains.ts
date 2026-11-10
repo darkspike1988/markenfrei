@@ -386,7 +386,11 @@ function makeSource(tld: string): Source {
           rdapNote =
             res.status === 429
               ? "Registry drosselt Anfragen (HTTP 429)."
-              : "Keine verwertbare Antwort der Registry.";
+              : res.error === "budget_long"
+                ? "Abfragelimit der Registry für längere Zeit erreicht, später erneut prüfen."
+                : res.error === "budget"
+                  ? "Abfragelimit der Registry erreicht, später erneut prüfen."
+                  : "Keine verwertbare Antwort der Registry.";
         }
 
         const dns = await dohNs(ctx.http, domain);
