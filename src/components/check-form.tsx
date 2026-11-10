@@ -5,13 +5,17 @@ import Link from "next/link";
 import type { Namespace } from "@/lib/engine/types";
 import { NAMESPACE_LABEL } from "@/lib/engine/types";
 import {
+  checkerProfiles,
   findTld,
   groupFeaturedTlds,
   groupOptional,
+  groupStandard,
+  matchesProfile,
   previewNames,
   selectionSummary,
   type CheckerConfig,
   type NamePreview,
+  type Profile,
   type SourceInfo,
 } from "@/components/checker-config";
 import { Chevron } from "@/components/chevron";
@@ -21,9 +25,9 @@ const LEGEND = "eyebrow mb-2 flex w-full flex-wrap items-baseline justify-betwee
 const LEGEND_NOTE = "font-sans text-xs font-normal normal-case tracking-normal";
 
 /**
- * Eingabeformular des Prüfers: Namensfeld, Absenden und aufklappbare Auswahl von Namensräumen,
- * Endungen und weiteren Quellen. Hält keinen Zustand außer der Auswahl-Anzeige; Eingaben und
- * Fehlermeldung gehören dem Aufrufer.
+ * Eingabeformular des Prüfers: Namensfeld, Absenden, Vorhaben und aufklappbare Auswahl von Namensräumen,
+ * Standardquellen, Endungen und weiteren Quellen. Hält keinen Zustand außer der Auswahl-Anzeige; Eingaben
+ * und Fehlermeldung gehören dem Aufrufer.
  */
 export function CheckerForm({
   config,
@@ -35,10 +39,13 @@ export function CheckerForm({
   namespaces,
   tlds,
   extra,
+  excluded,
   onSubmit,
   onToggleNs,
   onToggleTld,
   onToggleExtra,
+  onToggleStandard,
+  onApplyProfile,
 }: {
   config: CheckerConfig;
   inert: boolean;
@@ -49,14 +56,24 @@ export function CheckerForm({
   namespaces: Namespace[];
   tlds: string[];
   extra: string[];
+  /** Abgewählte Standardquellen */
+  excluded: string[];
   onSubmit: (e: React.FormEvent) => void;
   onToggleNs: (ns: Namespace) => void;
   onToggleTld: (tld: string) => void;
   onToggleExtra: (id: string) => void;
+  onToggleStandard: (id: string) => void;
+  onApplyProfile: (profile: Profile) => void;
 }) {
   const fieldId = useId();
   const hintId = useId();
   const errorId = useId();
+  const profileLabelId = useId();
+  const profiles = useMemo(() => checkerProfiles(config), [config]);
+  const standardGroups = useMemo(() => groupStandard(config), [config]);
+  const excludedActive = standardGroups
+    .filter((g) => namespaces.includes(g.ns))
+    .reduce((n, g) => n + g.list.filter((s) => excluded.includes(s.id)).length, 0);
   const optionalGroups = useMemo(() => groupOptional(config.sources), [config.sources]);
   const domainsOn = namespaces.includes("domains");
   const featuredGroups = useMemo(() => groupFeaturedTlds(config.featuredTlds), [config.featuredTlds]);
@@ -185,6 +202,21 @@ export function CheckerForm({
             Bis zu {config.maxNames} Namen, mit Komma getrennt
           </p>
 
+          <div role="group" aria-labelledby={profileLabelId} className="mt-3 flex flex-wrap items-center gap-1.5">
+            <span id={profileLabelId} className="eyebrow mr-1.5">
+              Vorhaben
+            </span>
+            {profiles.map((p) => (
+              <Chip
+                key={p.id}
+                pressed={matchesProfile({ namespaces, tlds, extra, excluded }, p, config)}
+                onClick={() => onApplyProfile(p)}
+              >
+                {p.label}
+              </Chip>
+            ))}
+          </div>
+
           {showTokens && <NameTokens previews={previews} onRemove={removeName} />}
 
           {formError && (
@@ -196,7 +228,7 @@ export function CheckerForm({
 
         <details className="rounded-b-[1.3rem] border-t border-line bg-wash/50">
           <summary className="flex min-h-11 items-center justify-between gap-3 px-4 py-2 text-sm sm:px-6">
-            <span className="min-w-0 text-muted">{selectionSummary({ namespaces, tlds, extra }, config)}</span>
+            <span className="min-w-0 text-muted">{selectionSummary({ namespaces, tlds, extra, excluded }, config)}</span>
             <span className="inline-flex shrink-0 items-center gap-1 font-medium text-ink">
               Anpassen
               <Chevron />
@@ -214,6 +246,37 @@ export function CheckerForm({
                 ))}
               </div>
             </fieldset>
+
+            {standardGroups.length > 0 && (
+              <fieldset>
+                <legend className={LEGEND}>
+                  <span>Standardquellen</span>
+                  <span className={LEGEND_NOTE}>{excludedActive > 0 ? `${excludedActive} abgewählt` : "alle gewählt"}</span>
+                </legend>
+                <div className="space-y-2">
+                  {standardGroups.map((g) => {
+                    const on = namespaces.includes(g.ns);
+                    return (
+                      <div key={g.ns} className="flex flex-wrap items-center gap-1.5">
+                        <span className="mr-1.5 min-w-28 text-sm font-medium text-ink">{NAMESPACE_LABEL[g.ns]}</span>
+                        {g.list.map((s) => (
+                          <Chip
+                            key={s.id}
+                            pressed={on && !excluded.includes(s.id)}
+                            disabled={!on}
+                            onClick={() => onToggleStandard(s.id)}
+                            title={s.description}
+                          >
+                            {s.label}
+                          </Chip>
+                        ))}
+                        {!on && <span className="text-[13px] text-muted">Namensraum abgewählt</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </fieldset>
+            )}
 
             <fieldset disabled={!domainsOn} className="disabled:opacity-60">
               <legend className={LEGEND}>

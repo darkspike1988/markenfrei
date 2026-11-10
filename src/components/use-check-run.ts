@@ -2,9 +2,20 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { NameReport } from "@/lib/engine/check";
+import type { SourceResult } from "@/lib/engine/types";
 import { trackEvent } from "@/lib/analytics";
 import { buildQuery, buildRequestBody, type CheckerConfig, type Selection } from "@/components/checker-config";
-import { cancelRun, nextItem, type Item, type Outcome, type Run, type Waiting } from "@/components/check-run";
+import {
+  cancelRun,
+  mergeResults,
+  nextItem,
+  remainingFeaturedTlds,
+  tldBatches,
+  type Item,
+  type Outcome,
+  type Run,
+  type Waiting,
+} from "@/components/check-run";
 
 const CONCURRENCY = 3;
 
@@ -121,6 +132,59 @@ export function useCheckRun(config: CheckerConfig) {
     void checkOne(name, sel, abort.current.signal, id);
   }
 
+  /**
+   * „Übrige geprüfte Endungen ansehen“: prüft die kuratierten Endungen, die der Bericht noch nicht enthält,
+   * nacheinander in Gruppen von höchstens maxTlds (nur Domains, eine Anfrage nach der anderen) und fügt die
+   * neuen Zeilen dem Bericht hinzu. „Abbrechen“ beendet das; scheitert eine Anfrage, endet es mit einem
+   * Hinweis, und der Bericht behält, was bis dahin geprüft war.
+   */
+  async function extendTlds(key: string) {
+    const current = run?.items[key];
+    if (!run || !abort.current || current?.state !== "done" || current.extending) return;
+    const { id } = run;
+    const signal = abort.current.signal;
+    const name = current.report.name;
+    const remaining = remainingFeaturedTlds(current.report, config.featuredTlds);
+    if (remaining.length === 0) return;
+    const update = (change: (it: Extract<Item, { state: "done" }>) => Item) =>
+      setRun((r) => {
+        const it = r?.items[key];
+        if (!r || r.id !== id || it?.state !== "done") return r;
+        return { ...r, items: { ...r.items, [key]: change(it) } };
+      });
+
+    update((it) => ({ ...it, extending: { checked: 0, total: remaining.length }, extendError: undefined }));
+    let checked = 0;
+    for (const batch of tldBatches(remaining, config.maxTlds)) {
+      let rows: SourceResult[] = [];
+      let message: string | undefined;
+      try {
+        const res = await fetch("/api/check", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ names: [name], namespaces: ["domains"], tlds: batch }),
+          signal,
+        });
+        const json = (await res.json().catch(() => null)) as { error?: string; reports?: NameReport[] } | null;
+        if (signal.aborted) return;
+        if (!res.ok || !json?.reports?.[0]) message = json?.error ?? `Die Prüfung ist fehlgeschlagen (HTTP ${res.status}).`;
+        else rows = json.reports[0].results.filter((r) => r.namespace === "domains");
+      } catch {
+        if (signal.aborted) return;
+        message = "Keine Verbindung zum Server. Bitte erneut versuchen.";
+      }
+      if (runId.current !== id) return;
+      if (message !== undefined) {
+        const text = `Weitere Endungen konnten nicht geprüft werden: ${message}`;
+        update((it) => ({ ...it, extending: undefined, extendError: text }));
+        return;
+      }
+      checked += batch.length;
+      const progress = checked < remaining.length ? { checked, total: remaining.length } : undefined;
+      update((it) => ({ ...it, report: mergeResults(it.report, rows), extending: progress }));
+    }
+  }
+
   useEffect(
     () => () => {
       abort.current?.abort();
@@ -137,5 +201,5 @@ export function useCheckRun(config: CheckerConfig) {
     setRun((r) => (r ? cancelRun(r) : r));
   }
 
-  return { run, start, recheck, retry, cancel };
+  return { run, start, recheck, retry, cancel, extendTlds };
 }

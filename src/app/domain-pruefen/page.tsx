@@ -135,7 +135,8 @@ export default function DomainPruefenPage() {
         <p>
           Zur Auswahl stehen {DOMAIN_TLDS.length} Endungen, {rdapTlds.length} davon per RDAP und {DOH_ONLY_TLDS.length} nur
           per DNS. Vorausgewählt sind {DEFAULT_DOMAIN_TLDS.map((t) => "." + t).join(", ")}. Pro Prüfung gehen höchstens{" "}
-          {MAX_TLDS} Endungen und {MAX_NAMES} Namen.
+          {MAX_TLDS} Endungen und {MAX_NAMES} Namen. Im Ergebnis eines Namens holt „Übrige geprüfte Endungen ansehen“
+          die übrigen einzeln geprüften Endungen nach, in mehreren Anfragen nacheinander.
         </p>
         <p>
           Einzeln geprüft sind {FEATURED_TLDS.length} Endungen; sie stehen unten. Die übrigen {otherTlds} haben einen

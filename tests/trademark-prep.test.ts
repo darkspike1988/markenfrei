@@ -2,8 +2,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   buildDpmaExpertQuery,
+  NICE_CLASSES,
   spellingVariants,
   trademarkPrep,
+  trademarkPrepForSelection,
   TRADEMARK_PREP_NOTE,
 } from "@/lib/engine/trademark-prep";
 import { generatePhoneticTwins } from "@/lib/phonetics";
@@ -205,4 +207,65 @@ test("Checkliste: 5 bis 7 Schritte mit den DPMA-Empfehlungen", () => {
     assert.ok(all.includes(needle), needle);
   }
   assert.ok(all.includes("9, 42"));
+});
+
+/** Klassen im Suchstring als Zahlen, in der Reihenfolge des Strings */
+function queryClasses(query: string): number[] {
+  return [...query.matchAll(/KL=(\d{2})/g)].map((m) => Number(m[1]));
+}
+
+test("Klassenkatalog: alle 45 Nizza-Klassen der Reihe nach, jede mit Überschrift", () => {
+  assert.deepEqual(
+    NICE_CLASSES.map((c) => c.number),
+    Array.from({ length: 45 }, (_, i) => i + 1),
+  );
+  for (const c of NICE_CLASSES) assert.ok(c.heading.length > 0, `Klasse ${c.number}`);
+  const p = trademarkPrepForSelection("wachwerk", "", [3]);
+  assert.equal(p.classes[0].title, `Klasse 3 · ${NICE_CLASSES[2].heading}`);
+});
+
+test("Markenblock: ohne Beschreibung und ohne Auswahl genau die Vorbereitung vom Server", () => {
+  assert.deepEqual(trademarkPrepForSelection("wachwerk", "", null), trademarkPrep("wachwerk"));
+});
+
+test("Markenblock: Beschreibung ändert den Klassenvorschlag, Suchstring und Checkliste folgen", () => {
+  const p = trademarkPrepForSelection("wachwerk", "Online-Shop mit Chat", null);
+  assert.deepEqual(
+    p.classes.map((c) => c.number),
+    [9, 42, 35, 38],
+  );
+  assert.deepEqual(queryClasses(p.dpmaExpertQuery), [9, 42, 35, 38]);
+  assert.ok(p.checklist.join(" ").includes("Vorschlag: 9, 42, 35, 38"));
+});
+
+test("Markenblock: gewählte Klassen ersetzen den Vorschlag aus der Beschreibung", () => {
+  const p = trademarkPrepForSelection("wachwerk", "Online-Shop mit Chat", [42, 9, 35]);
+  assert.deepEqual(
+    p.classes.map((c) => c.number),
+    [9, 35, 42],
+  );
+  // Begründung aus dem Vorschlag bleibt, wo die Klasse vorgeschlagen ist
+  assert.match(p.classes[1].reason, /E-Commerce/);
+  assert.ok(p.checklist.join(" ").includes("9, 35, 42"));
+});
+
+test("Markenblock: der Suchstring enthält genau die gewählten Klassen", () => {
+  for (const chosen of [[9], [3, 25], [9, 35, 41, 44], [1, 45]]) {
+    const p = trademarkPrepForSelection("wachwerk", "Lern-App für Pflege", chosen);
+    assert.deepEqual(queryClasses(p.dpmaExpertQuery), chosen, chosen.join(","));
+  }
+});
+
+test("Markenblock: keine Klasse gewählt sucht ohne Klasseneinschränkung", () => {
+  const p = trademarkPrepForSelection("wachwerk", "Online-Shop", []);
+  assert.deepEqual(p.classes, []);
+  assert.deepEqual(queryClasses(p.dpmaExpertQuery), []);
+  assert.match(p.dpmaExpertQuery, /^\(MARKE=\?wachwerk\?( ODER MARKE=[^)]+)?\)$/);
+  assert.ok(p.checklist.join(" ").includes("noch keine gewählt"));
+  assert.deepEqual(p.variants, trademarkPrep("wachwerk").variants);
+  // API und MCP bleiben beim Vorschlag, wenn die Vorgabe leer ist
+  assert.deepEqual(
+    trademarkPrep("wachwerk", { classes: [] }).classes.map((c) => c.number),
+    [9, 42],
+  );
 });

@@ -1,12 +1,32 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { checkName } from "@/lib/engine/check";
-import { buildJsonExport, cancelRun, CANCELLED_MESSAGE, deriveRun, nextItem, type Item, type Run } from "@/components/check-run";
+import type { SourceResult, Status } from "@/lib/engine/types";
+import {
+  buildJsonExport,
+  cancelRun,
+  CANCELLED_MESSAGE,
+  deriveRun,
+  mergeResults,
+  nextItem,
+  remainingFeaturedTlds,
+  tldBatches,
+  type Item,
+  type Run,
+} from "@/components/check-run";
 
 // Berichte offline: nur die Marken-Heuristik (kein Netz).
 const report = (name: string) => checkName(name, { sources: ["known_brands"], namespaces: ["known_names"] });
 
-const sel = (names: string[]) => ({ names, namespaces: [], tlds: [], extra: [] });
+const sel = (names: string[]) => ({ names, namespaces: [], tlds: [], extra: [], excluded: [] });
+
+const domainRow = (tld: string, status: Status): SourceResult => ({
+  sourceId: `rdap:${tld}`,
+  namespace: "domains",
+  label: `.${tld}`,
+  target: `wachwerk.${tld}`,
+  status,
+});
 
 test("deriveRun: ohne Lauf alles leer, nicht fertig", () => {
   const v = deriveRun(null);
@@ -49,7 +69,7 @@ test("buildJsonExport: nur fertige Berichte in Eingabereihenfolge, mit Hinweis, 
   const [a, b] = await Promise.all([report("wachwerk"), report("github")]);
   const run: Run = {
     id: 3,
-    sel: { names: ["github", "wachwerk", "offen"], namespaces: ["known_names"], tlds: ["de"], extra: ["npm"] },
+    sel: { names: ["github", "wachwerk", "offen"], namespaces: ["known_names"], tlds: ["de"], extra: ["npm"], excluded: [] },
     items: { github: { state: "done", report: b }, wachwerk: { state: "done", report: a }, offen: { state: "loading" } },
   };
   const { data, reports } = buildJsonExport(run, "2026-11-07T10:00:00.000Z");
@@ -58,6 +78,78 @@ test("buildJsonExport: nur fertige Berichte in Eingabereihenfolge, mit Hinweis, 
   assert.match(data.note, /keine Rechtsberatung/);
   assert.deepEqual(data.query, { names: ["github", "wachwerk", "offen"], namespaces: ["known_names"], tlds: ["de"], sources: ["npm"] });
   assert.deepEqual(data.ranking.map((e) => e.name), ["wachwerk", "github"]);
+});
+
+test("buildJsonExport: abgewählte Standardquellen stehen in der Abfrage, wenn es welche gibt", async () => {
+  const r = await report("wachwerk");
+  const run: Run = {
+    id: 4,
+    sel: { names: ["wachwerk"], namespaces: ["packages"], tlds: ["de"], extra: ["pub"], excluded: ["npm"] },
+    items: { wachwerk: { state: "done", report: r } },
+  };
+  assert.deepEqual(buildJsonExport(run, "2026-11-07T10:00:00.000Z").data.query.excludedSources, ["npm"]);
+});
+
+test("mergeResults: neue Endung „vergeben“ macht aus Grün Rot, Zählung und Ampeltext folgen", async () => {
+  const free = await report("wachwerk");
+  assert.equal(free.verdict, "green");
+  const merged = mergeResults(free, [domainRow("shop", "not_found"), domainRow("xyz", "taken")]);
+  assert.equal(merged.verdict, "red");
+  assert.equal(merged.verdictLabel, "Vergeben");
+  assert.equal(merged.counts.taken, 1);
+  assert.equal(merged.counts.not_found, free.counts.not_found + 1);
+  assert.deepEqual(merged.results.slice(-2).map((r) => r.sourceId), ["rdap:shop", "rdap:xyz"], "angehängt");
+  assert.equal(free.results.length, merged.results.length - 2, "der alte Bericht bleibt unverändert");
+});
+
+test("mergeResults: Zeilen ohne Antwort landen in incomplete und machen Grün zu Gelb", async () => {
+  const free = await report("wachwerk");
+  const merged = mergeResults(free, [domainRow("at", "unknown")]);
+  assert.equal(merged.verdict, "yellow");
+  assert.deepEqual(merged.incomplete, [".at"]);
+  assert.equal(merged.counts.unknown, 1);
+});
+
+test("mergeResults: zweimal dasselbe einfügen fügt nichts hinzu, vorhandene Quellen bleiben, wie sie sind", async () => {
+  const free = await report("wachwerk");
+  const once = mergeResults(free, [domainRow("shop", "not_found")]);
+  const twice = mergeResults(once, [domainRow("shop", "taken")]);
+  assert.equal(twice, once);
+  assert.equal(twice.results.filter((r) => r.sourceId === "rdap:shop").length, 1);
+  assert.equal(mergeResults(free, []), free);
+});
+
+test("remainingFeaturedTlds und tldBatches: fehlende kuratierte Endungen in Gruppen von höchstens max", async () => {
+  const r = mergeResults(await report("wachwerk"), [domainRow("de", "not_found"), domainRow("com", "taken")]);
+  assert.deepEqual(remainingFeaturedTlds(r, ["de", "com", "net", "org", "io"]), ["net", "org", "io"]);
+  assert.deepEqual(tldBatches(["a", "b", "c", "d", "e"], 2), [["a", "b"], ["c", "d"], ["e"]]);
+  assert.deepEqual(tldBatches([], 8), []);
+});
+
+test("nextItem: eine neue Antwort behält nachgeprüfte Endungen des alten Berichts", async () => {
+  const [old, fresh] = await Promise.all([report("wachwerk"), report("wachwerk")]);
+  const extended = mergeResults(old, [domainRow("shop", "taken")]);
+  const next = nextItem({ state: "done", report: extended }, { ok: true, report: fresh });
+  assert.equal(next.state, "done");
+  if (next.state !== "done") return;
+  assert.ok(next.report.results.some((r) => r.sourceId === "rdap:shop"));
+  assert.equal(next.report.verdict, "red");
+  assert.equal(next.report.checkedAt, fresh.checkedAt);
+});
+
+test("deriveRun: Nachprüfen weiterer Endungen hält den Lauf im Zustand „läuft“, Abbrechen beendet es", async () => {
+  const r = await report("wachwerk");
+  const run: Run = {
+    id: 7,
+    sel: sel(["wachwerk"]),
+    items: { wachwerk: { state: "done", report: r, extending: { checked: 8, total: 28 } } },
+  };
+  const v = deriveRun(run);
+  assert.equal(v.extending, true);
+  assert.equal(v.signal, "checking");
+  const cancelled = deriveRun(cancelRun(run));
+  assert.equal(cancelled.extending, false);
+  assert.equal(cancelled.signal, "green");
 });
 
 test("nextItem: erster Fehler ohne Vorgänger oder während des Ladens ist ein Fehler", () => {
@@ -125,4 +217,38 @@ test("cancelRun: offene Namen werden zu Fehlerzeilen, Berichte bleiben, Nachprü
   assert.equal(view.rechecking, false);
   assert.notEqual(view.signal, "checking");
   assert.equal(run.items.offen.state, "loading", "der ursprüngliche Lauf bleibt unverändert");
+});
+
+import { changeLines, isSettled } from "@/components/check-run";
+
+test("isSettled: erst ohne offene Namen, Nachprüfen und Endungen in Arbeit, und nur mit einem Bericht", async () => {
+  const r = await report("wachwerk");
+  const settledFor = (items: Record<string, Item>) => isSettled(deriveRun({ id: 1, sel: sel(Object.keys(items)), items }));
+  assert.equal(isSettled(deriveRun(null)), false);
+  assert.equal(settledFor({ wachwerk: { state: "done", report: r } }), true);
+  assert.equal(settledFor({ wachwerk: { state: "done", report: r }, planzeit: { state: "loading" } }), false);
+  assert.equal(settledFor({ wachwerk: { state: "done", report: r, waiting: { attempt: 1, max: 6 } } }), false);
+  assert.equal(settledFor({ wachwerk: { state: "done", report: r, rechecking: true } }), false);
+  assert.equal(settledFor({ wachwerk: { state: "done", report: r, extending: { checked: 0, total: 3 } } }), false);
+  assert.equal(settledFor({ wachwerk: { state: "error", message: "x" } }), false);
+  assert.equal(settledFor({ wachwerk: { state: "done", report: r }, kaputt: { state: "error", message: "x" } }), true);
+});
+
+test("changeLines: Name · Beschriftung aus dem Bericht: alter → neuer Status; unbekannte Quelle mit ID", async () => {
+  const r = mergeResults(await report("wachwerk"), [domainRow("com", "taken")]);
+  const lines = changeLines(
+    [
+      { name: "wachwerk", sourceId: "rdap:com", from: { status: "not_found", weak: false }, to: { status: "taken", weak: false } },
+      { name: "wachwerk", sourceId: "known_brands", from: { status: "taken", weak: true }, to: { status: "taken", weak: false } },
+      { name: "wachwerk", sourceId: "weg", from: { status: "similar", weak: false }, to: { status: "invalid", weak: false } },
+    ],
+    [r],
+  );
+  const brands = r.results.find((x) => x.sourceId === "known_brands")?.label;
+  assert.ok(brands);
+  assert.deepEqual(lines, [
+    "wachwerk · .com: nicht gefunden → vergeben",
+    `wachwerk · ${brands}: vergeben (schwaches Signal) → vergeben`,
+    "wachwerk · weg: ähnlich → nicht zulässig",
+  ]);
 });

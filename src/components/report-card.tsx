@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { NameReport } from "@/lib/engine/check";
 import type { SourceResult } from "@/lib/engine/types";
 import { NAMESPACE_LABEL, NAMESPACES } from "@/lib/engine/types";
 import { rankReports, STATUS_LABEL } from "@/lib/engine/verdict";
+import { alternativeNames } from "@/lib/insights";
+import type { Extending } from "@/components/check-run";
 import { Chevron } from "@/components/chevron";
 import { statusLamp, StatusText, VerdictBadge } from "@/components/status-badge";
 import { MatchList } from "@/components/match-list";
@@ -21,8 +23,13 @@ export function reportAnchor(name: string): string {
 
 export const QUIET_BUTTON = "btn-quiet";
 
-/** Eine Zeile je Quelle: Name, Status, Link. Das Ziel (z. B. Paketname) steht auf kleinen Schirmen darunter. */
-function SourceRow({ r, name, note }: { r: SourceResult; name: string; note?: string }) {
+/**
+ * Eine Zeile je Quelle: Name, Status, Link. Das Ziel (z. B. Paketname) steht auf kleinen Schirmen darunter.
+ * Mit `showEvidence` steht der technische Beleg der Quelle (z. B. „HTTP 404“) klein darunter. Hat die Zeile
+ * einen Registrierungs-Link des Betreibers (`register`), steht er neben „prüfen“, gleich unauffällig und
+ * als `sponsored` gekennzeichnet; den Hinweis dazu zeigt die Gruppe.
+ */
+function SourceRow({ r, name, note, showEvidence }: { r: SourceResult; name: string; note?: string; showEvidence: boolean }) {
   const showTarget = r.namespace !== "domains" && r.target !== name && r.target !== r.label;
   return (
     <li className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 border-b border-line/70 py-2 last:border-b-0">
@@ -56,45 +63,82 @@ function SourceRow({ r, name, note }: { r: SourceResult; name: string; note?: st
         ) : (
           <span className="min-w-14" aria-hidden />
         )}
+        {r.register && (
+          <a
+            href={r.register.url}
+            target="_blank"
+            rel="sponsored noopener"
+            aria-label={`${r.register.label}: ${r.target}`}
+            className="inline-flex min-h-6 items-center gap-1 text-sm text-soft underline decoration-line-strong hover:text-ink hover:decoration-ink"
+          >
+            registrieren
+            <svg aria-hidden viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 2h6v6M10 2 2.5 9.5" />
+            </svg>
+          </a>
+        )}
       </div>
       {note && <p className="col-span-2 text-[13px] leading-snug text-muted">{note}</p>}
+      {showEvidence && r.evidence && (
+        <p className="col-span-2 font-mono text-xs leading-snug text-muted [overflow-wrap:anywhere]">
+          <span className="font-sans">Beleg:</span> {r.evidence}
+        </p>
+      )}
       {r.matches && r.matches.length > 0 && <MatchList matches={r.matches} name={name} />}
     </li>
   );
 }
 
-/** Gruppenkopf: kleine Beschriftung mit feiner Linie; Hinweise zu „nicht gefunden“ auf Abruf. */
+/** „Übrige geprüfte Endungen ansehen“ in der Gruppe Domains: was noch fehlt, Fortschritt und Fehler. */
+type DomainExtension = {
+  /** Kuratierte Endungen, die der Bericht noch nicht enthält */
+  remaining: number;
+  extending?: Extending;
+  error?: string;
+  onExtend: () => void;
+};
+
+/**
+ * Gruppenkopf: kleine Beschriftung mit feiner Linie; Hinweise zu „nicht gefunden“ und die Belege der
+ * Quellen auf Abruf. In der Gruppe Domains auf Wunsch die übrigen geprüften Endungen.
+ */
 function SourceGroup({
   ns,
   rows,
   name,
   findingsOnly,
+  extension,
 }: {
   ns: (typeof NAMESPACES)[number];
   rows: SourceResult[];
   name: string;
   findingsOnly: boolean;
+  extension?: DomainExtension;
 }) {
   const notesId = useId();
+  const listId = useId();
   const [showHidden, setShowHidden] = useState(false);
   const notes: GroupNotes = groupNotes(rows);
   const shown = findingsOnly ? rows.filter((r) => r.status !== "not_found") : rows;
   const concealed = rows.length - shown.length;
+  const hasDetails = notes.hidden.length > 0 || rows.some((r) => r.evidence);
+  // Hinweis zu Registrierungs-Links nur, solange eine Zeile mit Link sichtbar ist (nicht bei „Nur Auffälliges“).
+  const registerNotice = shown.find((r) => r.register)?.register?.notice;
 
   return (
     <section aria-label={NAMESPACE_LABEL[ns]}>
       <div className="flex items-center gap-3">
         <h4 className="eyebrow">{NAMESPACE_LABEL[ns]}</h4>
         <span aria-hidden className="h-px flex-1 bg-line" />
-        {notes.hidden.length > 0 && (
+        {hasDetails && (
           <button
             type="button"
             aria-expanded={showHidden}
-            aria-controls={notesId}
+            aria-controls={shown.length > 0 ? `${notesId} ${listId}` : notesId}
             onClick={() => setShowHidden((v) => !v)}
             className="inline-flex min-h-6 items-center text-xs text-muted underline hover:text-ink"
           >
-            Hinweise<span className="sr-only"> zu {NAMESPACE_LABEL[ns]}</span>
+            Hinweise und Belege<span className="sr-only"> zu {NAMESPACE_LABEL[ns]}</span>
           </button>
         )}
       </div>
@@ -104,11 +148,22 @@ function SourceGroup({
         </p>
       ))}
       {shown.length > 0 && (
-        <ul className="mt-1">
+        <ul id={listId} className="mt-1">
           {shown.map((r) => (
-            <SourceRow key={r.sourceId} r={r} name={name} note={notes.inline.get(r.sourceId)} />
+            <SourceRow
+              key={r.sourceId}
+              r={r}
+              name={name}
+              note={notes.inline.get(r.sourceId)}
+              showEvidence={showHidden}
+            />
           ))}
         </ul>
+      )}
+      {registerNotice && (
+        <p className="mt-1.5 text-[13px] leading-snug text-muted">
+          <span className="font-medium text-soft">Anzeige:</span> {registerNotice}
+        </p>
       )}
       {concealed > 0 && (
         <p className="mt-1.5 text-[13px] text-muted">
@@ -127,6 +182,61 @@ function SourceGroup({
           </ul>
         )}
       </div>
+      {extension && (extension.remaining > 0 || extension.extending || extension.error) && (
+        <div className="mt-3 space-y-1.5 print:hidden">
+          {(extension.remaining > 0 || extension.extending) && (
+            <button
+              type="button"
+              onClick={extension.onExtend}
+              disabled={extension.extending !== undefined}
+              className="btn btn-secondary btn-sm"
+            >
+              {extension.extending
+                ? `Prüfe Endungen … ${extension.extending.checked} von ${extension.extending.total}`
+                : `Übrige geprüfte Endungen ansehen (${extension.remaining})`}
+            </button>
+          )}
+          {extension.error && (
+            <p role="status" className="text-[13px] text-warn">
+              {extension.error}
+            </p>
+          )}
+          <p className="text-[13px] text-muted">
+            Fragt nur Domains für diesen Namen ab, nacheinander. Der Link enthält diese Endungen nicht.
+          </p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/**
+ * Ausweichnamen bei einem Treffer oder einer Lücke: feste Muster aus `alternativeNames`, ungeprüft, bis
+ * jemand „Ausweichnamen prüfen“ drückt. Vorher geht keine Anfrage hinaus.
+ */
+function Alternatives({ name, onCheck }: { name: string; onCheck: (original: string, alternatives: string[]) => void }) {
+  const headingId = useId();
+  const alternatives = useMemo(() => alternativeNames(name), [name]);
+  if (alternatives.length === 0) return null;
+  return (
+    <section aria-labelledby={headingId} className="space-y-2 print:hidden">
+      <h4 id={headingId} className="eyebrow">
+        Ausweichnamen
+      </h4>
+      <ul className="flex flex-wrap gap-1.5">
+        {alternatives.map((a) => (
+          <li key={a} className="tag">
+            {a}
+          </li>
+        ))}
+      </ul>
+      <p className="max-w-2xl text-[13px] text-muted">
+        Nach festen Mustern gebildet und noch nicht geprüft. Ein Klick ersetzt die Liste im Namensfeld durch {name} und
+        diese Namen und prüft sie.
+      </p>
+      <button type="button" onClick={() => onCheck(name, alternatives)} className="btn btn-secondary btn-sm">
+        Ausweichnamen prüfen
+      </button>
     </section>
   );
 }
@@ -168,6 +278,11 @@ export function ReportEntry({
   findingsOnly = false,
   onRecheck,
   onCheckVariants,
+  onCheckAlternatives,
+  remainingTlds = [],
+  extending,
+  extendError,
+  onExtendTlds,
 }: {
   report: NameReport;
   /** Anfangszustand; gilt endgültig, sobald `settled` und der Nutzer den Eintrag nicht selbst bedient hat */
@@ -184,6 +299,16 @@ export function ReportEntry({
   onRecheck?: () => void;
   /** „Tippfehler-Varianten prüfen“: Original plus gewählte Varianten als Shortlist */
   onCheckVariants?: (original: string, variants: string[]) => void;
+  /** „Ausweichnamen prüfen“: Original plus Ausweichnamen als neue Shortlist; ohne diese Funktion kein Block */
+  onCheckAlternatives?: (original: string, alternatives: string[]) => void;
+  /** Kuratierte Endungen, die der Bericht noch nicht enthält */
+  remainingTlds?: readonly string[];
+  /** Gesetzt, solange weitere Endungen nachgeprüft werden */
+  extending?: Extending;
+  /** Das Nachprüfen weiterer Endungen ist gescheitert */
+  extendError?: string;
+  /** „Übrige geprüfte Endungen ansehen“ */
+  onExtendTlds?: () => void;
 }) {
   const anchor = reportAnchor(report.name);
   const [open, setOpen] = useState(defaultOpen);
@@ -271,7 +396,27 @@ export function ReportEntry({
 
         <div className="grid gap-x-10 gap-y-6 md:grid-cols-2">
           {groups.map((g) => (
-            <SourceGroup key={g.ns} ns={g.ns} rows={g.rows} name={report.name} findingsOnly={findingsOnly} />
+            <SourceGroup
+              key={g.ns}
+              ns={g.ns}
+              rows={g.rows}
+              name={report.name}
+              findingsOnly={findingsOnly}
+              extension={
+                g.ns === "domains" && onExtendTlds
+                  ? {
+                      remaining: remainingTlds.length,
+                      extending,
+                      error: extendError,
+                      // Wer hier klickt, bedient den Eintrag: er bleibt offen, auch wenn sich die Rangfolge ändert.
+                      onExtend: () => {
+                        touched.current = true;
+                        onExtendTlds();
+                      },
+                    }
+                  : undefined
+              }
+            />
           ))}
         </div>
 
@@ -287,6 +432,10 @@ export function ReportEntry({
               </span>
             ))}
           </p>
+        )}
+
+        {report.verdict !== "green" && onCheckAlternatives && (
+          <Alternatives name={report.name} onCheck={onCheckAlternatives} />
         )}
 
         <div>

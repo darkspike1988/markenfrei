@@ -4,6 +4,7 @@
  */
 import { NAMESPACES, type Namespace } from "@/lib/engine/types";
 import { normalizeName } from "@/lib/name";
+import { buildProfiles } from "@/lib/profiles";
 
 export type SourceInfo = {
   id: string;
@@ -34,6 +35,8 @@ export type Selection = {
   tlds: string[];
   /** Zusätzliche, nicht standardmäßige Quellen */
   extra: string[];
+  /** Abgewählte Standardquellen (gelten nur, solange ihr Namensraum gewählt ist) */
+  excluded: string[];
 };
 
 /** Trennt die Eingabe an Komma und Zeilenumbruch, ohne Leereinträge und Dubletten. */
@@ -61,7 +64,7 @@ function sameSet(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((x) => b.includes(x));
 }
 
-/** Liest ?q=a,b&tld=de,com&ns=domains,packages&src=nuget. Unbekanntes wird ignoriert. */
+/** Liest ?q=a,b&tld=de,com&ns=domains,packages&src=nuget&x=homebrew. Unbekanntes wird ignoriert. */
 export function parseSelection(params: URLSearchParams, config: CheckerConfig): Selection {
   const names = splitNames(list(params.get("q")).join(","));
   const nsAllowed = config.namespaces.map((n) => n.id);
@@ -74,8 +77,10 @@ export function parseSelection(params: URLSearchParams, config: CheckerConfig): 
         .slice(0, config.maxTlds)
     : [...config.defaultTlds];
   const optional = new Set(config.sources.filter((s) => !s.defaultEnabled).map((s) => s.id));
+  const standard = new Set(config.sources.filter((s) => s.defaultEnabled).map((s) => s.id));
   const extra = [...new Set(list(params.get("src")))].filter((id) => optional.has(id));
-  return { names, namespaces: ns, tlds: tlds.length ? tlds : [...config.defaultTlds], extra };
+  const excluded = [...new Set(list(params.get("x")))].filter((id) => standard.has(id));
+  return { names, namespaces: ns, tlds: tlds.length ? tlds : [...config.defaultTlds], extra, excluded };
 }
 
 /** Baut den Query-String; Standardwerte werden weggelassen, damit Links kurz bleiben. */
@@ -85,18 +90,39 @@ export function buildQuery(sel: Selection, config: CheckerConfig): string {
   if (!sameSet(sel.namespaces, config.defaultNamespaces)) p.set("ns", sel.namespaces.join(","));
   if (!sameSet(sel.tlds, config.defaultTlds)) p.set("tld", sel.tlds.join(","));
   if (sel.extra.length) p.set("src", sel.extra.join(","));
+  if (sel.excluded.length) p.set("x", sel.excluded.join(","));
   // Kommas lesbar lassen
   return p.toString().replace(/%2C/gi, ",");
 }
 
+type SourceChoice = Pick<Selection, "namespaces" | "extra" | "excluded">;
+
+/** Standardquellen der gewählten Namensräume, die nicht abgewählt sind. */
+function keptStandard(sel: SourceChoice, config: Pick<CheckerConfig, "sources">): string[] {
+  return config.sources
+    .filter((s) => s.defaultEnabled && sel.namespaces.includes(s.namespace) && !sel.excluded.includes(s.id))
+    .map((s) => s.id);
+}
+
+/**
+ * Alle Quellen außer Domains, die eine Auswahl abfragt: die nicht abgewählten Standardquellen der
+ * gewählten Namensräume, dann die zusätzlichen Quellen. Nur IDs aus der Konfiguration.
+ */
+export function selectedSources(sel: SourceChoice, config: Pick<CheckerConfig, "sources">): string[] {
+  const kept = keptStandard(sel, config);
+  const known = new Set(config.sources.map((s) => s.id));
+  return [...kept, ...sel.extra.filter((id) => known.has(id) && !kept.includes(id))];
+}
+
 /**
  * Anfragekörper für /api/check. Die Engine ersetzt mit `sources` die Standardauswahl
- * außerhalb von Domains, daher gehen bei zusätzlichen Quellen die Standardquellen der
- * gewählten Namensräume mit.
+ * außerhalb von Domains. Deshalb geht `sources` nur mit, wenn die Auswahl vom Standard der
+ * gewählten Namensräume abweicht (zusätzliche oder abgewählte Quellen), und enthält dann
+ * alle abzufragenden Quellen.
  */
 export function buildRequestBody(
   name: string,
-  sel: Pick<Selection, "namespaces" | "tlds" | "extra">,
+  sel: Pick<Selection, "namespaces" | "tlds" | "extra" | "excluded">,
   config: CheckerConfig,
 ): { names: string[]; namespaces?: Namespace[]; tlds?: string[]; sources?: string[] } {
   const wantsDomains = sel.namespaces.includes("domains");
@@ -107,34 +133,97 @@ export function buildRequestBody(
     namespaces,
   };
   if (wantsDomains) body.tlds = sel.tlds;
-  if (sel.extra.length) {
-    const defaults = config.sources
-      .filter((s) => s.defaultEnabled && sel.namespaces.includes(s.namespace))
-      .map((s) => s.id);
-    body.sources = [...defaults, ...sel.extra.filter((id) => !defaults.includes(id))];
-  }
+  const narrowed = config.sources.some(
+    (s) => s.defaultEnabled && sel.namespaces.includes(s.namespace) && sel.excluded.includes(s.id),
+  );
+  if (sel.extra.length || narrowed) body.sources = selectedSources(sel, config);
   return body;
 }
 
 /** Prüft, ob die Auswahl überhaupt eine Quelle ergibt. */
-export function hasAnySource(sel: Pick<Selection, "namespaces" | "extra">): boolean {
-  return sel.namespaces.length > 0 || sel.extra.length > 0;
+export function hasAnySource(sel: SourceChoice, config: Pick<CheckerConfig, "sources">): boolean {
+  return sel.namespaces.includes("domains") || selectedSources(sel, config).length > 0;
 }
 
 /**
- * Eine ruhige Zeile für die aktuelle Auswahl, z. B. „Domains, Pakete · .de .com · +2 weitere Quellen“.
- * Dient auch Screenreadern als Zusammenfassung hinter dem Schalter „Anpassen“.
+ * Eine ruhige Zeile für die aktuelle Auswahl, z. B. „Domains, Pakete (2 von 5) · .de .com · +2 weitere Quellen“.
+ * Ein Namensraum mit abgewählten Standardquellen nennt, wie viele davon bleiben; einer ohne
+ * verbleibende Standardquelle fehlt. Dient auch Screenreadern als Zusammenfassung hinter dem Schalter „Anpassen“.
  */
 export function selectionSummary(
-  sel: Pick<Selection, "namespaces" | "tlds" | "extra">,
-  config: Pick<CheckerConfig, "namespaces">,
+  sel: Pick<Selection, "namespaces" | "tlds" | "extra" | "excluded">,
+  config: Pick<CheckerConfig, "namespaces" | "sources">,
 ): string {
-  const labels = config.namespaces.filter((n) => sel.namespaces.includes(n.id)).map((n) => n.label);
+  const labels = config.namespaces
+    .filter((n) => sel.namespaces.includes(n.id))
+    .flatMap((n) => {
+      const standard = config.sources.filter((s) => s.defaultEnabled && s.namespace === n.id);
+      const kept = standard.filter((s) => !sel.excluded.includes(s.id)).length;
+      if (kept === standard.length) return [n.label];
+      return kept > 0 ? [`${n.label} (${kept} von ${standard.length})`] : [];
+    });
   const parts: string[] = [];
   if (labels.length) parts.push(labels.join(", "));
   if (sel.namespaces.includes("domains") && sel.tlds.length) parts.push(sel.tlds.map((t) => `.${t}`).join(" "));
   if (sel.extra.length) parts.push(`+${sel.extra.length} ${sel.extra.length === 1 ? "weitere Quelle" : "weitere Quellen"}`);
   return parts.join(" · ") || "Keine Quelle gewählt";
+}
+
+/** Ein Vorhaben in der Form der Oberfläche: dieselben Felder wie eine Auswahl ohne Namen. */
+export type Profile = {
+  id: string;
+  label: string;
+  namespaces: Namespace[];
+  tlds: string[];
+  extra: string[];
+  excluded: string[];
+};
+
+/**
+ * Die Vorhaben aus `src/lib/profiles.ts` für die Chip-Reihe im Formular. Aus der Quellenliste des
+ * Vorhabens werden Zusatzquellen (`extra`) und abgewählte Standardquellen (`excluded`); Namensräume,
+ * die sich nicht umschalten lassen, fallen weg; Endungen werden auf wählbare und `maxTlds` begrenzt,
+ * ohne Domains gelten die Standard-Endungen.
+ */
+export function checkerProfiles(config: CheckerConfig): Profile[] {
+  const allowedNs = config.namespaces.map((n) => n.id);
+  const byId = new Map(config.sources.map((s) => [s.id, s]));
+  return buildProfiles(config.sources, config.defaultTlds).map((p): Profile => {
+    const namespaces = p.namespaces.filter((ns) => allowedNs.includes(ns));
+    const sources = p.sources.filter((id) => byId.has(id));
+    const tlds = (p.tlds ?? []).filter((t) => config.tlds.includes(t)).slice(0, config.maxTlds);
+    return {
+      id: p.id,
+      label: p.label,
+      namespaces,
+      tlds: tlds.length ? tlds : [...config.defaultTlds],
+      extra: sources.filter((id) => !byId.get(id)!.defaultEnabled),
+      excluded: config.sources
+        .filter((s) => s.defaultEnabled && namespaces.includes(s.namespace) && !sources.includes(s.id))
+        .map((s) => s.id),
+    };
+  });
+}
+
+/**
+ * Entspricht die Auswahl dem Vorhaben? Verglichen wird, was abgefragt würde: Namensräume, Quellen
+ * und, wenn Domains gewählt sind, die Endungen. Reihenfolge und wirkungslose Abwahlen zählen nicht.
+ */
+export function matchesProfile(
+  sel: Pick<Selection, "namespaces" | "tlds" | "extra" | "excluded">,
+  profile: Profile,
+  config: Pick<CheckerConfig, "sources">,
+): boolean {
+  if (!sameSet(sel.namespaces, profile.namespaces)) return false;
+  if (!sameSet(selectedSources(sel, config), selectedSources(profile, config))) return false;
+  return !sel.namespaces.includes("domains") || sameSet(sel.tlds, profile.tlds);
+}
+
+/** Standardquellen je umschaltbarem Namensraum, in der Reihenfolge der Namensräume. */
+export function groupStandard(config: Pick<CheckerConfig, "namespaces" | "sources">): { ns: Namespace; list: SourceInfo[] }[] {
+  return config.namespaces
+    .map((n) => ({ ns: n.id, list: config.sources.filter((s) => s.defaultEnabled && s.namespace === n.id) }))
+    .filter((g) => g.list.length > 0);
 }
 
 const COUNTRY_TLDS = ["de", "ch", "li", "at", "eu", "fr", "uk", "nl", "pl", "cz", "ca", "io", "ai", "tv"];

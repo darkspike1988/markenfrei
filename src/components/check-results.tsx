@@ -4,9 +4,11 @@ import type { RefObject } from "react";
 import Link from "next/link";
 import { EXPORT_DISCLAIMER } from "@/lib/export";
 import { VERDICT_LABEL, type Verdict } from "@/lib/engine/verdict";
-import type { Run, RunView } from "@/components/check-run";
+import { withSharedFragment } from "@/lib/snapshot-link";
+import { remainingFeaturedTlds, type Run, type RunView } from "@/components/check-run";
 import { Chevron } from "@/components/chevron";
 import { Chip } from "@/components/chip";
+import { ChangesNotice } from "@/components/changes-notice";
 import { CopyButton } from "@/components/copy-button";
 import { Menu } from "@/components/menu";
 import { MatrixView } from "@/components/matrix-view";
@@ -44,6 +46,11 @@ export function CheckResults({
   findingsOnly,
   onFindingsOnlyChange,
   checkTypoVariants,
+  checkAlternatives,
+  extendTlds,
+  featuredTlds,
+  notice,
+  standData,
 }: {
   run: Run | null;
   view: RunView;
@@ -62,8 +69,18 @@ export function CheckResults({
   findingsOnly: boolean;
   onFindingsOnlyChange: (value: boolean) => void;
   checkTypoVariants: (original: string, variants: string[]) => void;
+  /** „Ausweichnamen prüfen“: Original plus Ausweichnamen als neue Shortlist */
+  checkAlternatives: (original: string, alternatives: string[]) => void;
+  /** „Übrige geprüfte Endungen ansehen“ für den Eintrag mit diesem Schlüssel */
+  extendTlds: (key: string) => void;
+  featuredTlds: readonly string[];
+  /** Vergleich mit der letzten Prüfung derselben Auswahl (Verlauf): Zeitpunkt und je Änderung eine Zeile */
+  notice?: { at: string; lines: string[] } | null;
+  /** Fertiger Stand für „Stand kopieren“ (Text hinter `#stand=`); ohne ihn keine Schaltfläche */
+  standData?: string | null;
 }) {
-  const { names, done, pending, failed, ranking, ranked, latestCheck, finished, rechecking, tally, firstOpen } = view;
+  const { names, done, pending, failed, ranking, ranked, latestCheck, finished, rechecking, extending, tally, firstOpen } =
+    view;
   const showMatrix = mode === "matrix" && ranked.length > 1;
   const settled = names.length - pending.length;
 
@@ -103,16 +120,18 @@ export function CheckResults({
             )}
           </div>
 
-          {(!finished || rechecking) && (
+          {(!finished || rechecking || extending) && (
             <div className="flex items-center gap-4 print:hidden">
               <div className="min-w-0 flex-1">
                 <div className="progress" aria-hidden>
                   <span style={{ width: `${names.length ? (settled / names.length) * 100 : 0}%` }} />
                 </div>
                 <p className="mt-1.5 text-sm text-muted">
-                  {finished
-                    ? "Quellen ohne Antwort werden erneut geprüft …"
-                    : `${settled} von ${names.length} ${names.length === 1 ? "Name" : "Namen"} geprüft`}
+                  {!finished
+                    ? `${settled} von ${names.length} ${names.length === 1 ? "Name" : "Namen"} geprüft`
+                    : rechecking
+                      ? "Quellen ohne Antwort werden erneut geprüft …"
+                      : "Weitere Endungen werden geprüft …"}
                 </p>
               </div>
               <button type="button" onClick={cancel} className="btn btn-secondary btn-sm">
@@ -146,6 +165,9 @@ export function CheckResults({
               </div>
               <div role="group" aria-label="Weitergeben" className="-mx-1 flex flex-wrap items-center">
                 <CopyButton text={() => window.location.href} label="Link kopieren" />
+                {standData && (
+                  <CopyButton text={() => withSharedFragment(window.location.href, standData)} label="Stand kopieren" />
+                )}
                 <Menu
                   className={QUIET_BUTTON}
                   items={[
@@ -164,6 +186,8 @@ export function CheckResults({
               </div>
             </div>
           )}
+
+          {notice && <ChangesNotice at={notice.at} lines={notice.lines} />}
 
           {showMatrix && (
             <div className="print:hidden">
@@ -191,6 +215,11 @@ export function CheckResults({
                   findingsOnly={findingsOnly}
                   onRecheck={() => recheck(key)}
                   onCheckVariants={checkTypoVariants}
+                  onCheckAlternatives={checkAlternatives}
+                  remainingTlds={remainingFeaturedTlds(it.report, featuredTlds)}
+                  extending={it.extending}
+                  extendError={it.extendError}
+                  onExtendTlds={() => extendTlds(key)}
                 />
               );
             })}

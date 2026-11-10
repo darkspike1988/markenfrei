@@ -2,7 +2,15 @@
 
 import { useMemo, useRef, useSyncExternalStore } from "react";
 import { Chevron } from "@/components/chevron";
-import { addHistory, HISTORY_KEY, historyNames, MAX_HISTORY, parseHistory } from "@/lib/history";
+import {
+  addHistory,
+  HISTORY_KEY,
+  historyNames,
+  MAX_HISTORY,
+  parseHistory,
+  setHistoryResults,
+  type HistorySnapshot,
+} from "@/lib/history";
 
 const DATE = new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short" });
 
@@ -45,14 +53,31 @@ function store(value: string | null) {
   for (const l of listeners) l();
 }
 
+/** Ergebnis einer früheren Prüfung derselben Auswahl, mit dem eine Wiederholung verglichen wird. */
+export type CheckBaseline = { at: string; results: HistorySnapshot };
+
 /**
  * Merkt sich eine Prüfung (Query-Teil des Links), aber nur, wenn der Verlauf eingeschaltet ist. Ohne
- * Eintrag unter HISTORY_KEY wird nichts geschrieben.
+ * Eintrag unter HISTORY_KEY wird nichts geschrieben. Gibt Zeitpunkt und Ergebnis der letzten Prüfung
+ * derselben Auswahl zurück, bevor dieser Eintrag ersetzt wird (`null` ohne gespeichertes Ergebnis).
  */
-export function recordCheck(query: string, at = new Date().toISOString()) {
+export function recordCheck(query: string, at = new Date().toISOString()): CheckBaseline | null {
+  const raw = getSnapshot();
+  if (raw === null) return null;
+  const entries = parseHistory(raw) ?? [];
+  const previous = entries.find((e) => e.query === query);
+  store(JSON.stringify(addHistory(entries, query, at)));
+  return previous?.results ? { at: previous.at, results: previous.results } : null;
+}
+
+/** Legt das Ergebnis einer fertigen Prüfung im Eintrag dieser Auswahl ab; ohne Verlauf oder Eintrag nichts. */
+export function recordResults(query: string, results: HistorySnapshot) {
   const raw = getSnapshot();
   if (raw === null) return;
-  store(JSON.stringify(addHistory(parseHistory(raw) ?? [], query, at)));
+  const entries = parseHistory(raw) ?? [];
+  if (!entries.some((e) => e.query === query)) return;
+  const next = JSON.stringify(setHistoryResults(entries, query, results));
+  if (next !== raw) store(next);
 }
 
 /** „Zuletzt geprüft“: Verlauf nur auf diesem Gerät und nur, wenn eingeschaltet. Ein Klick prüft erneut. */
@@ -88,7 +113,7 @@ export function RecentChecks({ onUse }: { onUse: (query: string) => void }) {
           <>
             <p className="text-sm text-muted">
               Der Verlauf ist aus. Wenn du ihn einschaltest, merkt sich dein Browser die letzten {MAX_HISTORY} Prüfungen
-              (Namen und Auswahl) auf diesem Gerät. Nichts davon geht an den Server.
+              (Namen, Auswahl, Zeitpunkt und den Status je Quelle) auf diesem Gerät. Nichts davon geht an den Server.
             </p>
             <button type="button" onClick={() => toggle("[]")} className="btn btn-secondary btn-sm">
               Verlauf einschalten

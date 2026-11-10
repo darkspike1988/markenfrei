@@ -67,6 +67,11 @@ export default function DatenschutzPage() {
                   Arbeitsspeicher, damit wiederholte Prüfungen die Dienste nicht erneut belasten. Sie sind nicht mit
                   deiner IP-Adresse verknüpft und werden nicht dauerhaft gespeichert.
                 </p>
+                <p>
+                  Hat der Betreiber einen Registrierungsdienst eingerichtet, steht bei einer Domain mit
+                  „nicht gefunden“ ein gekennzeichneter Link dorthin. Markenfrei übermittelt dabei nichts; die
+                  Domain ist Teil des Links, den du öffnest, und erst dann sieht der Dienst deine Anfrage.
+                </p>
 
                 <H2 id="browser-speicher">Speicher im Browser</H2>
                 <p>
@@ -75,13 +80,17 @@ export default function DatenschutzPage() {
                   <code className="font-mono">markenfrei:theme</code>); „System“ löscht den Eintrag wieder.
                 </p>
                 <p>
-                  Schaltest du unter „Zuletzt geprüft“ den Verlauf ein, merkt sich dein Browser die letzten{" "}
-                  {MAX_HISTORY} Prüfungen mit Namen, Auswahl und Zeitpunkt (Eintrag{" "}
+                  Schaltest du unter „Zuletzt geprüft“ den Verlauf ein, merkt sich dein Browser zu den letzten{" "}
+                  {MAX_HISTORY} Prüfungen Namen, Auswahl, Zeitpunkt und den Status je Quelle (Eintrag{" "}
                   <code className="font-mono">markenfrei:history</code>); „Verlauf löschen und ausschalten“ entfernt
                   ihn. Beide Einträge bleiben auf deinem Gerät, werden nicht an den Server oder an Dritte übertragen
                   und lassen sich auch über die Einstellungen deines Browsers löschen. Grundlage ist § 25 Abs. 2
                   Nr. 2 TDDDG: Die Speicherung ist nötig, um die von dir ausdrücklich gewünschte Funktion
                   bereitzustellen.
+                </p>
+                <p>
+                  Ein mit „Stand kopieren“ kopierter Link trägt das Ergebnis (Namen, Status je Quelle und Zeitpunkt)
+                  im Teil nach <code className="font-mono">#</code>, den Browser nicht an den Server senden.
                 </p>
 
                 <H2 id="ip">IP-Adresse und Missbrauchsschutz</H2>

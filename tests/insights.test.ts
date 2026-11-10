@@ -1,9 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  alternativeNames,
   analyzeName,
   buildShortlist,
   generateVariants,
+  MAX_ALTERNATIVES,
   MAX_TYPOS,
   typoVariants,
   VARIANT_PREFIXES,
@@ -257,4 +259,31 @@ test("buildShortlist: Original zuerst, Grenze, Dubletten, Zählung der abgeschni
   const cut = buildShortlist("o1", ["a1", "b1", "c1", "d1"], 3);
   assert.deepEqual(cut, { names: ["o1", "a1", "b1"], dropped: 2 });
   assert.deepEqual(buildShortlist("o1", [], 10), { names: ["o1"], dropped: 0 });
+});
+
+test("alternativeNames: feste Muster in fester Reihenfolge, höchstens fünf", () => {
+  assert.equal(MAX_ALTERNATIVES, 5);
+  assert.deepEqual(alternativeNames("wachwerk"), ["wachwerkapp", "getwachwerk", "wachwerkhq", "trywachwerk", "wachwerklabs"]);
+  assert.deepEqual(alternativeNames("wachwerk"), alternativeNames("wachwerk"), "deterministisch");
+});
+
+test("alternativeNames: fällt ein Muster weg, springen die Ersatzmuster ein", () => {
+  // beginnt mit get und endet auf app: diese beiden Muster entfallen
+  assert.deepEqual(alternativeNames("getapp"), ["getapphq", "trygetapp", "getapplabs", "getappkit", "usegetapp"]);
+});
+
+test("alternativeNames: nur gültige Labels, nie der Name selbst, nichts bei ungültiger Eingabe", () => {
+  const long = "a".repeat(61);
+  for (const name of ["wachwerk", "wach-werk", "x1", long]) {
+    const alts = alternativeNames(name);
+    assert.ok(alts.length <= MAX_ALTERNATIVES, name);
+    assert.equal(new Set(alts).size, alts.length, name);
+    for (const a of alts) {
+      assert.ok(valid(a), `${name}: ${a}`);
+      assert.notEqual(a, name);
+    }
+  }
+  assert.ok(alternativeNames(long).every((a) => a.length <= 63));
+  assert.deepEqual(alternativeNames(""), []);
+  assert.deepEqual(alternativeNames("-x-"), []);
 });

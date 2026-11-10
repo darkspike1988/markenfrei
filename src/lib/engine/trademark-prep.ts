@@ -143,6 +143,12 @@ const NICE_HEADINGS: Record<number, string> = {
   45: "Dienstleistungen im Bereich Sicherheit, Lebensrettung, Schutz und Vollzug",
 };
 
+/** Alle Nizza-Klassen (1 bis 45) mit der Kurzüberschrift oben, für die Klassenwahl im Markenblock. */
+export const NICE_CLASSES: readonly { number: number; heading: string }[] = Object.keys(NICE_HEADINGS)
+  .map(Number)
+  .sort((a, b) => a - b)
+  .map((number) => ({ number, heading: NICE_HEADINGS[number] }));
+
 /** Kleinbuchstaben, a-z0-9 und Bindestrich. Robust auch für nicht normalisierte Eingaben. */
 function cleanName(name: string): string {
   return foldToAscii(String(name ?? ""))
@@ -313,7 +319,9 @@ function buildChecklist(classes: TrademarkClass[]): string[] {
   return [
     "Identische Marken suchen: den Namen im DPMAregister, in EUIPO eSearch plus und in TMview eingeben (Deutschland, EU und international registrierte Marken mit Schutz in Deutschland).",
     "Ähnliche Marken suchen: alle Schreibvarianten und klangähnliche Formen prüfen. Das DPMAregister hat keine Ähnlichkeitssuche, dafür hilft der Expertensuchstring mit Platzhaltern.",
-    `Waren- und Dienstleistungsklassen festlegen (Vorschlag: ${kl || "keine"}) und Treffer in gleichen oder ähnlichen Klassen besonders genau ansehen.`,
+    kl
+      ? `Waren- und Dienstleistungsklassen festlegen (Vorschlag: ${kl}) und Treffer in gleichen oder ähnlichen Klassen besonders genau ansehen.`
+      : "Waren- und Dienstleistungsklassen festlegen (noch keine gewählt, der Suchstring sucht in allen Klassen) und Treffer in gleichen oder ähnlichen Klassen besonders genau ansehen.",
     "International registrierte Marken mit Schutz in Deutschland zusätzlich in der WIPO Global Brand Database prüfen.",
     "Unternehmenskennzeichen prüfen: gleiche oder ähnliche Firmennamen im Handelsregister und im Unternehmensregister suchen.",
     "Im Internet nach dem Namen suchen (Suchmaschinen, App Stores, Domains), denn auch nicht eingetragene Kennzeichen und Werktitel können Rechte begründen.",
@@ -344,5 +352,27 @@ export function trademarkPrep(
     variants,
     classes,
     checklist: buildChecklist(classes),
+  };
+}
+
+/**
+ * Recherche-Vorbereitung für die Eingaben im Markenblock, läuft auch im Browser.
+ * `classes` null folgt dem Vorschlag aus der Beschreibung, eine Liste ersetzt ihn. Anders als
+ * trademarkPrep (API, MCP) gilt auch eine leere Liste: Suchstring ohne Klasseneinschränkung.
+ */
+export function trademarkPrepForSelection(
+  name: string,
+  description: string,
+  classes: number[] | null,
+): TrademarkPrep {
+  if (classes === null || classes.length > 0) {
+    return trademarkPrep(name, { description, classes: classes ?? undefined });
+  }
+  const prep = trademarkPrep(name, { description });
+  return {
+    ...prep,
+    dpmaExpertQuery: buildDpmaExpertQuery(cleanName(name), prep.variants, []),
+    classes: [],
+    checklist: buildChecklist([]),
   };
 }

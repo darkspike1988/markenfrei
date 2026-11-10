@@ -409,3 +409,40 @@ export function buildShortlist(
   const room = Math.max(0, max - 1);
   return { names: [original, ...unique.slice(0, room)], dropped: Math.max(0, unique.length - room) };
 }
+
+// ---------------------------------------------------------------------------
+// Ausweichnamen im Bericht
+// ---------------------------------------------------------------------------
+
+/** So viele Ausweichnamen zeigt ein Bericht höchstens. */
+export const MAX_ALTERNATIVES = 5;
+
+/**
+ * Feste Muster für Ausweichnamen, in dieser Reihenfolge: Suffix app, Präfix get, Suffix hq, Präfix try,
+ * Suffix labs; die letzten beiden (Suffix kit, Präfix use) springen ein, wenn ein Muster wegfällt,
+ * weil der Name schon so beginnt oder endet oder das Ergebnis kein gültiges Label wäre.
+ */
+const ALTERNATIVE_PATTERNS: readonly VariantOptions[] = [
+  { suffixes: ["app"] },
+  { prefixes: ["get"] },
+  { suffixes: ["hq"] },
+  { prefixes: ["try"] },
+  { suffixes: ["labs"] },
+  { suffixes: ["kit"] },
+  { prefixes: ["use"] },
+];
+
+/**
+ * Bis zu `MAX_ALTERNATIVES` Ausweichnamen aus den festen Mustern in ALTERNATIVE_PATTERNS (über
+ * `generateVariants`): gültige Labels, ohne den Namen selbst, ohne Dubletten. Rein und deterministisch,
+ * ohne Anfrage; ob sie frei sind, zeigt erst eine Prüfung.
+ */
+export function alternativeNames(name: string): string[] {
+  const out: string[] = [];
+  for (const pattern of ALTERNATIVE_PATTERNS) {
+    for (const v of generateVariants(name, pattern)) {
+      if (out.length < MAX_ALTERNATIVES && !out.includes(v.name)) out.push(v.name);
+    }
+  }
+  return out;
+}

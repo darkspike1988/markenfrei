@@ -7,21 +7,33 @@ import { exportFileName, toCsv, toMarkdown } from "@/lib/export";
 import { buildReminderIcs } from "@/lib/ics";
 import { buildShortlist, MAX_TYPO_CHECK } from "@/lib/insights";
 import { trackEvent } from "@/lib/analytics";
+import { diffSnapshots, snapshotFromReports, type HistorySnapshot } from "@/lib/history";
+import {
+  decodeShared,
+  encodeShared,
+  MAX_FRAGMENT_LENGTH,
+  sharedFromHash,
+  sharedFromReports,
+  snapshotLinkSupported,
+  type SharedSnapshot,
+} from "@/lib/snapshot-link";
 import {
   buildQuery,
   hasAnySource,
   parseSelection,
   previewNames,
   type CheckerConfig,
+  type Profile,
   type Selection,
 } from "@/components/checker-config";
-import { buildJsonExport, deriveRun } from "@/components/check-run";
+import { buildJsonExport, changeLines, deriveRun, isSettled } from "@/components/check-run";
 import { CheckerForm } from "@/components/check-form";
 import { CheckResults } from "@/components/check-results";
 import { downloadFile } from "@/components/download";
 import { IdeaFinder } from "@/components/idea-finder";
-import { recordCheck, RecentChecks } from "@/components/recent-checks";
+import { recordCheck, recordResults, RecentChecks, type CheckBaseline } from "@/components/recent-checks";
 import { reportAnchor } from "@/components/report-card";
+import { SnapshotView } from "@/components/snapshot-view";
 import { useCheckRun } from "@/components/use-check-run";
 import { usePrintExpand } from "@/components/use-print-expand";
 import { VariantPicker } from "@/components/variant-picker";
@@ -39,8 +51,8 @@ export function CheckerFallback({ config }: { config: CheckerConfig }) {
 }
 
 /**
- * Der Prüfer: hält die Eingaben (Text, Namensräume, Endungen, Zusatzquellen) und die Ansicht und
- * verbindet Formular (CheckerForm), Prüflauf (useCheckRun) und Ergebnisse (CheckResults).
+ * Der Prüfer: hält die Eingaben (Text, Namensräume, Endungen, Zusatzquellen, abgewählte Standardquellen) und
+ * die Ansicht und verbindet Formular (CheckerForm), Prüflauf (useCheckRun) und Ergebnisse (CheckResults).
  */
 export function Checker({
   config,
@@ -61,16 +73,58 @@ export function Checker({
   const [namespaces, setNamespaces] = useState<Namespace[]>(initial.namespaces);
   const [tlds, setTlds] = useState<string[]>(initial.tlds);
   const [extra, setExtra] = useState<string[]>(initial.extra);
+  const [excluded, setExcluded] = useState<string[]>(initial.excluded);
   const [formError, setFormError] = useState("");
   const [mode, setMode] = useState<"list" | "matrix">("list");
   /** „Nur Auffälliges“: blendet in den Berichten die Zeilen „nicht gefunden“ aus */
   const [findingsOnly, setFindingsOnly] = useState(false);
   /** Anker, zu dem nach dem Wechsel von der Vergleichsansicht zur Liste gesprungen wird */
   const jumpTo = useRef<string | null>(null);
+  /** Ergebnis der letzten Prüfung derselben Auswahl (Verlauf); gilt nur für den Lauf mit `runId` */
+  const [baseline, setBaseline] = useState<(CheckBaseline & { runId: number }) | null>(null);
+  /** Geteilter Stand aus `#stand=` im Link; solange gesetzt, steht er statt der Ergebnisse da */
+  const [shared, setShared] = useState<SharedSnapshot | null>(null);
+  /** Text für „Stand kopieren“, gehört zum Ergebnis mit dem Schlüssel `key` */
+  const [stand, setStand] = useState<{ key: string; data: string } | null>(null);
+  /** Zählt gestartete Läufe: Ein später gelesener Stand verdrängt keinen inzwischen gestarteten Lauf. */
+  const runsStarted = useRef(0);
 
-  const { run, start, recheck, retry, cancel } = useCheckRun(config);
+  const { run, start, recheck, retry, cancel, extendTlds } = useCheckRun(config);
   usePrintExpand(resultsRef);
   const view = deriveRun(run);
+  const settled = !inert && isSettled(view);
+  const runQuery = run ? buildQuery(run.sel, config) : "";
+  const results = settled ? snapshotFromReports(view.done) : null;
+  const resultsKey = results ? JSON.stringify(results) : "";
+
+  // Steht das Ergebnis fest, kommt es in den Eintrag dieser Auswahl im Verlauf (nur wenn eingeschaltet).
+  useEffect(() => {
+    if (resultsKey && runQuery) recordResults(runQuery, JSON.parse(resultsKey) as HistorySnapshot);
+  }, [resultsKey, runQuery]);
+
+  // Vergleich mit der letzten Prüfung derselben Auswahl; ohne gespeichertes Ergebnis kein Hinweis.
+  const notice =
+    results && baseline && baseline.runId === run?.id
+      ? { at: baseline.at, lines: changeLines(diffSnapshots(baseline.results, results), view.done) }
+      : null;
+
+  // „Stand kopieren“: Den Text für `#stand=` vorbereiten, sobald das Ergebnis feststeht. Die Schaltfläche
+  // erscheint erst dann und nie in Browsern ohne CompressionStream.
+  const standKey = settled ? JSON.stringify(sharedFromReports(view.done, view.latestCheck)) : "";
+  useEffect(() => {
+    if (!standKey || !snapshotLinkSupported()) return;
+    let live = true;
+    encodeShared(JSON.parse(standKey) as SharedSnapshot).then(
+      (data) => {
+        if (live && data.length <= MAX_FRAGMENT_LENGTH) setStand({ key: standKey, data });
+      },
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [standKey]);
+  const standData = stand?.key === standKey ? stand.data : null;
 
   // Der Signalgeber im Seitenkopf folgt dem Lauf: Lampen laufen während der Prüfung, danach leuchtet
   // die des schlechtesten Ergebnisses. Reine Zierde, die Aussage steht immer als Text im Ergebnis.
@@ -90,11 +144,14 @@ export function Checker({
    * automatische über ?q=) landet im Verlauf, sofern der eingeschaltet ist.
    */
   function startRun(sel: Selection, reveal = false) {
+    runsStarted.current++;
+    setShared(null);
     const id = start(sel);
     revealFor.current = reveal ? id : null;
     if (reveal) trackEvent("pruefung");
     const query = buildQuery(sel, config);
-    if (query) recordCheck(query);
+    const previous = query ? recordCheck(query) : null;
+    setBaseline(previous && { ...previous, runId: id });
   }
 
   function submitNames(names: string[]) {
@@ -108,8 +165,8 @@ export function Checker({
       fieldRef.current?.focus();
       return;
     }
-    const sel: Selection = { names, namespaces, tlds, extra };
-    if (!hasAnySource(sel)) {
+    const sel: Selection = { names, namespaces, tlds, extra, excluded };
+    if (!hasAnySource(sel, config)) {
       setFormError("Bitte mindestens einen Namensraum oder eine weitere Quelle wählen.");
       return;
     }
@@ -128,16 +185,47 @@ export function Checker({
     );
   }
 
-  // Link mit ?q=… prüft beim Öffnen sofort (nur einmal).
+  // Link mit ?q=… prüft beim Öffnen sofort (nur einmal). Trägt er einen gültigen Stand (`#stand=`), steht
+  // stattdessen dieser da, ohne Anfrage; ein ungültiger Stand wird ignoriert. Das Fragment wird erst nach
+  // dem Einhängen gelesen, der Server kennt es nicht.
   const autoStarted = useRef(false);
   useEffect(() => {
     if (inert || autoStarted.current) return;
     autoStarted.current = true;
-    if (initial.names.length && initial.names.length <= config.maxNames && hasAnySource(initial)) {
-      queueMicrotask(() => startRun(initial));
+    const autoStart = () => {
+      if (initial.names.length && initial.names.length <= config.maxNames && hasAnySource(initial, config)) {
+        startRun(initial);
+      }
+    };
+    const data = sharedFromHash(window.location.hash);
+    if (data === null || !snapshotLinkSupported()) {
+      queueMicrotask(autoStart);
+      return;
     }
+    void decodeShared(data).then((snapshot) => {
+      if (runsStarted.current > 0) return;
+      if (snapshot) setShared(snapshot);
+      else autoStart();
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Ein Stand-Link, der in diesem Tab nur das Fragment ändert, lädt die Seite nicht neu; dann hier lesen.
+  useEffect(() => {
+    if (inert) return;
+    const onHashChange = () => {
+      const data = sharedFromHash(window.location.hash);
+      if (data === null) return;
+      const before = runsStarted.current;
+      void decodeShared(data).then((snapshot) => {
+        if (!snapshot || runsStarted.current !== before) return;
+        cancel();
+        setShared(snapshot);
+      });
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, [inert, cancel]);
 
   // Nach „Prüfen“ (nicht beim automatischen Start über ?q=) Fokus auf die Ergebnis-Überschrift
   // setzen und den Bereich zeigen, wenn er außerhalb des sichtbaren Ausschnitts liegt.
@@ -181,6 +269,19 @@ export function Checker({
     if (!extra.includes(id)) trackEvent(`quelle/${id}`);
     setExtra((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
   }
+  /** Standardquelle eines gewählten Namensraums ab- oder wieder anwählen. */
+  function toggleStandard(id: string) {
+    setExcluded((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
+  }
+
+  /** Vorhaben übernehmen: setzt Namensräume, Endungen, Zusatzquellen und abgewählte Standardquellen. */
+  function applyProfile(p: Profile) {
+    setNamespaces(p.namespaces);
+    setTlds(p.tlds);
+    setExtra(p.extra);
+    setExcluded(p.excluded);
+    setFormError("");
+  }
 
   function applyIdeas(names: string[]) {
     const list = names.slice(0, config.maxNames);
@@ -194,6 +295,7 @@ export function Checker({
     setNamespaces(sel.namespaces);
     setTlds(sel.tlds);
     setExtra(sel.extra);
+    setExcluded(sel.excluded);
     setFormError("");
     startRun(sel, true);
   }
@@ -201,7 +303,24 @@ export function Checker({
   /** Eintrag aus „Zuletzt geprüft“: unbrauchbare Einträge (keine oder zu viele Namen, keine Quelle) tun nichts. */
   function checkRecent(query: string) {
     const sel = parseSelection(new URLSearchParams(query), config);
-    if (inert || sel.names.length === 0 || sel.names.length > config.maxNames || !hasAnySource(sel)) return;
+    if (inert || sel.names.length === 0 || sel.names.length > config.maxNames || !hasAnySource(sel, config)) return;
+    applySelection(sel);
+  }
+
+  /**
+   * „Jetzt neu prüfen“ im geteilten Stand: prüft Namen und Auswahl aus dem Link (ohne Namen im Link die
+   * Namen des Stands) wie gewohnt; das Fragment fällt weg.
+   */
+  function recheckShared() {
+    if (!shared || inert) return;
+    const fromLink = parseSelection(new URLSearchParams(window.location.search), config);
+    const names = (fromLink.names.length ? fromLink.names : shared.names.map((n) => n.name)).slice(0, config.maxNames);
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    const sel: Selection = { ...fromLink, names };
+    if (!hasAnySource(sel, config)) {
+      setShared(null);
+      return;
+    }
     applySelection(sel);
   }
 
@@ -209,6 +328,11 @@ export function Checker({
   function checkTypoVariants(original: string, variants: string[]) {
     trackEvent("varianten/tippfehler");
     applyIdeas(buildShortlist(original, variants.slice(0, MAX_TYPO_CHECK), config.maxNames).names);
+  }
+
+  /** „Ausweichnamen prüfen“ aus einem Bericht: Original zuerst, dann die Ausweichnamen, als neue Shortlist. */
+  function checkAlternatives(original: string, alternatives: string[]) {
+    applyIdeas(buildShortlist(original, alternatives, config.maxNames).names);
   }
 
   function exportJson() {
@@ -258,31 +382,43 @@ export function Checker({
         namespaces={namespaces}
         tlds={tlds}
         extra={extra}
+        excluded={excluded}
         onSubmit={onSubmit}
         onToggleNs={toggleNs}
         onToggleTld={toggleTld}
         onToggleExtra={toggleExtra}
+        onToggleStandard={toggleStandard}
+        onApplyProfile={applyProfile}
       />
 
-      <CheckResults
-        run={run}
-        view={view}
-        mode={mode}
-        onViewChange={setMode}
-        resultsRef={resultsRef}
-        headingRef={headingRef}
-        exportJson={exportJson}
-        exportCsv={exportCsv}
-        exportMarkdown={exportMarkdown}
-        exportIcs={exportIcs}
-        openFromMatrix={openFromMatrix}
-        recheck={recheck}
-        retry={retry}
-        cancel={cancel}
-        findingsOnly={findingsOnly}
-        onFindingsOnlyChange={setFindingsOnly}
-        checkTypoVariants={checkTypoVariants}
-      />
+      {shared ? (
+        <SnapshotView snapshot={shared} sources={config.sources} headingRef={headingRef} onRecheck={recheckShared} />
+      ) : (
+        <CheckResults
+          run={run}
+          view={view}
+          mode={mode}
+          onViewChange={setMode}
+          resultsRef={resultsRef}
+          headingRef={headingRef}
+          exportJson={exportJson}
+          exportCsv={exportCsv}
+          exportMarkdown={exportMarkdown}
+          exportIcs={exportIcs}
+          openFromMatrix={openFromMatrix}
+          recheck={recheck}
+          retry={retry}
+          cancel={cancel}
+          findingsOnly={findingsOnly}
+          onFindingsOnlyChange={setFindingsOnly}
+          checkTypoVariants={checkTypoVariants}
+          checkAlternatives={checkAlternatives}
+          extendTlds={extendTlds}
+          featuredTlds={config.featuredTlds}
+          notice={notice}
+          standData={standData}
+        />
+      )}
 
       <div className="grid items-start gap-3 md:grid-cols-2 lg:grid-cols-3 print:hidden">
         <IdeaFinder max={config.maxNames} onUse={applyIdeas} />
