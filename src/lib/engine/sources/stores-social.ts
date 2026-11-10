@@ -94,81 +94,153 @@ export function titleWordPrefixes(trackName: string): string[] {
   return [...out];
 }
 
-const appstore: Source = {
-  id: "appstore",
-  namespace: "stores",
-  label: "App Store",
-  defaultEnabled: true,
-  description:
-    "Apple App Store (Deutschland), Suche über die iTunes Search API. Vergeben nur bei exakt gleichem Haupttitel. Titel, die mit dem Namen als ganzem Wort beginnen, oder klanggleiche Titel (Kölner Phonetik) ergeben ähnlich, ebenso eine volle Trefferseite ohne exakten Titel (nicht alle Treffer geprüft).",
-  endpoint: `https://itunes.apple.com/search?term={name}&country=de&entity=software&limit=${APPSTORE_LIMIT}`,
-  check: safe({ id: "appstore", namespace: "stores", label: "App Store" }, async (name, ctx, base) => {
-    const searchUrl = `https://apps.apple.com/de/iphone/search?term=${enc(name)}`;
-    const api = `https://itunes.apple.com/search?term=${enc(name)}&country=de&entity=software&limit=${APPSTORE_LIMIT}`;
-    const res = await ctx.http.request(api, { read: "json", maxBytes: 600_000, retry: true });
-    if (res.error || res.status !== 200) return unknownFrom(base, res, searchUrl);
-    const results = isObject(res.json) ? res.json.results : undefined;
-    if (!Array.isArray(results)) {
-      return make(base, "unknown", { url: searchUrl, note: "Unerwartetes Antwortformat, bitte manuell prüfen", evidence: "HTTP 200, ohne results" });
-    }
-
-    const target = compactName(name);
-    const targetKp = koelnerPhonetik(name);
-    // Vorrang: exakter Haupttitel (taken) vor Titelanfang als ganzes Wort vor Klanggleichheit (beide similar).
-    let prefix: { title: string; url: string; seller: string } | undefined;
-    let sound: { title: string; url: string } | undefined;
-    for (const app of results) {
-      if (!isObject(app)) continue;
-      const title = typeof app.trackName === "string" ? app.trackName : "";
-      const url = typeof app.trackViewUrl === "string" && app.trackViewUrl ? app.trackViewUrl : searchUrl;
-      const seller = typeof app.sellerName === "string" ? app.sellerName : "";
-      const candidates = mainTitleCandidates(title);
-      if (candidates.includes(target)) {
-        return make(base, "taken", {
-          url,
-          note: `App „${title}“${seller ? ` von ${seller}` : ""}`,
-          evidence: `HTTP 200, exakter Titel unter ${results.length} Treffern`,
-        });
-      }
-      const prefixes = titleWordPrefixes(title);
-      if (!prefix && prefixes.includes(target)) prefix = { title, url, seller };
-      if (
-        !sound &&
-        targetKp.length >= 3 &&
-        [...candidates, ...prefixes].some((c) => koelnerPhonetik(c) === targetKp)
-      ) {
-        sound = { title, url };
-      }
-    }
-    if (prefix) {
-      return make(base, "similar", {
-        url: prefix.url,
-        note: `App-Titel „${prefix.title}“${prefix.seller ? ` von ${prefix.seller}` : ""} beginnt mit dem Namen, bitte prüfen`,
-        evidence: `HTTP 200, Titelanfang an Wortgrenze unter ${results.length} Treffern`,
-      });
-    }
-    if (sound) {
-      return make(base, "similar", {
-        url: sound.url,
-        note: `Klanggleicher Titel „${sound.title}“, bitte prüfen`,
-        evidence: `HTTP 200, Kölner Phonetik ${targetKp}`,
-      });
-    }
-    // Die iTunes-Suche nennt keine Gesamtzahl; eine volle Seite heißt: es kann weitere Treffer geben
-    if (results.length >= APPSTORE_LIMIT) {
-      return make(base, "similar", {
-        url: searchUrl,
-        note: `Nicht alle Treffer geprüft (Suche liefert höchstens ${APPSTORE_LIMIT}), ein App-Titel mit diesem Namen ist nicht ausgeschlossen`,
-        evidence: `HTTP 200, ${results.length} Treffer ohne exakten Titel, Seite voll`,
-      });
-    }
-    return make(base, "not_found", {
-      url: searchUrl,
-      note: `Kein App-Titel mit diesem Namen in der Suche (deutscher Store, ${results.length} Treffer). Andere Länder nicht geprüft`,
-      evidence: `HTTP 200, ${results.length} Treffer ohne exakten Titel`,
-    });
-  }),
+export type AppStoreCountry = {
+  /** Quellen-ID */
+  id: string;
+  label: string;
+  /** Ländercode der Storefront (iTunes-Parameter country und Pfad auf apps.apple.com) */
+  code: string;
+  /** Name des Landes in der Beschreibung ("Deutschland") */
+  land: string;
+  /** Wie der Store im Hinweis heißt ("deutscher Store") */
+  store: string;
+  defaultEnabled: boolean;
+  /** Zusatz zur Beschreibung (Hinweis auf das gemeinsame Abfragelimit bei den Zusatzländern) */
+  extraDescription?: string;
 };
+
+const APPSTORE_DE: AppStoreCountry = {
+  id: "appstore",
+  label: "App Store",
+  code: "de",
+  land: "Deutschland",
+  store: "deutscher Store",
+  defaultEnabled: true,
+};
+
+/** Alle Storefronts teilen sich den Host itunes.apple.com und damit ein Abfragebudget (HOST_BUDGETS). */
+const APPSTORE_SHARED_LIMIT = "Teilt sich das Abfragelimit von Apple mit dem deutschen App Store.";
+
+async function checkAppStore(
+  country: AppStoreCountry,
+  endpoint: string,
+  name: string,
+  ctx: CheckContext,
+  base: Base,
+): Promise<SourceResult> {
+  const searchUrl = `https://apps.apple.com/${country.code}/iphone/search?term=${enc(name)}`;
+  const api = endpoint.replace("{name}", enc(name));
+  const res = await ctx.http.request(api, { read: "json", maxBytes: 600_000, retry: true });
+  if (res.error || res.status !== 200) return unknownFrom(base, res, searchUrl);
+  const results = isObject(res.json) ? res.json.results : undefined;
+  if (!Array.isArray(results)) {
+    return make(base, "unknown", { url: searchUrl, note: "Unerwartetes Antwortformat, bitte manuell prüfen", evidence: "HTTP 200, ohne results" });
+  }
+
+  const target = compactName(name);
+  const targetKp = koelnerPhonetik(name);
+  // Vorrang: exakter Haupttitel (taken) vor Titelanfang als ganzes Wort vor Klanggleichheit (beide similar).
+  let prefix: { title: string; url: string; seller: string } | undefined;
+  let sound: { title: string; url: string } | undefined;
+  for (const app of results) {
+    if (!isObject(app)) continue;
+    const title = typeof app.trackName === "string" ? app.trackName : "";
+    const url = typeof app.trackViewUrl === "string" && app.trackViewUrl ? app.trackViewUrl : searchUrl;
+    const seller = typeof app.sellerName === "string" ? app.sellerName : "";
+    const candidates = mainTitleCandidates(title);
+    if (candidates.includes(target)) {
+      return make(base, "taken", {
+        url,
+        note: `App „${title}“${seller ? ` von ${seller}` : ""}`,
+        evidence: `HTTP 200, exakter Titel unter ${results.length} Treffern`,
+      });
+    }
+    const prefixes = titleWordPrefixes(title);
+    if (!prefix && prefixes.includes(target)) prefix = { title, url, seller };
+    if (
+      !sound &&
+      targetKp.length >= 3 &&
+      [...candidates, ...prefixes].some((c) => koelnerPhonetik(c) === targetKp)
+    ) {
+      sound = { title, url };
+    }
+  }
+  if (prefix) {
+    return make(base, "similar", {
+      url: prefix.url,
+      note: `App-Titel „${prefix.title}“${prefix.seller ? ` von ${prefix.seller}` : ""} beginnt mit dem Namen, bitte prüfen`,
+      evidence: `HTTP 200, Titelanfang an Wortgrenze unter ${results.length} Treffern`,
+    });
+  }
+  if (sound) {
+    return make(base, "similar", {
+      url: sound.url,
+      note: `Klanggleicher Titel „${sound.title}“, bitte prüfen`,
+      evidence: `HTTP 200, Kölner Phonetik ${targetKp}`,
+    });
+  }
+  // Die iTunes-Suche nennt keine Gesamtzahl; eine volle Seite heißt: es kann weitere Treffer geben
+  if (results.length >= APPSTORE_LIMIT) {
+    return make(base, "similar", {
+      url: searchUrl,
+      note: `Nicht alle Treffer geprüft (Suche liefert höchstens ${APPSTORE_LIMIT}), ein App-Titel mit diesem Namen ist nicht ausgeschlossen`,
+      evidence: `HTTP 200, ${results.length} Treffer ohne exakten Titel, Seite voll`,
+    });
+  }
+  return make(base, "not_found", {
+    url: searchUrl,
+    note: `Kein App-Titel mit diesem Namen in der Suche (${country.store}, ${results.length} Treffer). Andere Länder nicht geprüft`,
+    evidence: `HTTP 200, ${results.length} Treffer ohne exakten Titel`,
+  });
+}
+
+/** Apple App Store für ein Land. Nur die Storefront unterscheidet sich, die Regeln sind für alle gleich. */
+export function appStoreSource(country: AppStoreCountry): Source {
+  const { id, label, code } = country;
+  const endpoint = `https://itunes.apple.com/search?term={name}&country=${code}&entity=software&limit=${APPSTORE_LIMIT}`;
+  return {
+    id,
+    namespace: "stores",
+    label,
+    defaultEnabled: country.defaultEnabled,
+    description:
+      `Apple App Store (${country.land}), Suche über die iTunes Search API. Vergeben nur bei exakt gleichem Haupttitel. Titel, die mit dem Namen als ganzem Wort beginnen, oder klanggleiche Titel (Kölner Phonetik) ergeben ähnlich, ebenso eine volle Trefferseite ohne exakten Titel (nicht alle Treffer geprüft).` +
+      (country.extraDescription ? ` ${country.extraDescription}` : ""),
+    endpoint,
+    check: safe({ id, namespace: "stores", label }, (name, ctx, base) => checkAppStore(country, endpoint, name, ctx, base)),
+  };
+}
+
+const appstore = appStoreSource(APPSTORE_DE);
+
+/** Zusatzländer: nicht in der Standardauswahl, auf Wunsch zuschaltbar. */
+const appstoreAt = appStoreSource({
+  id: "appstore_at",
+  label: "App Store (Österreich)",
+  code: "at",
+  land: "Österreich",
+  store: "österreichischer Store",
+  defaultEnabled: false,
+  extraDescription: APPSTORE_SHARED_LIMIT,
+});
+const appstoreCh = appStoreSource({
+  id: "appstore_ch",
+  label: "App Store (Schweiz)",
+  code: "ch",
+  land: "Schweiz",
+  store: "Schweizer Store",
+  defaultEnabled: false,
+  extraDescription: APPSTORE_SHARED_LIMIT,
+});
+const appstoreUs = appStoreSource({
+  id: "appstore_us",
+  label: "App Store (USA)",
+  code: "us",
+  land: "USA",
+  store: "US-Store",
+  defaultEnabled: false,
+  extraDescription: APPSTORE_SHARED_LIMIT,
+});
 
 // ---------------------------------------------------------------------------
 // Google Play (Bundle-IDs per HEAD, Logik aus rea.ts)
@@ -368,7 +440,7 @@ const firefox: Source = {
   }),
 };
 
-export const STORE_SOURCES: Source[] = [appstore, googleplay, fdroid, firefox];
+export const STORE_SOURCES: Source[] = [appstore, appstoreAt, appstoreCh, appstoreUs, googleplay, fdroid, firefox];
 
 // ---------------------------------------------------------------------------
 // Bluesky ({name}.bsky.social)

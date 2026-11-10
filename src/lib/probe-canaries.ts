@@ -73,6 +73,10 @@ export const CANARIES: Readonly<Record<string, Canary>> = {
   // Stores
   // Die Suche im App Store liefert für einen bekannten Namen den Titel mit dem Namen am Anfang ("Spotify Musik und Podcasts"): "similar".
   appstore: { name: "spotify", level: "advisory", accept: ["taken", "similar"] },
+  // Zusatzländer: gleiche Quelle, andere Storefront; Spotify ist überall im Store, der Titel beginnt mit dem Namen ("similar" möglich)
+  appstore_at: { name: "spotify", level: "advisory", accept: ["taken", "similar"] },
+  appstore_ch: { name: "spotify", level: "advisory", accept: ["taken", "similar"] },
+  appstore_us: { name: "spotify", level: "advisory", accept: ["taken", "similar"] },
   // Google Play prüft com.{name}.app und de.{name}.app; FlixBus nutzt de.flixbus.app
   googleplay: { name: "flixbus", level: "advisory" },
   fdroid: { name: "newpipe", level: "advisory" },

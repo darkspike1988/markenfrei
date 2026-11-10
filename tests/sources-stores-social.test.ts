@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  appStoreSource,
   mainTitleCandidates,
   manualSocialLinks,
   titleWordPrefixes,
@@ -37,7 +38,7 @@ const byId = (id: string): Source => {
 };
 
 test("Exporte: IDs, Namensräume und Standardauswahl", () => {
-  assert.deepEqual(STORE_SOURCES.map((s) => s.id), ["appstore", "googleplay", "fdroid", "firefox"]);
+  assert.deepEqual(STORE_SOURCES.map((s) => s.id), ["appstore", "appstore_at", "appstore_ch", "appstore_us", "googleplay", "fdroid", "firefox"]);
   assert.deepEqual(SOCIAL_SOURCES.map((s) => s.id), ["bluesky", "mastodon", "hackernews"]);
   assert.ok(STORE_SOURCES.every((s) => s.namespace === "stores"));
   assert.ok(SOCIAL_SOURCES.every((s) => s.namespace === "social" && !s.defaultEnabled));
@@ -117,6 +118,96 @@ test("appstore: 429, 503, Timeout und falsches Format => unknown", async () => {
   }
   const { ctx } = fakeCtx({ [ITUNES("abc")]: { status: 503 } });
   assert.equal((await byId("appstore").check("abc", ctx)).evidence, "HTTP 503");
+});
+
+// --- App Store in weiteren Ländern ----------------------------------------
+
+const ITUNES_IN = (country: string, n: string) => `https://itunes.apple.com/search?term=${n}&country=${country}&entity=software&limit=25`;
+
+const EXTRA_STORES = [
+  { id: "appstore_at", code: "at", label: "App Store (Österreich)" },
+  { id: "appstore_ch", code: "ch", label: "App Store (Schweiz)" },
+  { id: "appstore_us", code: "us", label: "App Store (USA)" },
+];
+
+test("App Store: das deutsche Angebot bleibt unverändert (ID, Bezeichnung, Standard, Endpunkt)", () => {
+  const de = byId("appstore");
+  assert.equal(de.label, "App Store");
+  assert.equal(de.namespace, "stores");
+  assert.equal(de.defaultEnabled, true);
+  assert.equal(de.endpoint, "https://itunes.apple.com/search?term={name}&country=de&entity=software&limit=25");
+  assert.match(de.description, /^Apple App Store \(Deutschland\)/);
+  assert.doesNotMatch(de.description, /Abfragelimit/);
+});
+
+test("App Store: Zusatzländer sind optional, im Namensraum stores und nennen das gemeinsame Abfragelimit", () => {
+  for (const { id, code, label } of EXTRA_STORES) {
+    const s = byId(id);
+    assert.equal(s.label, label);
+    assert.equal(s.namespace, "stores");
+    assert.equal(s.defaultEnabled, false, id);
+    assert.equal(s.endpoint, `https://itunes.apple.com/search?term={name}&country=${code}&entity=software&limit=25`);
+    assert.match(s.description, /Abfragelimit von Apple mit dem deutschen App Store/, id);
+  }
+  assert.match(byId("appstore_at").description, /\(Österreich\)/);
+  assert.match(byId("appstore_ch").description, /\(Schweiz\)/);
+  assert.match(byId("appstore_us").description, /\(USA\)/);
+});
+
+test("App Store: die Fabrik fragt je Land die passende Storefront ab und verlinkt deren Suche", async () => {
+  for (const { id, code } of [{ id: "appstore", code: "de" }, ...EXTRA_STORES]) {
+    const { ctx, calls } = fakeCtx({ [ITUNES_IN(code, "zzqxkvjwabc")]: { json: { resultCount: 0, results: [] } } });
+    const r = await byId(id).check("zzqxkvjwabc", ctx);
+    assert.deepEqual(calls.map((c) => c.url), [ITUNES_IN(code, "zzqxkvjwabc")], id);
+    assert.equal(r.sourceId, id);
+    assert.equal(r.status, "not_found", id);
+    assert.equal(r.url, `https://apps.apple.com/${code}/iphone/search?term=zzqxkvjwabc`, id);
+  }
+  const custom = appStoreSource({ id: "appstore_xx", label: "App Store (XX)", code: "xx", land: "XX", store: "XX-Store", defaultEnabled: false });
+  const { ctx, calls } = fakeCtx({});
+  await custom.check("a b", ctx);
+  assert.equal(calls[0]?.url, "https://itunes.apple.com/search?term=a%20b&country=xx&entity=software&limit=25");
+});
+
+test("appstore_at, appstore_ch, appstore_us: taken, similar, volle Seite und Fehler wie beim deutschen Store", async () => {
+  for (const { id, code } of EXTRA_STORES) {
+    const app = (n: number, title: string) => ({ trackName: title, trackViewUrl: `https://apps.apple.com/${code}/app/x/id${n}`, sellerName: "Wachwerk GmbH" });
+
+    // vergeben
+    const taken = fakeCtx({ [ITUNES_IN(code, "wachwerk")]: { json: { results: [app(1, "Wachwerk: Sicherheit")] } } });
+    const t = await byId(id).check("wachwerk", taken.ctx);
+    assert.equal(t.status, "taken", id);
+    assert.equal(t.url, `https://apps.apple.com/${code}/app/x/id1`);
+    assert.match(t.note ?? "", /Wachwerk GmbH/);
+
+    // Titelanfang und klanggleich => similar
+    const prefix = fakeCtx({ [ITUNES_IN(code, "spotify")]: { json: { results: [app(2, "Spotify Musik und Podcasts")] } } });
+    assert.equal((await byId(id).check("spotify", prefix.ctx)).status, "similar", id);
+    const sound = fakeCtx({ [ITUNES_IN(code, "klarna")]: { json: { results: [app(3, "Clarna - Bezahlen")] } } });
+    assert.equal((await byId(id).check("klarna", sound.ctx)).status, "similar", id);
+
+    // volle Seite ohne exakten Titel => similar, eine nicht volle Seite => not_found
+    const results = Array.from({ length: 25 }, (_, i) => app(i, `Zufallsspiel ${i}`));
+    const full = fakeCtx({ [ITUNES_IN(code, "qzwexr")]: { json: { resultCount: 25, results } } });
+    const f = await byId(id).check("qzwexr", full.ctx);
+    assert.equal(f.status, "similar", id);
+    assert.match(f.note ?? "", /Nicht alle Treffer geprüft/);
+    assert.equal(f.url, `https://apps.apple.com/${code}/iphone/search?term=qzwexr`);
+    const few = fakeCtx({ [ITUNES_IN(code, "qzwexr")]: { json: { resultCount: 24, results: results.slice(0, 24) } } });
+    const n = await byId(id).check("qzwexr", few.ctx);
+    assert.equal(n.status, "not_found", id);
+    assert.doesNotMatch(n.note ?? "", /registrierbar|frei/i);
+
+    // Fehler => unknown, nie not_found
+    for (const reply of [{ status: 429 }, { status: 503 }, { status: 0, error: "timeout" as const }, { status: 0, error: "budget" as const }, { status: 0, error: "budget_long" as const }, { json: { foo: 1 } }]) {
+      const { ctx } = fakeCtx({ [ITUNES_IN(code, "abc")]: reply });
+      const r = await byId(id).check("abc", ctx);
+      assert.equal(r.status, "unknown", `${id} ${JSON.stringify(reply)}`);
+      assert.ok(r.note && r.evidence);
+    }
+    const long = fakeCtx({ [ITUNES_IN(code, "abc")]: { status: 0, error: "budget_long" as const } });
+    assert.match((await byId(id).check("abc", long.ctx)).note ?? "", /längere Zeit/);
+  }
 });
 
 test("mainTitleCandidates trennt vor Doppelpunkt und Gedankenstrich", () => {

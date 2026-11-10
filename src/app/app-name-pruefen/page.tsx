@@ -13,10 +13,18 @@ export const metadata: Metadata = {
 
 const optionalStores = STATIC_SOURCES.filter((s) => s.namespace === "stores" && !s.defaultEnabled);
 
+/** Länder der zuschaltbaren App Stores aus der Quellenliste, z. B. "Österreich, Schweiz und USA". */
+const extraCountries = (() => {
+  const names = optionalStores
+    .map((s) => /^App Store \((.+)\)$/.exec(s.label)?.[1])
+    .filter((c): c is string => !!c);
+  return names.length > 1 ? `${names.slice(0, -1).join(", ")} und ${names[names.length - 1]}` : names.join("");
+})();
+
 const FAQ: FaqItem[] = [
   {
     q: "Prüft Markenfrei den App-Namen auch in anderen Ländern?",
-    a: "Nein. Der App Store wird nur im deutschen Store durchsucht. Geprüft werden die ersten 25 Treffer der Suche. Ist die Seite voll und der exakte Name nicht dabei, zeigt Markenfrei „ähnlich“ statt „nicht gefunden“, weil weitere Treffer nicht eingesehen wurden. Andere Länder sind nicht geprüft.",
+    a: `Standardmäßig nur im deutschen Store.${extraCountries ? ` Auf Wunsch fragt Markenfrei auch den App Store für ${extraCountries} ab; alle Länder teilen sich das Abfragelimit von Apple.` : ""} Geprüft werden jeweils die ersten 25 Treffer der Suche. Ist die Seite voll und der exakte Name nicht dabei, zeigt Markenfrei „ähnlich“ statt „nicht gefunden“, weil weitere Treffer nicht eingesehen wurden. Alle anderen Länder sind nicht geprüft.`,
   },
   {
     q: "Prüft Markenfrei bei Google Play den App-Titel?",
@@ -39,8 +47,8 @@ export default function AppNamePruefenPage() {
       lead={
         <p>
           Markenfrei sucht deinen Namen im deutschen App Store und prüft bei Google Play, ob die Bundle-IDs com.&lt;name&gt;.app
-          und de.&lt;name&gt;.app belegt sind. Das ist eine Vorprüfung: Andere Länder, andere Bundle-IDs und App-Titel bei
-          Google Play sind nicht abgedeckt.
+          und de.&lt;name&gt;.app belegt sind. Das ist eine Vorprüfung: Weitere Länder gibt es nur auf Wunsch, andere
+          Bundle-IDs und App-Titel bei Google Play sind nicht abgedeckt.
         </p>
       }
       limits={
@@ -50,7 +58,10 @@ export default function AppNamePruefenPage() {
               „Nicht gefunden“ heißt nur, dass die Quelle den Namen nicht kennt. Es heißt nie, dass der Name im Store
               verfügbar ist oder dass du ihn verwenden darfst.
             </li>
-            <li>Der App Store wird nur im deutschen Store geprüft. Andere Länder sind nicht geprüft.</li>
+            <li>
+              Der App Store wird standardmäßig nur im deutschen Store geprüft.
+              {extraCountries ? ` Auf Wunsch kommen ${extraCountries} hinzu.` : ""} Alle anderen Länder sind nicht geprüft.
+            </li>
             <li>
               Geprüft werden die ersten 25 Treffer der Suche. Ist die Seite voll und der exakte Name nicht dabei, zeigt
               Markenfrei „ähnlich“ statt „nicht gefunden“, weil weitere Treffer nicht eingesehen wurden.
@@ -79,6 +90,9 @@ export default function AppNamePruefenPage() {
         <p>
           Markenfrei nutzt die Suche des deutschen App Stores (iTunes Search API, Land Deutschland, Software, bis zu 25
           Treffer) und vergleicht die Titel mit deinem Namen.
+          {extraCountries
+            ? ` Auf Wunsch gilt dieselbe Prüfung für den Store in ${extraCountries}; die Länder teilen sich das Abfragelimit von Apple.`
+            : ""}
         </p>
         <GuideList>
           <li>
@@ -92,7 +106,7 @@ export default function AppNamePruefenPage() {
           </li>
           <li>
             <strong className="font-medium text-ink">Nicht gefunden:</strong> Unter den Treffern steht kein App-Titel mit
-            diesem Namen. Das bezieht sich auf den deutschen Store.
+            diesem Namen. Das bezieht sich auf den jeweils geprüften Store.
           </li>
         </GuideList>
       </GuideSection>
@@ -119,6 +133,8 @@ export default function AppNamePruefenPage() {
           <li>
             <span className="font-medium text-ink">App Store:</span>{" "}
             <code className="break-all font-mono text-[13px]">https://apps.apple.com/de/iphone/search?term=&lt;Name&gt;</code>
+            {" "}
+            (für andere Länder de durch at, ch oder us ersetzen)
           </li>
           <li>
             <span className="font-medium text-ink">Google Play:</span>{" "}
