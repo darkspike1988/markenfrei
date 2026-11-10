@@ -12,6 +12,8 @@ import { DEFAULT_DOMAIN_TLDS, DOMAIN_TLDS } from "@/lib/engine/sources/domains";
 import { NAMESPACES } from "@/lib/engine/types";
 import { STATUS_LABEL, VERDICT_LABEL } from "@/lib/engine/verdict";
 import { buildOpenApiDocument, EXAMPLE_CHECK_REQUESTS, exampleCheckResponse, OPENAPI_MAX_AGE_SECONDS } from "@/lib/openapi";
+import { PROFILE_IDS, selectSources } from "@/lib/engine/format";
+import { REGISTER_NOTICE } from "@/lib/register";
 import { DEFAULT_RATE_LIMIT, rateLimitMessage } from "@/lib/rate-limit";
 import { DEFAULT_PUBLIC_URL, SITEMAP_PATHS } from "@/lib/site";
 
@@ -108,6 +110,27 @@ test("Aufzählungen stimmen mit den Konstanten im Code überein", () => {
   assert.equal(schemas.TrademarkPrep.properties.status.const, "not_checked");
   assert.equal(schemas.NameReport.properties.schemaVersion.const, 2);
   assert.match(schemas.SourceResult.properties.status.description, /nie als frei/);
+
+  assert.deepEqual(props.profile.enum, [...PROFILE_IDS]);
+  assert.equal(props.profile.type, "string");
+  for (const id of PROFILE_IDS) assert.ok(props.profile.description.includes(`${id} = `), id);
+  assert.deepEqual(doc["x-markenfrei"].profiles, [...PROFILE_IDS]);
+});
+
+test("SourceResult.register: optional, beschrieben als Angebot des Betreibers, mit Beispiel", () => {
+  const register = schemas.SourceResult.properties.register;
+  assert.ok(register, "register fehlt im Schema");
+  assert.ok(!(schemas.SourceResult.required ?? []).includes("register"), "register ist optional");
+  assert.deepEqual(register.required, ["label", "url", "notice"]);
+  assert.match(register.description, /Angebot des Betreibers/);
+  assert.match(register.description, /kostenpflichtig/);
+  assert.match(register.description, /not_found/);
+  assert.equal(register.examples.length, 1);
+  assert.equal(register.examples[0].notice, REGISTER_NOTICE);
+  assert.match(register.examples[0].url, /^https:\/\/example\.org\//);
+  assert.match(doc.paths["/api/check"].post.description, /\*\*Registrierungs-Link:\*\*/);
+  // Die Beispielantwort zeigt keinen Link: ohne Einstellung des Betreibers fehlt das Feld.
+  assert.ok(exampleCheckResponse().reports.every((r) => r.results.every((x) => x.register === undefined)));
 });
 
 test("Grenzen im Dokument kommen aus den Konstanten", () => {
@@ -133,12 +156,12 @@ test("alle Beispielanfragen sind gültig für Schema und Engine", () => {
   for (const [key, body] of Object.entries(EXAMPLE_CHECK_REQUESTS)) {
     const parsed = checkBodySchema.safeParse(body);
     assert.ok(parsed.success, `${key}: ${parsed.success ? "" : parsed.error.message}`);
-    resolveSources({ tlds: parsed.data.tlds, namespaces: parsed.data.namespaces as never, sources: parsed.data.sources });
+    resolveSources(selectSources(parsed.data, false));
   }
   const examples = doc.paths["/api/check"].post.requestBody.content["application/json"].examples;
   assert.deepEqual(
     Object.values(examples).map((e) => (e as { value: unknown }).value),
-    [EXAMPLE_CHECK_REQUESTS.single, EXAMPLE_CHECK_REQUESTS.shortlist, EXAMPLE_CHECK_REQUESTS.selection],
+    [EXAMPLE_CHECK_REQUESTS.single, EXAMPLE_CHECK_REQUESTS.shortlist, EXAMPLE_CHECK_REQUESTS.selection, EXAMPLE_CHECK_REQUESTS.profile],
   );
 });
 
@@ -251,12 +274,37 @@ test("GET /api/sources: Katalog passt zum Schema, enthält jede Quelle und Endun
   assert.deepEqual(json.limits, { maxNames: MAX_NAMES, maxTlds: MAX_TLDS });
   // jede ID aus dem Katalog ist für /api/check gültig
   resolveSources({ sources: json.sources.map((s) => s.id) });
+  // jedes Profil ist für /api/check gültig, ohne Registrierungsdienst nur configured: false
+  assert.deepEqual(json.profiles.map((p) => p.id), [...PROFILE_IDS]);
+  for (const p of json.profiles) resolveSources(selectSources({ profile: p.id }, false));
+  assert.deepEqual(json.register, { configured: false });
+});
+
+test("GET /api/sources nennt einen eingestellten Registrierungsdienst nur mit Namen, nie mit Vorlage", async () => {
+  const saved = { url: process.env.MARKENFREI_REGISTER_URL, name: process.env.MARKENFREI_REGISTER_NAME };
+  process.env.MARKENFREI_REGISTER_URL = "https://example.org/geheim/bestellen?domain={domain}";
+  process.env.MARKENFREI_REGISTER_NAME = "Beispiel-Domains";
+  try {
+    const res = sourcesGET(new Request("http://localhost/api/sources"));
+    const text = await res.text();
+    assert.deepEqual(SourcesCatalogSchema.parse(JSON.parse(text)).register, { configured: true, name: "Beispiel-Domains" });
+    assert.ok(!text.includes("example.org"), "die Vorlage bleibt intern");
+  } finally {
+    for (const [key, value] of [
+      ["MARKENFREI_REGISTER_URL", saved.url],
+      ["MARKENFREI_REGISTER_NAME", saved.name],
+    ] as const) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
 });
 
 test("OpenAPI: /api/sources ist beschrieben und das Beispiel entspricht dem Katalog", () => {
   assert.ok(schemas.SourcesCatalog);
   const example = doc.paths["/api/sources"].get.responses["200"].content["application/json"].example;
-  assert.deepEqual(example, buildSourcesCatalog());
+  assert.deepEqual(example, buildSourcesCatalog(null));
+  assert.deepEqual(example.register, { configured: false });
 });
 
 // --- /llms.txt --------------------------------------------------------------

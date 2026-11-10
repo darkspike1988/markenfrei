@@ -1,13 +1,13 @@
 import type { z } from "zod";
 import { checkNames, CheckInputError, MAX_NAMES } from "@/lib/engine/check";
-import type { Namespace } from "@/lib/engine/types";
+import { selectSources, unknownProfileMessage, type CheckSelection } from "@/lib/engine/format";
 import { CHECK_ERRORS, CHECK_MAX_BODY_BYTES, checkBodySchema } from "@/app/api/_lib/check-schema";
 import { CLIENT_RATE_LIMIT } from "@/lib/rate-limit";
 import { checkCost, distinctNameCount, guardDetailed, isAllowedBrowserCall, isJsonContentType, jsonError, NO_STORE, readLimited } from "@/app/api/_lib/http";
 
 /**
  * POST /api/check
- * Eingabe: { names: string[] (1–MAX_NAMES), tlds?: string[], namespaces?: string[], sources?: string[] }
+ * Eingabe: { names: string[] (1–MAX_NAMES), tlds?: string[], namespaces?: string[], sources?: string[], profile?: string }
  * Ausgabe: { ranking, reports } aus checkNames. Suchanfragen werden nicht gespeichert.
  *
  * Schutz: nur Content-Type application/json (fremde Seiten brauchen dann einen Preflight),
@@ -32,6 +32,7 @@ function describeIssue(issue: z.core.$ZodIssue): string {
     if (issue.code === "too_big" && issue.path.length === 1) return `${field}: zu viele Einträge.`;
     return `${field} muss eine Liste von Texten sein.`;
   }
+  if (field === "profile") return issue.code === "invalid_type" ? "profile muss ein Text sein." : unknownProfileMessage();
   return "Ungültige Anfrage. Erwartet: { names: [\"…\"] }.";
 }
 
@@ -58,15 +59,12 @@ export async function POST(req: Request): Promise<Response> {
   if (!parsed.success) return fail(400, describeIssue(parsed.error.issues[0]));
   const body = parsed.data;
 
-  const opts = {
-    tlds: body.tlds,
-    // Typen prüft resolveSources und meldet unbekannte Werte als CheckInputError.
-    namespaces: body.namespaces as Namespace[] | undefined,
-    sources: body.sources,
-  };
-
+  let opts: CheckSelection;
   let cost: number;
   try {
+    // Profil und ausdrückliche Angaben wie beim MCP-Server, aber ohne automatische Social-Quellen.
+    // Typen und unbekannte Werte prüft resolveSources und meldet sie als CheckInputError.
+    opts = selectSources({ profile: body.profile, namespaces: body.namespaces, tlds: body.tlds, sources: body.sources }, false);
     cost = checkCost(distinctNameCount(body.names), opts);
   } catch (err) {
     if (err instanceof CheckInputError) return fail(400, err.message);

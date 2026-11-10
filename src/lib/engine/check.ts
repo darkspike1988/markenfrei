@@ -1,6 +1,6 @@
 import { cachedLookup, createTtlCache, DEFAULT_CACHE_MAX, DEFAULT_CACHE_TTL_MS } from "@/lib/cache";
 import { buildUserAgent, createHttpClient } from "@/lib/engine/http";
-import { DEFAULT_DOMAIN_TLDS, domainSources, isDomainTld } from "@/lib/engine/sources/domains";
+import { DEFAULT_DOMAIN_TLDS, domainSources, FEATURED_TLDS, isDomainTld } from "@/lib/engine/sources/domains";
 import { KNOWN_NAME_SOURCES } from "@/lib/engine/sources/known-names";
 import { PACKAGE_SOURCES } from "@/lib/engine/sources/packages";
 import { wikidataBrands } from "@/lib/engine/sources/wikidata-brands";
@@ -21,6 +21,7 @@ import {
 export type { ShortlistEntry };
 import { safeHttpUrl } from "@/lib/engine/url";
 import { normalizeName } from "@/lib/name";
+import { registerConfigFromEnv, registerLink, type RegisterService } from "@/lib/register";
 
 export const DEFAULT_NAMESPACES: readonly Namespace[] = ["domains", "packages", "stores", "known_names"];
 export const MAX_TLDS = 8;
@@ -52,6 +53,11 @@ export type CheckOptions = {
   /** Ausdrückliche Quellen-IDs (z. B. "npm", "nuget"). Überschreibt die Standardauswahl außerhalb von domains. */
   sources?: string[];
   contact?: string;
+  /**
+   * Registrierungsdienst des Betreibers (src/lib/register.ts); null schaltet den Link ab.
+   * Ohne Angabe gilt MARKENFREI_REGISTER_URL/MARKENFREI_REGISTER_NAME aus der Umgebung.
+   */
+  register?: RegisterService | null;
   fetchImpl?: typeof fetch;
   now?: () => number;
   /** Nur für Tests: eigene Quellen statt der eingebauten */
@@ -149,6 +155,18 @@ function failed(source: Source, name: string, note: string): SourceResult {
   return { sourceId: source.id, namespace: source.namespace, label: source.label, target: name, status: "unknown", note };
 }
 
+/**
+ * Hängt den Registrierungs-Link an eine Domain-Zeile einer einzeln geprüften Endung mit
+ * "not_found". Läuft nach dem Zwischenspeicher und kopiert die Zeile, damit eine gespeicherte
+ * Zeile nie einen Link trägt und eine geänderte Einstellung sofort gilt.
+ */
+function withRegisterLink(r: SourceResult, service: RegisterService): SourceResult {
+  if (r.namespace !== "domains" || r.status !== "not_found" || !r.sourceId.startsWith("rdap:")) return r;
+  if (!FEATURED_TLDS.includes(r.sourceId.slice("rdap:".length))) return r;
+  const register = registerLink(service, r.target);
+  return register ? { ...r, register } : r;
+}
+
 export async function checkName(input: unknown, opts: CheckOptions = {}): Promise<NameReport> {
   const n = normalizeName(input);
   if (!n.ok) throw new CheckInputError(n.error);
@@ -166,7 +184,7 @@ export async function checkName(input: unknown, opts: CheckOptions = {}): Promis
   });
   const ctx = { http, contact };
 
-  const results = await Promise.all(
+  const cached = await Promise.all(
     sources.map((s) =>
       cachedLookup(
         resultCache,
@@ -185,6 +203,8 @@ export async function checkName(input: unknown, opts: CheckOptions = {}): Promis
       ),
     ),
   );
+  const service = opts.register === undefined ? registerConfigFromEnv(process.env) : opts.register;
+  const results = service ? cached.map((r) => withRegisterLink(r, service)) : cached;
 
   const verdict = computeVerdict(results);
   return {

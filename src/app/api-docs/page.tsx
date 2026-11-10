@@ -5,6 +5,7 @@ import { CodeBlock } from "@/components/code-block";
 import { TocInline, TocLayout, type TocItem } from "@/components/page-toc";
 import { DEFAULT_CACHE_TTL_MS } from "@/lib/cache";
 import { DEFAULT_NAMESPACES, MAX_NAMES, MAX_TLDS, STATIC_SOURCES } from "@/lib/engine/check";
+import { CHECK_PROFILES, PROFILE_SHARED_IDS, profileSummary } from "@/lib/engine/format";
 import { DEFAULT_DOMAIN_TLDS, DOMAIN_TLDS } from "@/lib/engine/sources/domains";
 import { NAMESPACE_LABEL, NAMESPACES, type Status } from "@/lib/engine/types";
 import { STATUS_LABEL, VERDICT_LABEL, type Verdict } from "@/lib/engine/verdict";
@@ -44,12 +45,13 @@ const FIELDS: [string, string][] = [
   ["reports[].incomplete", "Namen der Quellen ohne verwertbare Antwort. Dort heißt „nichts gefunden“ nicht „frei“."],
   ["reports[].results[]", "Eine Zeile je Quelle: sourceId, namespace, label, target, status und, wo vorhanden, url zum Nachprüfen, note, evidence, weak (schwaches Signal, höchstens Gelb) und retryable (bei unknown: später erneut versuchen lohnt sich)."],
   ["reports[].results[].matches", "Optional und additiv: bis zu 5 Vergleichstreffer einer Ähnlichkeitsquelle als { label, kind, id? }, kind ist gleich, klanggleich, schreibaehnlich oder enthalten. Nur ein Hinweis, kein Rechtsbefund; kein Treffer ist keine Freigabe."],
+  ["reports[].results[].register", "Optional und additiv: Registrierungs-Link als { label, url, notice }. Erscheint nur, wenn der Betreiber dieser Instanz einen Registrierungsdienst eingerichtet hat, und nur bei Domains einzeln geprüfter Endungen mit not_found. Es ist ein Angebot des Betreibers, an dem er verdienen kann; „nicht gefunden“ ist keine Zusage, dass die Domain bestellbar ist. Markenfrei überträgt nichts an den Dienst."],
   ["reports[].trademark", "Vorbereitung der Markenrecherche: Registerlinks, DPMA-Expertensuchstring, Schreibvarianten, Klassenvorschlag, Checkliste. status ist immer not_checked: Marken werden nicht abgefragt."],
   ["reports[].manualLinks", "Links zum Nachsehen von Hand (Instagram, TikTok, X, YouTube, Chrome Web Store). Hier wird nichts abgefragt."],
 ];
 
 const ERRORS: [number, string, string][] = [
-  [400, "Kaputtes JSON, falsche Typen, keine oder zu viele Namen, ungültiger Name, unbekannte Endung, Quelle oder Namensraum", `z. B. „Höchstens ${MAX_NAMES} Namen pro Anfrage.“`],
+  [400, "Kaputtes JSON, falsche Typen, keine oder zu viele Namen, ungültiger Name, unbekannte Endung, Quelle, Namensraum oder unbekanntes Profil", `z. B. „Höchstens ${MAX_NAMES} Namen pro Anfrage.“`],
   [403, "Aufruf aus einer fremden Browserseite (Origin nicht erlaubt)", CHECK_ERRORS.forbidden],
   [413, `Body größer als ${CHECK_MAX_BODY_BYTES / 1024} KB`, CHECK_ERRORS.tooLarge],
   [415, "Content-Type ist nicht application/json", CHECK_ERRORS.contentType],
@@ -71,6 +73,10 @@ const CURL_SHORTLIST = `curl -s ${CHECK_URL} \\
 const CURL_SELECTION = `curl -s ${CHECK_URL} \\
   -H "Content-Type: application/json" \\
   -d '${bodyJson(EXAMPLE_CHECK_REQUESTS.selection)}'`;
+
+const CURL_PROFILE = `curl -s ${CHECK_URL} \\
+  -H "Content-Type: application/json" \\
+  -d '${bodyJson(EXAMPLE_CHECK_REQUESTS.profile)}'`;
 
 const JS_EXAMPLE = `const res = await fetch("${CHECK_URL}", {
   method: "POST",
@@ -172,8 +178,12 @@ export default function ApiDocsPage() {
               <tr>
                 <td className="py-2 pr-4 align-top font-mono text-[13px] text-ink">GET /api/sources</td>
                 <td className="py-2 text-soft">
-                  Alle Quellen-IDs, Namensräume und Endungen als JSON, mit Kennzeichnung der Standardauswahl (die
-                  gültigen Werte für <Mono>sources</Mono>, <Mono>namespaces</Mono> und <Mono>tlds</Mono>)
+                  Alle Quellen-IDs, Namensräume, Endungen und Profile als JSON, mit Kennzeichnung der Standardauswahl
+                  (die gültigen Werte für <Mono>sources</Mono>, <Mono>namespaces</Mono>, <Mono>tlds</Mono> und{" "}
+                  <Mono>profile</Mono>). <Mono>profiles</Mono> nennt je Profil <Mono>id</Mono>, <Mono>label</Mono>,{" "}
+                  <Mono>namespaces</Mono>, <Mono>sources</Mono> und bei Domains <Mono>tlds</Mono>.{" "}
+                  <Mono>register</Mono> sagt nur, ob der Betreiber einen Registrierungsdienst eingerichtet hat{" "}
+                  (<Mono>configured</Mono>) und wie er heißt (<Mono>name</Mono>), nie die Link-Vorlage.
                 </td>
               </tr>
               <tr>
@@ -234,7 +244,7 @@ export default function ApiDocsPage() {
       <section aria-labelledby="beispiele">
         <H2 id="beispiele">Beispiele</H2>
         <p className="mb-4 max-w-2xl text-sm text-soft">
-          Eingabe: <Mono>names</Mono> (Pflicht, 1 bis {MAX_NAMES}), optional <Mono>tlds</Mono>,{" "}
+          Eingabe: <Mono>names</Mono> (Pflicht, 1 bis {MAX_NAMES}), optional <Mono>profile</Mono>, <Mono>tlds</Mono>,{" "}
           <Mono>namespaces</Mono> und <Mono>sources</Mono>. Ohne Angabe gelten die Standardwerte (siehe{" "}
           <a href="#werte" className="underline hover:text-ink">Werte</a>).
         </p>
@@ -242,6 +252,7 @@ export default function ApiDocsPage() {
           <CodeBlock label="curl: ein Name mit Standardauswahl" text={CURL_SINGLE} />
           <CodeBlock label="curl: Shortlist, nur die Rangliste anzeigen (jq)" text={CURL_SHORTLIST} />
           <CodeBlock label="curl: Endungen, Namensräume und Quellen wählen" text={CURL_SELECTION} />
+          <CodeBlock label="curl: Profil für ein npm-Paket" text={CURL_PROFILE} />
         </div>
         <p className="mb-4 mt-3 max-w-2xl text-sm text-muted">
           <Mono>sources</Mono> ersetzt die Standardquellen außerhalb von Domains: Wer Zusatzquellen will, schickt die
@@ -313,6 +324,24 @@ export default function ApiDocsPage() {
       <section aria-labelledby="werte">
         <H2 id="werte">Erlaubte Werte</H2>
         <dl className="max-w-2xl space-y-4 text-sm">
+          <div>
+            <dt className="font-medium text-ink">profile</dt>
+            <dd className="mt-1 text-soft">
+              <span className="block">
+                Setzt Namensräume, Quellen und Endungen in einem Wort. Ausdrücklich angegebene <Mono>tlds</Mono> oder{" "}
+                <Mono>sources</Mono> ersetzen den jeweiligen Teil des Profils, ausdrückliche <Mono>namespaces</Mono>{" "}
+                behalten Quellen und Endungen des Profils nur in den gewählten Namensräumen. Jedes Profil außer{" "}
+                <Mono>allgemein</Mono> prüft zusätzlich <Mono>{PROFILE_SHARED_IDS.join(", ")}</Mono>.
+              </span>
+              <span className="mt-1 block">
+                {CHECK_PROFILES.map((p) => (
+                  <span key={p.id} className="mr-2 inline-block">
+                    <Mono>{p.id}</Mono> ({p.label}: {profileSummary(p)})
+                  </span>
+                ))}
+              </span>
+            </dd>
+          </div>
           <div>
             <dt className="font-medium text-ink">namespaces</dt>
             <dd className="mt-1 text-soft">

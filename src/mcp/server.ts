@@ -13,11 +13,14 @@ import {
 } from "@/lib/engine/check";
 import {
   CheckNamesOutputSchema,
-  effectiveSources,
+  describeProfiles,
   formatRanking,
   formatReport,
   prepareShortlist,
+  PROFILE_IDS,
+  selectSources,
   SOCIAL_AUTO_SOURCE_IDS,
+  unknownProfileMessage,
   withoutTrademark,
 } from "@/lib/engine/format";
 import { NameReportSchema, NamespaceSchema, TrademarkPrepSchema } from "@/lib/engine/report-schema";
@@ -48,15 +51,20 @@ export const TOOL_NAMES = [
 ] as const;
 
 const SERVER_INSTRUCTIONS = [
-  "Markenfrei prüft Namen deterministisch in offenen Quellen: Domains (RDAP), Paketregister, App Stores, bekannte Namen und auf Wunsch Social-Plattformen. Kein LLM, keine Speicherung der Anfragen.",
+  "Markenfrei prüft Namen in offenen Quellen: Domains (RDAP), Paketregister, App Stores, bekannte Namen und auf Wunsch Social-Plattformen. Kein LLM, keine Speicherung der Anfragen.",
+  "Wann aufrufen: bevor du ein Projekt, Paket, eine App, ein Repository oder eine Domain anlegst, benennst oder per Scaffold erzeugst, und wenn der Nutzer Namensideen will.",
+  `Ablauf: 5 bis 10 Kandidaten sammeln (eigene Ideen, optional markenfrei_suggest_names), alle zusammen mit markenfrei_check_names und dem passenden profile prüfen (${PROFILE_IDS.join(", ")}). Namen ohne Treffer bevorzugen.`,
   "Status je Quelle: taken = vergeben; not_found = die Quelle kennt den Namen nicht, das heißt nicht, dass er frei oder registrierbar ist; similar = ähnlicher Treffer; invalid = dort nicht zulässig; unknown = keine verwertbare Antwort. unknown nie als frei werten.",
-  "Ampel je Name: green (Keine Treffer) heißt nur, dass die geprüften Quellen nichts gefunden haben. Das ist keine Markenfreigabe.",
-  "Markenregister werden nicht abgefragt, die Marke ist immer „nicht geprüft“. Die Recherche mit markenfrei_trademark_prep vorbereiten und dem Menschen die Links und den DPMA-Suchstring geben.",
-  "Beim Benennen: Kandidaten selbst erzeugen oder markenfrei_suggest_names nutzen, dann alle zusammen mit markenfrei_check_names prüfen (bis 10 Namen).",
+  "Ampel je Name: green (Keine Treffer) heißt nur, dass die geprüften Quellen nichts gefunden haben. Das ist keine Markenfreigabe. Gelb und unknown gelten als nicht geklärt. Einen Namen nie „frei“ nennen.",
+  "Markenregister werden nicht abgefragt, die Marke ist immer „nicht geprüft“. Das dem Nutzer sagen und markenfrei_trademark_prep anbieten (Links und DPMA-Suchstring für den Menschen).",
+  "Steht im Ergebnis „Domain registrieren“ (Feld register): den Link mit dem Hinweis an den Nutzer weitergeben. Es ist ein Angebot des Betreibers, er kann daran verdienen. Nichts selbst bestellen.",
 ].join("\n");
 
 const STATUS_HELP =
   "Status je Quelle: taken = vergeben, not_found = nicht gefunden (das heißt nicht, dass der Name frei oder registrierbar ist), similar = ähnlich, invalid = nicht zulässig, unknown = keine Antwort (nie als frei werten). Ampel: green = keine Treffer in den geprüften Quellen, yellow = Treffer oder Lücken prüfen, red = vergeben. Grün ist keine Markenfreigabe: Markenregister werden nicht abgefragt.";
+
+const REGISTER_HELP =
+  "Bei Domains mit not_found kann ein Registrierungs-Link des Betreibers stehen (Feld register, eigenes, möglicherweise vergütetes Angebot): dem Nutzer zeigen, nichts selbst bestellen.";
 
 // --- Eingaben ---------------------------------------------------------------
 
@@ -95,6 +103,12 @@ const checkFields = {
     .optional()
     .describe(
       `Ausdrückliche Quellen statt der Standardauswahl außerhalb von Domains (Standard: ${DEFAULT_SOURCE_IDS.join(", ")}).`,
+    ),
+  profile: z
+    .enum(PROFILE_IDS, { error: unknownProfileMessage() })
+    .optional()
+    .describe(
+      `Fertige Auswahl zum Vorhaben, z. B. "npm". Setzt namespaces, sources und tlds; ausdrücklich angegebene Felder ersetzen den jeweiligen Teil. Profile: ${describeProfiles()}`,
     ),
 };
 
@@ -147,7 +161,7 @@ function toolError(err: unknown): CallToolResult {
   return { isError: true, content: [{ type: "text", text }] };
 }
 
-export type MarkenfreiServerOptions = Pick<CheckOptions, "fetchImpl" | "now" | "contact">;
+export type MarkenfreiServerOptions = Pick<CheckOptions, "fetchImpl" | "now" | "contact" | "register">;
 
 export function createMarkenfreiMcpServer(opts: MarkenfreiServerOptions = {}): McpServer {
   const server = new McpServer(
@@ -159,7 +173,7 @@ export function createMarkenfreiMcpServer(opts: MarkenfreiServerOptions = {}): M
     "markenfrei_check_name",
     {
       title: "Namen prüfen",
-      description: `Prüft einen Namen, bevor ein Projekt, Paket, Repo, App-Eintrag oder eine Domain angelegt wird: Domains per RDAP, Paketregister (npm, PyPI, GitHub, crates.io, Homebrew), App Stores und bekannte Namen (Marken-Heuristik, Wikidata, GLEIF). Liefert eine Ampel, je Quelle einen Status und die Vorbereitung der Markenrecherche. Der Text nennt die Links zu Treffern und Lücken sowie Links zur manuellen Social-Prüfung; structuredContent enthält den Link jeder Quelle. ${STATUS_HELP} Für mehrere Kandidaten markenfrei_check_names verwenden.`,
+      description: `Prüft einen Namen, bevor ein Projekt, Paket, Repo, App-Eintrag oder eine Domain angelegt wird: Domains per RDAP, Paketregister (npm, PyPI, GitHub, crates.io, Homebrew), App Stores und bekannte Namen (Marken-Heuristik, Wikidata, GLEIF). profile wählt die Quellen zum Vorhaben (z. B. "python"). Liefert eine Ampel, je Quelle einen Status und die Vorbereitung der Markenrecherche. Der Text nennt die Links zu Treffern und Lücken sowie Links zur manuellen Social-Prüfung; structuredContent enthält den Link jeder Quelle. ${STATUS_HELP} ${REGISTER_HELP} Für mehrere Kandidaten markenfrei_check_names verwenden.`,
       inputSchema: {
         name: nameField.describe("Der zu prüfende Name, z. B. wachwerk. Umlaute werden ausgeschrieben, eine angehängte Endung entfernt."),
         ...checkFields,
@@ -167,9 +181,9 @@ export function createMarkenfreiMcpServer(opts: MarkenfreiServerOptions = {}): M
       outputSchema: NameReportSchema,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    async ({ name, namespaces, tlds, sources }) => {
+    async ({ name, profile, namespaces, tlds, sources }) => {
       try {
-        const report = await checkName(name, { ...opts, namespaces, tlds, sources: effectiveSources(namespaces, sources) });
+        const report = await checkName(name, { ...opts, ...selectSources({ profile, namespaces, tlds, sources }, true) });
         return ok(formatReport(report), report);
       } catch (err) {
         return toolError(err);
@@ -181,7 +195,7 @@ export function createMarkenfreiMcpServer(opts: MarkenfreiServerOptions = {}): M
     "markenfrei_check_names",
     {
       title: "Shortlist prüfen",
-      description: `Prüft bis zu ${MAX_NAMES} Kandidaten in denselben Quellen wie markenfrei_check_name und sortiert sie: ohne Treffer in allen gewählten Quellen zuerst, dann wenige Treffer, dann wenige Lücken. Gedacht für die Namenssuche: Kandidaten erzeugen (selbst oder mit markenfrei_suggest_names) und hier gesammelt prüfen. Gleiche Namen nach der Normalisierung werden einmal geprüft. Der Text begründet jede Ampel und verlinkt die Treffer; die Berichte enthalten keine Markenvorbereitung, dafür markenfrei_trademark_prep. ${STATUS_HELP}`,
+      description: `Prüft bis zu ${MAX_NAMES} Kandidaten in denselben Quellen wie markenfrei_check_name und sortiert sie: ohne Treffer in allen gewählten Quellen zuerst, dann wenige Treffer, dann wenige Lücken. Der Standardweg vor dem Benennen: 5 bis 10 Kandidaten sammeln (selbst oder mit markenfrei_suggest_names) und hier mit dem passenden profile prüfen, z. B. profile: "npm". Gleiche Namen nach der Normalisierung werden einmal geprüft. Der Text begründet jede Ampel und verlinkt die Treffer; die Berichte enthalten keine Markenvorbereitung, dafür markenfrei_trademark_prep. ${STATUS_HELP} ${REGISTER_HELP}`,
       inputSchema: {
         names: z
           .array(nameField)
@@ -193,16 +207,11 @@ export function createMarkenfreiMcpServer(opts: MarkenfreiServerOptions = {}): M
       outputSchema: CheckNamesOutputSchema,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    async ({ names, namespaces, tlds, sources }) => {
+    async ({ names, profile, namespaces, tlds, sources }) => {
       try {
         const prepared = prepareShortlist(names);
         if (!prepared.ok) return toolError(new CheckInputError(prepared.error));
-        const result = await checkNames(prepared.inputs, {
-          ...opts,
-          namespaces,
-          tlds,
-          sources: effectiveSources(namespaces, sources),
-        });
+        const result = await checkNames(prepared.inputs, { ...opts, ...selectSources({ profile, namespaces, tlds, sources }, true) });
         const reports = result.reports.map(withoutTrademark);
         return ok(formatRanking(result.ranking, reports, prepared.merged), { ranking: result.ranking, reports });
       } catch (err) {

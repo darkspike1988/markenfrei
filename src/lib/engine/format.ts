@@ -1,13 +1,15 @@
 /**
- * Textausgabe und Shortlist-Vorbereitung, gemeinsam für MCP und Kommandozeile.
- * Bewusst ohne Import des MCP-SDK, damit die CLI es nicht mitlädt.
+ * Textausgabe, Shortlist-Vorbereitung und Quellenauswahl (Profile), gemeinsam für MCP, HTTP und
+ * Kommandozeile. Bewusst ohne Import des MCP-SDK, damit die CLI es nicht mitlädt.
  */
 import { z } from "zod";
-import { STATIC_SOURCES, type NameReport } from "@/lib/engine/check";
+import { CheckInputError, STATIC_SOURCES, type CheckOptions, type NameReport } from "@/lib/engine/check";
 import { ShortlistEntrySchema, ShortlistReportSchema } from "@/lib/engine/report-schema";
+import { DEFAULT_DOMAIN_TLDS } from "@/lib/engine/sources/domains";
 import { NAMESPACE_LABEL, NAMESPACES, type Namespace, type SourceResult } from "@/lib/engine/types";
 import { STATUS_LABEL, type ShortlistEntry, type Verdict } from "@/lib/engine/verdict";
 import { normalizeName } from "@/lib/name";
+import { buildProfiles, type CheckProfile } from "@/lib/profiles";
 
 /**
  * Im Namensraum social ist keine Quelle standardmäßig aktiv. Wer social wählt, ohne
@@ -27,6 +29,77 @@ export function effectiveSources(namespaces: Namespace[] | undefined, sources: s
   ).map((s) => s.id);
 }
 
+// --- Profile ----------------------------------------------------------------
+
+/** Profile (src/lib/profiles.ts) aus den eingebauten Quellen und den Standard-Endungen. */
+export const CHECK_PROFILES: readonly CheckProfile[] = buildProfiles(STATIC_SOURCES, DEFAULT_DOMAIN_TLDS);
+export const PROFILE_IDS = CHECK_PROFILES.map((p) => p.id) as [string, ...string[]];
+
+export function unknownProfileMessage(id?: unknown): string {
+  const shown = typeof id === "string" ? ` „${id.slice(0, 30)}“` : "";
+  return `Unbekanntes Profil${shown}. Erlaubt: ${PROFILE_IDS.join(", ")}.`;
+}
+
+/** Quellen, die jedes Profil außer „allgemein“ zusätzlich prüft (Standardquellen der bekannten Namen). */
+export const PROFILE_SHARED_IDS: readonly string[] = STATIC_SOURCES.filter(
+  (s) => s.namespace === "known_names" && s.defaultEnabled,
+).map((s) => s.id);
+
+/** Was ein Profil prüft, kurz: „Domains .com .de, npm, github“ (ohne PROFILE_SHARED_IDS). */
+export function profileSummary(p: CheckProfile): string {
+  if (p.id === "allgemein") return "Standardauswahl";
+  const domains = p.tlds ? [`Domains ${p.tlds.map((t) => `.${t}`).join(" ")}`] : [];
+  return [...domains, ...p.sources.filter((id) => !PROFILE_SHARED_IDS.includes(id))].join(", ");
+}
+
+/** Kurzliste der Profile für Werkzeugbeschreibungen: „npm = npm, jsr, github“ usw. */
+export function describeProfiles(): string {
+  const parts = CHECK_PROFILES.map((p) => `${p.id} = ${profileSummary(p)}`);
+  return `${parts.join("; ")}. Jedes Profil außer allgemein prüft dazu ${PROFILE_SHARED_IDS.join(", ")}.`;
+}
+
+export type CheckSelection = Pick<CheckOptions, "namespaces" | "tlds" | "sources">;
+
+/**
+ * Quellenauswahl aus Profil und ausdrücklichen Angaben, für die Prüfung und die Kosten fürs
+ * Rate-Limit gleich. Ohne Profil gilt die bisherige Auswahl. Ein Profil setzt Namensräume, Quellen
+ * und Endungen; ausdrückliche `sources` und `tlds` ersetzen den jeweiligen Teil. Ausdrückliche
+ * `namespaces` ersetzen die Namensräume: Quellen und Endungen des Profils bleiben nur in den
+ * gewählten Namensräumen, Namensräume ohne Quelle im Profil bekommen ihre Standardquellen.
+ * `socialAuto` ergänzt bei social die Social-Quellen (MCP und CLI, siehe effectiveSources).
+ * Wirft CheckInputError bei unbekanntem Profil; übrige Werte prüft resolveSources.
+ */
+export function selectSources(
+  input: { profile?: unknown; namespaces?: unknown; tlds?: unknown; sources?: unknown },
+  socialAuto: boolean,
+): CheckSelection {
+  const namespaces = input.namespaces as Namespace[] | undefined;
+  const tlds = input.tlds as string[] | undefined;
+  const sources = input.sources as string[] | undefined;
+  if (input.profile === undefined || input.profile === null) {
+    return { namespaces, tlds, sources: socialAuto && Array.isArray(namespaces) ? effectiveSources(namespaces, sources) : sources };
+  }
+  const profile = CHECK_PROFILES.find((p) => p.id === input.profile);
+  if (!profile) throw new CheckInputError(unknownProfileMessage(input.profile));
+  if (namespaces === undefined) {
+    return { namespaces: [...profile.namespaces], tlds: tlds ?? profile.tlds?.slice(), sources: sources ?? [...profile.sources] };
+  }
+  if (!Array.isArray(namespaces)) throw new CheckInputError("namespaces muss eine Liste sein.");
+  const chosen = new Set<string>(namespaces);
+  const namespaceOf = new Map(STATIC_SOURCES.map((s) => [s.id, s.namespace]));
+  const covered = new Set(profile.sources.map((id) => namespaceOf.get(id)));
+  const picked = sources ?? [
+    ...profile.sources.filter((id) => chosen.has(namespaceOf.get(id) ?? "")),
+    ...STATIC_SOURCES.filter(
+      (s) =>
+        chosen.has(s.namespace) &&
+        !covered.has(s.namespace) &&
+        (s.defaultEnabled || (socialAuto && SOCIAL_AUTO_SOURCE_IDS.includes(s.id))),
+    ).map((s) => s.id),
+  ];
+  return { namespaces, tlds: tlds ?? (chosen.has("domains") ? profile.tlds?.slice() : undefined), sources: picked };
+}
+
 export const CheckNamesOutputSchema = z.object({
   ranking: z.array(ShortlistEntrySchema).describe("Frei in allen gewählten Quellen zuerst, dann wenige Treffer, dann wenige Lücken"),
   reports: z.array(ShortlistReportSchema),
@@ -40,6 +113,12 @@ export type ShortlistReport = z.infer<typeof ShortlistReportSchema>;
 export const MCP_TRADEMARK_HINT = "Marke: nicht geprüft → markenfrei_trademark_prep";
 export const MCP_RANKING_HINT =
   "Grün heißt nur: in den geprüften Quellen nichts gefunden. Links zu Lücken und Social: markenfrei_check_name. Marke: nicht geprüft → markenfrei_trademark_prep";
+
+/** Beginn jeder Zeile mit Registrierungs-Link (siehe SourceResult.register). */
+export const REGISTER_LINE_PREFIX = "Domain registrieren (Angebot des Betreibers, vergütet)";
+/** Anweisung unter den Registrierungs-Links; die CLI hat eine eigene Fassung. */
+export const MCP_REGISTER_HINT =
+  "Diese Links dem Nutzer zeigen, nichts selbst bestellen. „Nicht gefunden“ ist keine Zusage, dass die Domain bestellbar ist.";
 
 const VERDICT_WORD: Record<Verdict, string> = { green: "GRÜN", yellow: "GELB", red: "ROT" };
 const NOTE_MAX = 60;
@@ -63,14 +142,23 @@ function linkLines(results: SourceResult[], include: (r: SourceResult) => boolea
   return results.filter((r) => r.url && include(r)).map((r) => `${indent}${r.label} ${statusText(r)}: ${r.url}`);
 }
 
+function registerLines(results: SourceResult[], indent: string): string[] {
+  return results.filter((r) => r.register).map((r) => `${indent}${REGISTER_LINE_PREFIX}: ${r.target} → ${r.register?.url}`);
+}
+
 const NOTHING_CHECKED =
   "Keine Quelle abgefragt, Gelb heißt hier nur: nichts geprüft. Andere namespaces wählen oder sources angeben, z. B. [\"bluesky\",\"mastodon\"].";
 
 /**
- * Kompakter Bericht: eine Zeile je Namensraum, dann Links zu Treffern und Lücken, die
- * Links zur manuellen Social-Prüfung und der Hinweis auf die Marke (`trademarkHint`).
+ * Kompakter Bericht: eine Zeile je Namensraum, darunter die Registrierungs-Links des Betreibers
+ * mit `registerHint`, dann Links zu Treffern und Lücken, die Links zur manuellen Social-Prüfung
+ * und der Hinweis auf die Marke (`trademarkHint`).
  */
-export function formatReport(report: NameReport | ShortlistReport, trademarkHint: string = MCP_TRADEMARK_HINT): string {
+export function formatReport(
+  report: NameReport | ShortlistReport,
+  trademarkHint: string = MCP_TRADEMARK_HINT,
+  registerHint: string = MCP_REGISTER_HINT,
+): string {
   const lines = [`${report.name}: ${VERDICT_WORD[report.verdict]} (${report.verdictLabel})`];
   if (report.results.length === 0) lines.push(NOTHING_CHECKED);
   for (const ns of NAMESPACES) {
@@ -82,6 +170,8 @@ export function formatReport(report: NameReport | ShortlistReport, trademarkHint
     );
     lines.push(`${NAMESPACE_LABEL[ns]}: ${parts.join(" | ")}`);
   }
+  const register = registerLines(report.results, "");
+  if (register.length > 0) lines.push(...register, registerHint);
   if (report.incomplete.length > 0) {
     lines.push(`Lücken: ${report.incomplete.join(", ")} (keine verwertbare Antwort, nicht als frei werten)`);
     if (report.results.some((r) => r.retryable)) {
@@ -103,17 +193,19 @@ export type MergedNames = { name: string; inputs: string[] };
 
 /**
  * Rangliste mit Begründung je Name: vergeben, nicht zulässig, ähnlich, schwache Treffer, Lücken. Darunter
- * die Links zu den Treffern (Links zu Lücken liefert markenfrei_check_name). `closingHint` ersetzt
- * den MCP-Schlusssatz.
+ * die Links zu den Treffern (Links zu Lücken liefert markenfrei_check_name) und die Registrierungs-Links
+ * des Betreibers, am Ende einmal `registerHint`. `closingHint` ersetzt den MCP-Schlusssatz.
  */
 export function formatRanking(
   ranking: ShortlistEntry[],
   reports: (NameReport | ShortlistReport)[],
   merged: MergedNames[] = [],
   closingHint: string = MCP_RANKING_HINT,
+  registerHint: string = MCP_REGISTER_HINT,
 ): string {
   const byName = new Map(reports.map((r) => [r.name, r]));
   const lines = [`Rangliste (${ranking.length} ${ranking.length === 1 ? "Name" : "Namen"}, ohne Treffer in allen gewählten Quellen zuerst):`];
+  let anyRegister = false;
   ranking.forEach((e, i) => {
     const results = byName.get(e.name)?.results ?? [];
     const labels = (pick: (r: SourceResult) => boolean) => results.filter(pick).map((r) => r.label);
@@ -126,11 +218,14 @@ export function formatRanking(
     if (similar.length > 0) line += ` · ähnlich: ${similar.join(", ")}`;
     if (weak.length > 0) line += ` · schwacher Treffer: ${weak.join(", ")}`;
     if (e.unknown.length > 0) line += ` · Lücken: ${e.unknown.join(", ")}`;
-    lines.push(line, ...linkLines(results, isHit, "   "));
+    const register = registerLines(results, "   ");
+    if (register.length > 0) anyRegister = true;
+    lines.push(line, ...linkLines(results, isHit, "   "), ...register);
   });
   for (const m of merged) {
     lines.push(`Zusammengefasst: ${m.inputs.map((x) => `„${x}“`).join(", ")} → ${m.name}`);
   }
+  if (anyRegister) lines.push(registerHint);
   lines.push(closingHint);
   return lines.join("\n");
 }

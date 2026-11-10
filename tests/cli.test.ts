@@ -2,9 +2,9 @@ import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { checkName, checkNames, clearResultCache, STATIC_SOURCES } from "@/lib/engine/check";
+import { checkName, checkNames, clearResultCache, resolveSources, STATIC_SOURCES } from "@/lib/engine/check";
 import type { NameReport } from "@/lib/engine/check";
-import { CheckNamesOutputSchema } from "@/lib/engine/format";
+import { CheckNamesOutputSchema, MCP_REGISTER_HINT, REGISTER_LINE_PREFIX, selectSources } from "@/lib/engine/format";
 import { resetHostBudgets } from "@/lib/engine/http";
 import { NameReportSchema } from "@/lib/engine/report-schema";
 import { rankReports, type Verdict } from "@/lib/engine/verdict";
@@ -97,6 +97,70 @@ test("parseArgs: check mit einem und mehreren Namen, --json, Kommalisten für --
 
   assert.deepEqual(parseCliArgs(["--help"]), { kind: "help" });
   assert.deepEqual(parseCliArgs(["--version"]), { kind: "version" });
+  assert.deepEqual(parseCliArgs(["check", "wachwerk", "--profile", " npm "]), {
+    kind: "check",
+    names: ["wachwerk"],
+    json: false,
+    profile: "npm",
+  });
+});
+
+test("--profile: Auswahl wie bei API und MCP, unbekanntes Profil Exit 64 ohne Netzabfrage", async () => {
+  const seen: string[] = [];
+  const spy = (async (url: string) => (seen.push(url), new Response(null, { status: 404 }))) as unknown as typeof fetch;
+  const { deps, out } = realDeps(spy);
+  assert.notEqual(await run(["check", "wachwerk", "--profile", "rust", "--json"], deps), 64);
+  const report = NameReportSchema.parse(JSON.parse(out.text()));
+  const expected = resolveSources(selectSources({ profile: "rust" }, true)).map((s) => s.id);
+  assert.deepEqual(report.results.map((r) => r.sourceId), expected);
+
+  clearResultCache();
+  resetHostBudgets();
+  const withTlds = realDeps(spy);
+  assert.notEqual(await run(["check", "wachwerk", "--profile", "rust", "--tlds", "de", "--json"], withTlds.deps), 64);
+  assert.deepEqual(NameReportSchema.parse(JSON.parse(withTlds.out.text())).results.map((r) => r.sourceId), ["rdap:de", ...expected]);
+
+  seen.length = 0;
+  const bad = realDeps(spy);
+  assert.equal(await run(["check", "wachwerk", "--profile", "gibtsnicht"], bad.deps), 64);
+  assert.match(bad.err.text(), /Unbekanntes Profil „gibtsnicht“\. Erlaubt: allgemein, /);
+  assert.equal(seen.length, 0);
+
+  const help = fakeDeps(fakeEngine({}));
+  assert.equal(await run(["--help"], help.deps), 0);
+  assert.match(help.out.text(), /--profile id/);
+});
+
+test("Registrierungs-Link nur aus deps.env, mit eigener Schlusszeile ohne MCP-Anweisung", async () => {
+  const env = {
+    MARKENFREI_CONTACT: "mail@example.org",
+    MARKENFREI_REGISTER_URL: "https://example.org/bestellen?domain={domain}",
+    MARKENFREI_REGISTER_NAME: "Beispiel-Domains",
+  };
+  const { deps, out } = realDeps(notFound, env);
+  assert.equal(await run(["check", "wachwerk", "--tlds", "de", "--sources", "pypi"], deps), 0);
+  const lines = out.text().split("\n");
+  assert.ok(lines.includes(`${REGISTER_LINE_PREFIX}: wachwerk.de → https://example.org/bestellen?domain=wachwerk.de`), out.text());
+  assert.ok(lines.includes("„Nicht gefunden“ ist keine Zusage, dass die Domain bestellbar ist."), out.text());
+  assert.ok(!out.text().includes(MCP_REGISTER_HINT));
+
+  // Ohne deps.env kein Link, auch wenn process.env ihn setzt
+  const saved = { url: process.env.MARKENFREI_REGISTER_URL, name: process.env.MARKENFREI_REGISTER_NAME };
+  process.env.MARKENFREI_REGISTER_URL = env.MARKENFREI_REGISTER_URL;
+  process.env.MARKENFREI_REGISTER_NAME = env.MARKENFREI_REGISTER_NAME;
+  try {
+    const plain = realDeps(notFound, { MARKENFREI_CONTACT: "mail@example.org" });
+    assert.equal(await run(["check", "wachwerk", "--tlds", "de", "--sources", "pypi", "--json"], plain.deps), 0);
+    assert.ok(NameReportSchema.parse(JSON.parse(plain.out.text())).results.every((r) => r.register === undefined));
+  } finally {
+    for (const [key, value] of [
+      ["MARKENFREI_REGISTER_URL", saved.url],
+      ["MARKENFREI_REGISTER_NAME", saved.name],
+    ] as const) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
 });
 
 test("ohne Unterbefehl oder Namen: Hilfe auf stderr, Exit 64", async () => {

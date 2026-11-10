@@ -32,6 +32,9 @@ export type SourceMatch = { label: string; kind: MatchKind; id?: string };
 
 export const MAX_MATCHES = 5;
 
+/** Registrierungs-Link des Betreibers zu einer Domain (src/lib/register.ts). */
+export type RegisterLink = { label: string; url: string; notice: string };
+
 export type SourceResult = {
   /** Stabile ID der Quelle, z. B. "npm" oder "rdap:de" */
   sourceId: string;
@@ -60,6 +63,12 @@ export type SourceResult = {
    * (höchstens 5). Nur ein Hinweis, kein Rechtsbefund; ein fehlender Treffer ist keine Freigabe.
    */
   matches?: SourceMatch[];
+  /**
+   * Optional und additiv: Link zum Registrierungsdienst des Betreibers. Nur an Domain-Zeilen einzeln
+   * geprüfter Endungen mit "not_found" und nur, wenn der Betreiber den Dienst eingestellt hat. Ein
+   * eigenes, möglicherweise vergütetes Angebot des Betreibers, keine Zusage, dass die Domain bestellbar ist.
+   */
+  register?: RegisterLink;
 };
 
 export type HttpRequest = {

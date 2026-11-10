@@ -4,7 +4,8 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { clearAllCaches } from "@/lib/cache";
-import { clearResultCache } from "@/lib/engine/check";
+import { clearResultCache, resolveSources } from "@/lib/engine/check";
+import { MCP_REGISTER_HINT, PROFILE_IDS, REGISTER_LINE_PREFIX, selectSources } from "@/lib/engine/format";
 import { NameReportSchema } from "@/lib/engine/report-schema";
 import type { NameReport } from "@/lib/engine/check";
 import { rankReports } from "@/lib/engine/verdict";
@@ -71,6 +72,20 @@ test("Server-Anweisungen warnen vor grün als Markenfreigabe und vor unknown", (
   assert.equal(client.getServerVersion()?.name, "markenfrei");
 });
 
+test("Server-Anweisungen nennen Anlass, Ablauf, Profile und den Umgang mit dem Registrierungs-Link", () => {
+  const instructions = client.getInstructions() ?? "";
+  assert.match(instructions, /bevor du ein Projekt, Paket, eine App, ein Repository oder eine Domain anlegst, benennst/);
+  assert.match(instructions, /Namensideen/);
+  assert.match(instructions, /5 bis 10 Kandidaten/);
+  assert.match(instructions, /markenfrei_check_names und dem passenden profile/);
+  for (const id of PROFILE_IDS) assert.ok(instructions.includes(id), `Profil ${id} fehlt`);
+  assert.match(instructions, /Namen ohne Treffer bevorzugen/);
+  assert.match(instructions, /Gelb und unknown gelten als nicht geklärt/);
+  assert.match(instructions, /nie „frei“ nennen/);
+  assert.match(instructions, /Nichts selbst bestellen/);
+  assert.ok(instructions.length < 2000, `Anweisungen sind ${instructions.length} Zeichen lang`);
+});
+
 test("tools/list: genau vier Werkzeuge, alle mit Titel, outputSchema und Annotationen", async () => {
   const { tools } = await client.listTools();
   assert.deepEqual(tools.map((t) => t.name).sort(), [...TOOL_NAMES].sort());
@@ -89,6 +104,13 @@ test("tools/list: genau vier Werkzeuge, alle mit Titel, outputSchema und Annotat
   assert.deepEqual(props.namespaces.items?.enum, ["domains", "packages", "stores", "social", "known_names"]);
   assert.ok(props.sources.items?.enum?.includes("npm"));
   assert.ok(!props.sources.items?.enum?.some((id) => id.startsWith("rdap:")), "Domains laufen über tlds");
+  for (const name of ["markenfrei_check_name", "markenfrei_check_names"]) {
+    const tool = tools.find((t) => t.name === name);
+    const profile = (tool?.inputSchema.properties as Record<string, { enum?: string[]; description?: string }>).profile;
+    assert.deepEqual(profile.enum, [...PROFILE_IDS], name);
+    for (const id of PROFILE_IDS) assert.ok(profile.description?.includes(`${id} = `), `${name}: ${id} nicht beschrieben`);
+    assert.match(tool?.description ?? "", /profile/, name);
+  }
 });
 
 test("tools/list ohne Endungs-Aufzählung", async () => {
@@ -397,4 +419,68 @@ test("Schemafehler (Endung, Anzahl, Länge) ergeben isError statt Absturz", asyn
   const kw = await call("markenfrei_suggest_names", { keywords: [] });
   assert.equal(kw.isError, true);
   assert.match(text(kw), /mindestens ein Stichwort/);
+});
+
+test("profile: das Werkzeug prüft die aufgelöste Auswahl, ausdrückliche tlds ersetzen nur die Endungen", async () => {
+  const expected = resolveSources(selectSources({ profile: "npm" }, true)).map((s) => s.id);
+  assert.ok(!expected.some((id) => id.startsWith("rdap:")), "npm ohne Domains");
+  const res = await call("markenfrei_check_names", { names: ["profilname", "profilzwei"], profile: "npm" });
+  assert.notEqual(res.isError, true, text(res));
+  const out = CheckNamesOutputSchema.parse(res.structuredContent);
+  for (const r of out.reports) assert.deepEqual(r.results.map((x) => x.sourceId), expected);
+
+  const single = await call("markenfrei_check_name", { name: "profilname", profile: "npm", tlds: ["de"] });
+  assert.notEqual(single.isError, true, text(single));
+  assert.deepEqual(NameReportSchema.parse(single.structuredContent).results.map((r) => r.sourceId), ["rdap:de", ...expected]);
+});
+
+test("profile: unbekanntes Profil ist ein Eingabefehler mit der Liste der Profile, ohne Netzabfrage", async () => {
+  const before = requested.length;
+  const res = await call("markenfrei_check_names", { names: ["profilname"], profile: "gibtsnicht" });
+  assert.equal(res.isError, true);
+  assert.match(text(res), /Unbekanntes Profil\. Erlaubt: allgemein, web-app, /);
+  assert.equal(requested.length, before);
+});
+
+test("Registrierungs-Link: im Text und in structuredContent nur bei eingestelltem Dienst", async () => {
+  const args = { names: ["vergeben", "wachwerk"], tlds: ["de"], sources: ["npm"] };
+  const plain = await call("markenfrei_check_names", args);
+  assert.ok(!text(plain).includes(REGISTER_LINE_PREFIX), "ohne Einstellung kein Link");
+  for (const r of CheckNamesOutputSchema.parse(plain.structuredContent).reports) {
+    assert.ok(r.results.every((x) => x.register === undefined));
+  }
+
+  const server = createMarkenfreiMcpServer({
+    register: { name: "Beispiel-Domains", urlTemplate: "https://example.org/bestellen?domain={domain}" },
+  });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const other = new Client({ name: "test", version: "0" });
+  await Promise.all([server.connect(serverTransport), other.connect(clientTransport)]);
+  try {
+    const res = (await other.callTool({ name: "markenfrei_check_names", arguments: args })) as CallToolResult;
+    assert.notEqual(res.isError, true, text(res));
+    const out = CheckNamesOutputSchema.parse(res.structuredContent);
+    const byName = new Map(out.reports.map((r) => [r.name, r]));
+    const de = byName.get("wachwerk")?.results.find((r) => r.sourceId === "rdap:de");
+    assert.equal(de?.status, "not_found");
+    assert.deepEqual(de?.register, {
+      label: "Registrieren über Beispiel-Domains",
+      url: "https://example.org/bestellen?domain=wachwerk.de",
+      notice:
+        "Angebot des Betreibers dieser Seite; er kann dafür eine Vergütung erhalten. „Nicht gefunden“ ist keine Zusage, dass die Domain bestellbar ist.",
+    });
+    assert.ok(byName.get("vergeben")?.results.every((r) => r.register === undefined), "vergeben ohne Link");
+    assert.ok(byName.get("wachwerk")?.results.find((r) => r.sourceId === "npm")?.register === undefined, "nur Domains");
+
+    const lines = text(res).split("\n");
+    assert.ok(lines.includes(`   ${REGISTER_LINE_PREFIX}: wachwerk.de → https://example.org/bestellen?domain=wachwerk.de`), text(res));
+    assert.ok(lines.includes(MCP_REGISTER_HINT), text(res));
+    assert.ok(!lines.some((l) => l.includes("vergeben.de →")));
+
+    const single = (await other.callTool({ name: "markenfrei_check_name", arguments: { name: "wachwerk", tlds: ["de"], sources: ["npm"] } })) as CallToolResult;
+    assert.equal(NameReportSchema.parse(single.structuredContent).results[0].register?.url, "https://example.org/bestellen?domain=wachwerk.de");
+    assert.ok(text(single).split("\n").includes(`${REGISTER_LINE_PREFIX}: wachwerk.de → https://example.org/bestellen?domain=wachwerk.de`));
+  } finally {
+    await other.close();
+  }
 });

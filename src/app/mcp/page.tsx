@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { CodeBlock as Code } from "@/components/code-block";
 import { TocInline, TocLayout, type TocItem } from "@/components/page-toc";
+import { CHECK_PROFILES, PROFILE_SHARED_IDS, profileSummary } from "@/lib/engine/format";
+import { AGENT_INSTRUCTIONS_DE, AGENT_INSTRUCTIONS_EN } from "@/lib/llms-txt";
 
 export const metadata: Metadata = {
   title: "MCP einrichten",
@@ -23,13 +25,13 @@ const SNIPPETS = {
 const TOOLS: { name: string; input: string; text: string }[] = [
   {
     name: "markenfrei_check_name",
-    input: "name, namespaces?, tlds?, sources?",
+    input: "name, profile?, namespaces?, tlds?, sources?",
     text: "Prüft einen Namen in Domains, Paketregistern, App Stores und bekannten Namen. Liefert Ampel, eine Zeile pro Quelle mit Link und die Markenrecherche-Vorbereitung.",
   },
   {
     name: "markenfrei_check_names",
     input: "names (1 bis 10), sonst wie oben",
-    text: "Prüft eine Shortlist und sortiert sie: ohne Treffer in allen gewählten Quellen zuerst, dann wenige Treffer, dann wenige unzulässige Namensräume, dann wenige Lücken.",
+    text: "Prüft eine Shortlist und sortiert sie: ohne Treffer in allen gewählten Quellen zuerst, dann wenige Treffer, dann wenige unzulässige Namensräume, dann wenige Lücken. Der Standardweg vor dem Benennen.",
   },
   {
     name: "markenfrei_trademark_prep",
@@ -48,6 +50,9 @@ const TOC: TocItem[] = [
   { href: "#claude-desktop", label: "Claude Desktop" },
   { href: "#cursor", label: "Cursor" },
   { href: "#tools", label: "Werkzeuge" },
+  { href: "#profile", label: "Profile" },
+  { href: "#ablauf", label: "Ablauf für Agenten" },
+  { href: "#agents-md", label: "AGENTS.md" },
 ];
 
 function H2({ id, children }: { id: string; children: React.ReactNode }) {
@@ -131,6 +136,67 @@ export default function McpPage() {
           </Link>
           .
         </p>
+      </section>
+
+      <section aria-labelledby="profile">
+        <H2 id="profile">Profile</H2>
+        <p className="mb-3 max-w-2xl text-sm text-soft">
+          <code className="font-mono text-[13px]">profile</code> wählt Namensräume, Quellen und Endungen in einem Wort,
+          zum Beispiel <code className="font-mono text-[13px]">{`{ "names": ["wachwerk", "fokusnova"], "profile": "npm" }`}</code>.
+          Ausdrücklich angegebene <code className="font-mono text-[13px]">namespaces</code>,{" "}
+          <code className="font-mono text-[13px]">tlds</code> oder <code className="font-mono text-[13px]">sources</code>{" "}
+          ersetzen den jeweiligen Teil. Jedes Profil außer „allgemein“ prüft zusätzlich{" "}
+          {PROFILE_SHARED_IDS.join(", ")}. Dasselbe Feld gilt für <code className="font-mono text-[13px]">POST /api/check</code>;
+          die Liste steht auch unter <code className="font-mono text-[13px]">GET /api/sources</code>.
+        </p>
+        <ul className="divide-y divide-line border-y border-line">
+          {CHECK_PROFILES.map((p) => (
+            <li key={p.id} className="flex flex-wrap items-baseline gap-x-3 py-2.5">
+              <span className="font-mono text-sm font-medium text-ink">{p.id}</span>
+              <span className="text-sm text-soft">{p.label}</span>
+              <span className="font-mono text-xs text-muted">{profileSummary(p)}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section aria-labelledby="ablauf">
+        <H2 id="ablauf">Ablauf für Agenten</H2>
+        <ol className="max-w-2xl list-decimal space-y-1.5 pl-5 text-sm text-soft">
+          <li>
+            Aufrufen, bevor ein Projekt, Paket, eine App, ein Repository oder eine Domain angelegt oder benannt wird, und
+            wenn der Nutzer Namensideen will.
+          </li>
+          <li>
+            5 bis 10 Kandidaten sammeln (eigene Ideen, optional <code className="font-mono text-[13px]">markenfrei_suggest_names</code>)
+            und alle zusammen mit <code className="font-mono text-[13px]">markenfrei_check_names</code> und dem passenden
+            Profil prüfen.
+          </li>
+          <li>
+            Namen ohne Treffer bevorzugen. Gelb und „unbekannt“ gelten als nicht geklärt; kein Name wird „frei“ genannt.
+          </li>
+          <li>
+            Marken sind nicht geprüft: das sagen und <code className="font-mono text-[13px]">markenfrei_trademark_prep</code>{" "}
+            anbieten.
+          </li>
+          <li>
+            Hat der Betreiber einer Instanz einen Registrierungsdienst eingestellt, steht bei Domains mit „nicht
+            gefunden“ ein Link „Domain registrieren“. Das ist ein Angebot des Betreibers, an dem er verdienen kann. Der
+            Agent zeigt den Link mit Hinweis und bestellt nichts selbst.
+          </li>
+        </ol>
+      </section>
+
+      <section aria-labelledby="agents-md">
+        <H2 id="agents-md">Anweisung für AGENTS.md oder CLAUDE.md</H2>
+        <p className="mb-3 max-w-2xl text-sm text-soft">
+          Diesen Abschnitt in die Anweisungsdatei eines Projekts kopieren, damit der Coding-Agent Namen vor dem Anlegen
+          mit Markenfrei prüft. Der MCP-Server muss eingerichtet sein (siehe oben).
+        </p>
+        <div className="space-y-3">
+          <Code label="Deutsch" text={AGENT_INSTRUCTIONS_DE} />
+          <Code label="English" text={AGENT_INSTRUCTIONS_EN} />
+        </div>
       </section>
     </TocLayout>
   );

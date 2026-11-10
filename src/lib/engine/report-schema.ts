@@ -35,6 +35,16 @@ export const SourceMatchSchema = z.object({
   id: z.string().optional().describe("Kennung des Eintrags in der Quelle, z. B. Wikidata-ID"),
 });
 
+export const RegisterLinkSchema = z
+  .object({
+    label: z.string().describe("Beschriftung, z. B. Registrieren über <Name des Dienstes>"),
+    url: z.string().describe("https-Link zum Dienst des Betreibers; der Domainname steht nur im Link"),
+    notice: z.string().describe("Fester Hinweis: Angebot des Betreibers, möglicherweise vergütet, keine Zusage der Bestellbarkeit"),
+  })
+  .describe(
+    "Optional: Registrierungs-Link des Betreibers. Nur an Domain-Zeilen einzeln geprüfter Endungen mit not_found und nur, wenn der Betreiber den Dienst eingestellt hat. Ein eigenes, möglicherweise kostenpflichtiges oder vergütetes Angebot des Betreibers; dem Menschen zeigen, nicht selbst bestellen",
+  );
+
 export const SourceResultSchema = z.object({
   sourceId: z.string().describe("Stabile ID der Quelle, z. B. npm oder rdap:de"),
   namespace: NamespaceSchema,
@@ -53,6 +63,7 @@ export const SourceResultSchema = z.object({
     .array(SourceMatchSchema)
     .optional()
     .describe("Optional: bis zu 5 Vergleichstreffer einer Ähnlichkeitsquelle (wikidata_brands, known_brands). Nur ein Hinweis, kein Rechtsbefund; kein Treffer ist keine Freigabe"),
+  register: RegisterLinkSchema.optional(),
 });
 
 export const TrademarkLinkSchema = z.object({

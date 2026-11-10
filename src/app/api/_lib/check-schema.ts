@@ -18,6 +18,7 @@ export const CHECK_LIMITS = {
   namespacesMaxItems: 20,
   sourceMaxLength: 60,
   sourcesMaxItems: 100,
+  profileMaxLength: 40,
 } as const;
 
 export const checkBodySchema = z.object({
@@ -25,6 +26,7 @@ export const checkBodySchema = z.object({
   tlds: z.array(z.string().max(CHECK_LIMITS.tldMaxLength)).max(CHECK_LIMITS.tldsMaxItems).optional(),
   namespaces: z.array(z.string().max(CHECK_LIMITS.namespaceMaxLength)).max(CHECK_LIMITS.namespacesMaxItems).optional(),
   sources: z.array(z.string().max(CHECK_LIMITS.sourceMaxLength)).max(CHECK_LIMITS.sourcesMaxItems).optional(),
+  profile: z.string().max(CHECK_LIMITS.profileMaxLength).optional(),
 });
 
 /** Feste Fehlermeldungen (jeweils als { error } ausgeliefert). */

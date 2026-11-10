@@ -2,7 +2,8 @@ import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
 import { clearAllCaches } from "@/lib/cache";
-import { clearResultCache } from "@/lib/engine/check";
+import { clearResultCache, resolveSources } from "@/lib/engine/check";
+import { selectSources } from "@/lib/engine/format";
 import { POST } from "@/app/api/check/route";
 import type { SourceResult } from "@/lib/engine/types";
 import { rankReports, type ShortlistEntry } from "@/lib/engine/verdict";
@@ -65,6 +66,34 @@ test("Endungen und ausdrückliche Quellen werden übernommen", async () => {
   assert.equal(res.status, 200);
   const body = (await res.json()) as { reports: { results: { sourceId: string }[] }[] };
   assert.deepEqual(body.reports[0].results.map((r) => r.sourceId), ["rdap:de", "rdap:com", "nuget"]);
+});
+
+test("profile wählt Namensräume, Quellen und Endungen; ausdrückliche Felder ersetzen ihren Teil", async () => {
+  const res = await call({ names: ["wachwerk"], profile: "python" });
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { reports: { results: { sourceId: string }[] }[] };
+  const expected = resolveSources(selectSources({ profile: "python" }, false)).map((s) => s.id);
+  assert.deepEqual(body.reports[0].results.map((r) => r.sourceId), expected);
+  assert.ok(expected.includes("pypi") && !expected.some((id) => id.startsWith("rdap:")));
+
+  const withTlds = await call({ names: ["wachwerk"], profile: "python", tlds: ["de"], sources: ["pypi"] });
+  assert.equal(withTlds.status, 200);
+  const other = (await withTlds.json()) as { reports: { results: { sourceId: string }[] }[] };
+  assert.deepEqual(other.reports[0].results.map((r) => r.sourceId), ["rdap:de", "pypi"]);
+});
+
+test("unbekanntes oder falsches profile ergibt 400 mit der Liste der Profile", async () => {
+  const unknown = await call({ names: ["wachwerk"], profile: "gibtsnicht" });
+  assert.equal(unknown.status, 400);
+  assert.match(((await unknown.json()) as { error: string }).error, /^Unbekanntes Profil „gibtsnicht“\. Erlaubt: allgemein, web-app, /);
+
+  const long = await call({ names: ["wachwerk"], profile: "x".repeat(41) });
+  assert.equal(long.status, 400);
+  assert.match(((await long.json()) as { error: string }).error, /^Unbekanntes Profil\. Erlaubt: /);
+
+  const wrongType = await call({ names: ["wachwerk"], profile: ["npm"] });
+  assert.equal(wrongType.status, 400);
+  assert.equal(((await wrongType.json()) as { error: string }).error, "profile muss ein Text sein.");
 });
 
 test("falscher Typ für names ergibt 400 mit deutscher Meldung", async () => {

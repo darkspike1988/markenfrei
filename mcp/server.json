@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "app.markenfrei/mcp",
   "title": "Markenfrei",
-  "description": "Namen prüfen: Domains, Paketregister, App Stores, bekannte Namen. Markenrecherche vorbereiten.",
+  "description": "Namen vor dem Anlegen prüfen: Domains, Pakete, App Stores, bekannte Namen; Profile für Agenten.",
   "websiteUrl": "https://markenfrei.app",
   "repository": {
     "url": "https://github.com/darkspike1988/markenfrei",

@@ -7,6 +7,8 @@ import { STATUS_LABEL, VERDICT_LABEL } from "@/lib/engine/verdict";
  * Exportformate für Ergebnisse (rein, ohne Netz und ohne DOM): CSV und Markdown.
  * Die Reihenfolge der Berichte bestimmt die Aufrufstelle (in der Oberfläche die Rangfolge).
  * Es werden nur Felder der Berichte ausgegeben, nie Eingaben außerhalb davon.
+ * Registrierungs-Links des Betreibers (`SourceResult.register`) stehen nur im Markdown, mit Hinweis;
+ * die CSV behält ihre Spalten, `url` bleibt der Link zum Nachprüfen.
  */
 
 /** Schlusszeile jedes Markdown-Exports, gleicher Wortlaut wie im JSON-Export. */
@@ -70,7 +72,10 @@ function mdSource(r: SourceResult): string {
   return href ? `[${mdEscape(r.label)}](${href})` : mdEscape(r.label);
 }
 
-/** Markdown: ein Abschnitt je Name mit Ampel und Quellentabelle, am Ende der Hinweis zur Vorprüfung. */
+/**
+ * Markdown: ein Abschnitt je Name mit Ampel und Quellentabelle, darunter die Registrierungs-Links des
+ * Betreibers mit ihrem Hinweis, am Ende der Hinweis zur Vorprüfung.
+ */
 export function toMarkdown(reports: readonly NameReport[]): string {
   const out: string[] = ["# Markenfrei: Vorprüfung", ""];
   if (reports.length === 0) out.push("Keine Ergebnisse.", "");
@@ -86,6 +91,14 @@ export function toMarkdown(reports: readonly NameReport[]): string {
         );
       }
       out.push("");
+    }
+    const register = report.results.filter((r) => r.register && mdUrl(r.register.url));
+    if (register.length > 0) {
+      out.push("Domain registrieren (Angebot des Betreibers, vergütet):", "");
+      for (const r of register) {
+        out.push(`- [${mdEscape(`${r.register?.label}: ${r.target}`)}](${mdUrl(r.register?.url ?? "")})`);
+      }
+      out.push("", mdEscape(register[0].register?.notice ?? ""), "");
     }
     if (report.incomplete.length > 0) {
       out.push(

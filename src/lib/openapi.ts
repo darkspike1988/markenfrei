@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { CHECK_ERRORS, CHECK_LIMITS, CHECK_MAX_BODY_BYTES, checkBodySchema } from "@/app/api/_lib/check-schema";
 import { DEFAULT_NAMESPACES, MAX_NAMES, MAX_TLDS, STATIC_SOURCES, type NameReport, type ShortlistEntry } from "@/lib/engine/check";
+import { describeProfiles, PROFILE_IDS } from "@/lib/engine/format";
 import {
   NameReportSchema,
   ShortlistEntrySchema,
@@ -15,6 +16,7 @@ import { computeVerdict, countStatuses, rankReports, STATUS_LABEL, VERDICT_LABEL
 import { DEFAULT_CACHE_TTL_MS } from "@/lib/cache";
 import { DEFAULT_RATE_LIMIT, RATE_LIMIT_WINDOW_MS, rateLimitMessage } from "@/lib/rate-limit";
 import { DEFAULT_PUBLIC_URL } from "@/lib/site";
+import { REGISTER_NOTICE } from "@/lib/register";
 import { buildSourcesCatalog, SourcesCatalogSchema, SOURCES_MAX_AGE_SECONDS } from "@/lib/sources-catalog";
 import { APP_VERSION } from "@/lib/version";
 
@@ -56,6 +58,8 @@ export const EXAMPLE_CHECK_REQUESTS = {
     namespaces: ["domains", "packages", "social"],
     sources: ["npm", "pypi", "nuget", "bluesky"],
   },
+  /** Profil für ein npm-Paket */
+  profile: { names: ["wachwerk", "fokusnova"], profile: "npm" },
 };
 
 function pick(id: string): { sourceId: string; namespace: SourceResult["namespace"]; label: string } {
@@ -140,6 +144,10 @@ function requestSchema(): JsonObject {
   const sources = child(props, "sources");
   sources.description = `Ausdrückliche Quellen-IDs außerhalb von Domains. Sie ersetzen die Standardauswahl: Wer Zusatzquellen will, schickt die gewünschten Standardquellen mit (${DEFAULT_SOURCE_IDS.join(", ")}). Domains kommen weiter aus tlds und namespaces.`;
   child(sources, "items").enum = [...SOURCE_IDS];
+
+  const profile = child(props, "profile");
+  profile.description = `Fertige Auswahl zum Vorhaben. Setzt namespaces, sources und tlds in einem Wort; ausdrücklich angegebene tlds oder sources ersetzen den jeweiligen Teil, ausdrückliche namespaces behalten Quellen und Endungen des Profils nur in den gewählten Namensräumen. Die Kosten fürs Rate-Limit folgen der aufgelösten Auswahl. Ein unbekanntes Profil lässt die Anfrage scheitern (400). Profile: ${describeProfiles()} Die Liste liefert auch GET /api/sources.`;
+  profile.enum = [...PROFILE_IDS];
   return schema;
 }
 
@@ -150,6 +158,11 @@ function schemas(): JsonObject {
   reportProps.trademark = { ...ref("TrademarkPrep"), description: "Vorbereitung der Markenrecherche. Die Marke wird nie geprüft: status ist immer not_checked." };
 
   const sourceResult = jsonSchema(SourceResultSchema, "output");
+  const register = child(child(sourceResult, "properties"), "register");
+  register.description = `${String(register.description ?? "")}. Der Link führt zum eigenen, möglicherweise kostenpflichtigen Angebot des Betreibers dieser Instanz, an dem er verdienen kann; Markenfrei überträgt nichts an diesen Dienst. Ohne Einstellung des Betreibers fehlt das Feld immer.`;
+  register.examples = [
+    { label: "Registrieren über Beispiel-Domains", url: "https://example.org/bestellen?domain=wachwerk.de", notice: REGISTER_NOTICE },
+  ];
   const status = child(child(sourceResult, "properties"), "status");
   status.description = `${String(status.description ?? "")} Texte der Oberfläche: ${Object.entries(STATUS_LABEL)
     .map(([k, v]) => `${k} = ${v}`)
@@ -267,6 +280,10 @@ function checkOperation(): JsonObject {
       "",
       "**Was die Antwort bedeutet:** Jede Quelle liefert genau einen Status. `not_found` heißt, die Quelle kennt den Namen nicht; es heißt nie, der Name sei frei oder registrierbar. `unknown` (keine verwertbare Antwort) ist nie frei. Die Ampel `green` heißt nur, dass alle gewählten Quellen den Namen nicht kennen. Die Marke wird nicht geprüft: `trademark.status` ist immer `not_checked`; die Antwort enthält nur Links und Vorbereitung für die Recherche. Keine Rechtsberatung.",
       "",
+      "**Profile:** `profile` (z. B. `npm`, `python`, `web-app`) wählt Namensräume, Quellen und Endungen in einem Wort; die Liste steht unter GET /api/sources.",
+      "",
+      "**Registrierungs-Link:** Hat der Betreiber einen Registrierungsdienst eingestellt, tragen Domain-Zeilen einzeln geprüfter Endungen mit `not_found` das Feld `register` (`label`, `url`, `notice`). Das ist ein eigenes, möglicherweise kostenpflichtiges Angebot des Betreibers, an dem er verdienen kann, und keine Zusage, dass die Domain bestellbar ist. Ohne Einstellung fehlt das Feld.",
+      "",
       `**Grenzen:** höchstens ${MAX_NAMES} Namen, Body höchstens ${CHECK_MAX_BODY_BYTES / 1024} KB, Content-Type \`application/json\`. Pro Client (IP) gelten standardmäßig ${DEFAULT_RATE_LIMIT} Einheiten pro Minute; jeder verschiedene Name zählt eine Einheit, eine größere Quellenauswahl kostet ein Vielfaches (Namen × aufgerundet aufgelöste Quellen / Quellen der Standardauswahl). Eindeutige Quellenantworten hält der Server ${CACHE_TTL_SECONDS / 60} Minuten im Arbeitsspeicher. Gedacht für Einzelabfragen, die ein Mensch auslöst, nicht für Massenabfragen.`,
       "",
       "**Browser:** Es gibt kein CORS. Aufrufe aus Browserseiten fremder Herkunft werden mit 403 abgelehnt; Aufrufe ohne Origin-Header (curl, Server, Skripte) sind erlaubt.",
@@ -280,6 +297,7 @@ function checkOperation(): JsonObject {
             einzelnerName: { summary: "Ein Name mit Standardauswahl", value: EXAMPLE_CHECK_REQUESTS.single },
             shortlist: { summary: "Shortlist mit Standardauswahl", value: EXAMPLE_CHECK_REQUESTS.shortlist },
             auswahl: { summary: "Endungen, Namensräume und Quellen wählen", value: EXAMPLE_CHECK_REQUESTS.selection },
+            profil: { summary: "Profil für ein npm-Paket", value: EXAMPLE_CHECK_REQUESTS.profile },
           },
         },
       },
@@ -380,14 +398,14 @@ function sourcesOperation(): JsonObject {
     tags: ["Prüfung"],
     summary: "Quellen, Namensräume und Endungen auflisten",
     description:
-      "Die gültigen Werte für `sources`, `namespaces` und `tlds` von POST /api/check, dazu welche zur Standardprüfung gehören. Keine Abfragen bei Dritten, kein Rate-Limit. Achtung: `sources` ersetzt die Standardquellen außerhalb von Domains; wer Zusatzquellen will, schickt die Quellen mit `default: true` mit.",
+      "Die gültigen Werte für `sources`, `namespaces`, `tlds` und `profile` von POST /api/check, dazu welche zur Standardprüfung gehören, und ob der Betreiber einen Registrierungs-Link eingestellt hat (nur ja/nein und der Name des Dienstes). Keine Abfragen bei Dritten, kein Rate-Limit. Achtung: `sources` ersetzt die Standardquellen außerhalb von Domains; wer Zusatzquellen will, schickt die Quellen mit `default: true` mit.",
     responses: {
       "200": {
         description: "Der Katalog.",
         headers: {
           "Cache-Control": { description: `Eine Stunde zwischenspeicherbar.`, schema: { type: "string", const: `public, max-age=${SOURCES_MAX_AGE_SECONDS}` } },
         },
-        content: { "application/json": { schema: ref("SourcesCatalog"), example: buildSourcesCatalog() } },
+        content: { "application/json": { schema: ref("SourcesCatalog"), example: buildSourcesCatalog(null) } },
       },
     },
   };
@@ -432,6 +450,7 @@ export function buildOpenApiDocument(serverUrl: string = DEFAULT_PUBLIC_URL): Js
       defaultNamespaces: [...DEFAULT_NAMESPACES],
       defaultTlds: [...DEFAULT_DOMAIN_TLDS],
       defaultSources: DEFAULT_SOURCE_IDS,
+      profiles: [...PROFILE_IDS],
       statuses: STATUSES,
       verdicts: VERDICTS,
       limits: {

@@ -16,10 +16,11 @@ import {
   type checkName as checkNameFn,
   type checkNames as checkNamesFn,
 } from "@/lib/engine/check";
-import { effectiveSources, formatRanking, formatReport, prepareShortlist, withoutTrademark } from "@/lib/engine/format";
+import { formatRanking, formatReport, prepareShortlist, PROFILE_IDS, selectSources, withoutTrademark } from "@/lib/engine/format";
 import { DEFAULT_DOMAIN_TLDS } from "@/lib/engine/sources/domains";
-import { NAMESPACES, type Namespace } from "@/lib/engine/types";
+import { NAMESPACES } from "@/lib/engine/types";
 import type { Verdict } from "@/lib/engine/verdict";
+import { registerConfigFromEnv } from "@/lib/register";
 import { APP_VERSION } from "@/lib/version";
 export const EXIT_OK = 0;
 export const EXIT_YELLOW = 1;
@@ -44,7 +45,15 @@ export type CliCommand =
   | { kind: "help" }
   | { kind: "version" }
   | { kind: "error"; message: string }
-  | { kind: "check"; names: string[]; json: boolean; namespaces?: string[]; tlds?: string[]; sources?: string[] };
+  | {
+      kind: "check";
+      names: string[];
+      json: boolean;
+      profile?: string;
+      namespaces?: string[];
+      tlds?: string[];
+      sources?: string[];
+    };
 
 const list = (v: string): string[] =>
   v
@@ -64,6 +73,7 @@ export function parseCliArgs(argv: string[]): CliCommand {
         namespaces: { type: "string" },
         tlds: { type: "string" },
         sources: { type: "string" },
+        profile: { type: "string" },
         help: { type: "boolean", short: "h" },
         version: { type: "boolean", short: "v" },
       },
@@ -82,6 +92,7 @@ export function parseCliArgs(argv: string[]): CliCommand {
     kind: "check",
     names,
     json: values.json === true,
+    ...(values.profile !== undefined ? { profile: values.profile.trim() } : {}),
     ...(values.namespaces !== undefined ? { namespaces: list(values.namespaces) } : {}),
     ...(values.tlds !== undefined ? { tlds: list(values.tlds) } : {}),
     ...(values.sources !== undefined ? { sources: list(values.sources) } : {}),
@@ -97,6 +108,7 @@ export function helpText(): string {
     "",
     "Optionen:",
     "  --json                 Bericht als JSON (ein Name: Bericht, mehrere: { ranking, reports })",
+    `  --profile id           Fertige Auswahl zum Vorhaben: ${PROFILE_IDS.join(",")}. --namespaces, --tlds und --sources ersetzen den jeweiligen Teil`,
     `  --namespaces a,b       Namensräume (Standard: ${DEFAULT_NAMESPACES.join(",")}); möglich: ${NAMESPACES.join(",")}`,
     `  --tlds de,com          Domain-Endungen ohne Punkt, höchstens ${MAX_TLDS} (Standard: ${DEFAULT_DOMAIN_TLDS.join(",")})`,
     `  --sources x,y          Ausdrücklich diese Quellen: ${STATIC_SOURCES.map((s) => s.id).join(",")}`,
@@ -106,6 +118,7 @@ export function helpText(): string {
     "Bei mehreren Namen zählt die schlechteste Ampel. Ohne Netz kommt Gelb (Exit 1), nicht Grün.",
     "",
     "Umgebung: MARKENFREI_CONTACT (E-Mail oder URL) steht im User-Agent der Abfragen; ohne sie geht kein Kontakt mit.",
+    "MARKENFREI_REGISTER_URL und MARKENFREI_REGISTER_NAME: Registrierungs-Link bei Domains mit „nicht gefunden“ (siehe README).",
     "Abfragebudgets (z. B. GitHub ohne Token, crates.io, iTunes) gelten nur innerhalb eines Aufrufs, nicht zwischen",
     "Aufrufen. Den Befehl deshalb nicht in Schleifen aufrufen; alle Namen gehören in einen Aufruf.",
     "Grün heißt nur: in den geprüften Quellen nichts gefunden. Markenregister werden nicht abgefragt.",
@@ -115,6 +128,7 @@ export function helpText(): string {
 const CLI_REPORT_HINT = "Marke: nicht geprüft (Markenregister werden nicht abgefragt)";
 const CLI_RANKING_HINT =
   "Grün heißt nur: in den geprüften Quellen nichts gefunden. Marke: nicht geprüft (Markenregister werden nicht abgefragt).";
+const CLI_REGISTER_HINT = "„Nicht gefunden“ ist keine Zusage, dass die Domain bestellbar ist.";
 
 const WORSE: Record<Verdict, number> = { green: 0, yellow: 1, red: 2 };
 
@@ -147,19 +161,20 @@ export async function run(argv: string[], deps: CliDeps): Promise<number> {
     );
   }
 
-  const namespaces = cmd.namespaces as Namespace[] | undefined;
-  const opts: CheckOptions = {
-    namespaces,
-    tlds: cmd.tlds,
-    sources: effectiveSources(namespaces, cmd.sources),
-    contact,
-    ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}),
-  };
-
   try {
+    const opts: CheckOptions = {
+      ...selectSources({ profile: cmd.profile, namespaces: cmd.namespaces, tlds: cmd.tlds, sources: cmd.sources }, true),
+      contact,
+      // Wie der Kontakt nur aus deps.env, nie stillschweigend aus process.env.
+      register: registerConfigFromEnv(deps.env),
+      ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}),
+    };
+
     if (cmd.names.length === 1) {
       const report = await deps.checkName(cmd.names[0], opts);
-      deps.stdout.write(cmd.json ? `${JSON.stringify(report, null, 2)}\n` : `${formatReport(report, CLI_REPORT_HINT)}\n`);
+      deps.stdout.write(
+        cmd.json ? `${JSON.stringify(report, null, 2)}\n` : `${formatReport(report, CLI_REPORT_HINT, CLI_REGISTER_HINT)}\n`,
+      );
       return EXIT_BY_VERDICT[report.verdict];
     }
 
@@ -170,9 +185,10 @@ export async function run(argv: string[], deps: CliDeps): Promise<number> {
     deps.stdout.write(
       cmd.json
         ? `${JSON.stringify({ ranking: result.ranking, reports }, null, 2)}\n`
-        : `${formatRanking(result.ranking, reports, prepared.merged, CLI_RANKING_HINT)}\n`,
+        : `${formatRanking(result.ranking, reports, prepared.merged, CLI_RANKING_HINT, CLI_REGISTER_HINT)}\n`,
     );
-    return EXIT_BY_VERDICT[worst(result.reports.map((r) => r.verdict))];  } catch (err) {
+    return EXIT_BY_VERDICT[worst(result.reports.map((r) => r.verdict))];
+  } catch (err) {
     if (err instanceof CheckInputError) return usage(err.message);
     deps.stderr.write(`Interner Fehler: ${err instanceof Error ? err.message : String(err)}\n`);
     return EXIT_INTERNAL;
