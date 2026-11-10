@@ -235,7 +235,6 @@ async function main(): Promise<void> {
   const chosen = includeCompanies ? `${minSitelinks}, --company-min-sitelinks ${companyMinSitelinks}` : `${minSitelinks}`;
   console.log(`Gewählt (--min-sitelinks ${chosen}): nach Filter ${filtered.length}, nach Dedup ${marken.length}`);
 
-  const queryTypes = [BRAND, TRADEMARK, ...(includeCompanies ? COMPANY_TYPES : [])];
   const text = serializeSnapshot({
     quelle: ENDPOINT,
     lizenz: "CC0 1.0, Wikidata",

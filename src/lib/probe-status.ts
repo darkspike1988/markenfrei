@@ -1,7 +1,7 @@
 /**
  * Datenformat der Live-Probe (probe-status.json): je Quelle nur eine Kennung und ein Status.
  * Bewusst ohne Notizen, Belege, HTTP-Codes und Zufallsnamen. Die Beschriftung einer Quelle kommt erst
- * beim Anzeigen aus STATIC_SOURCES, damit es keine zweite Quellenliste gibt.
+ * beim Anzeigen aus STATIC_SOURCES (Domain-Quellen "rdap:<Endung>" aus domainSources), damit es keine zweite Quellenliste gibt.
  */
 import { z } from "zod";
 

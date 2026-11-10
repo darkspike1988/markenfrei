@@ -1,13 +1,18 @@
 # `src/app/api/`: HTTP-Routen
 
-Sechs Route Handler: vier mit `POST` (Prüfung, MCP, Wortfeld, Kontakt) und zwei mit `GET`
-(`/api/openapi.json`, `/api/health`). Keine LLM-Aufrufe, keine Speicherung von Anfragen.
+Sieben Route Handler: vier mit `POST` (Prüfung, MCP, Wortfeld, Kontakt) und drei mit `GET`
+(`/api/openapi.json`, `/api/sources`, `/api/health`); `/api/mcp` beantwortet `GET` mit `405`. Keine LLM-Aufrufe, keine Speicherung von Anfragen.
 Gemeinsame Bausteine liegen in `_lib/http.ts` (der Ordner beginnt mit `_` und ist keine Route):
 Body-Grenze, Content-Type, Origin-Prüfung, Kosten und Rate-Limit.
 
-Jede Route geht durch `guardRequest` aus `src/lib/rate-limit.ts` (Standard 60 Einheiten pro
-Minute und Client). Anfragen mit ausgehenden Abfragen zählen zusätzlich gegen ein Limit pro
-Prozess (`MARKENFREI_GLOBAL_RATE_LIMIT`, Standard 600 Einheiten pro Minute). Es greift auch,
+Die vier `POST`-Routen zählen gegen das Limit pro Client (Standard 60 Einheiten pro Minute und Client):
+`guard` und `guardDetailed` aus `_lib/http.ts` rufen dafür `guardRequestDetailed` aus `src/lib/rate-limit.ts` auf,
+keine Route ruft `guardRequest` unmittelbar auf. `/api/health`, `/api/sources` und `/api/openapi.json` haben kein
+Limit (sie stellen keine Abfragen bei Dritten). Anfragen mit ausgehenden Abfragen (`/api/check`,
+`/api/opendata-words` und bei `/api/mcp` die Werkzeuge `markenfrei_check_name`, `markenfrei_check_names` und
+`markenfrei_suggest_names`) zählen zusätzlich gegen ein Limit pro
+Prozess (`MARKENFREI_GLOBAL_RATE_LIMIT`, Standard 600 Einheiten pro Minute); `/api/contact` zählt nur gegen das
+Limit pro Client. Das Prozesslimit greift auch,
 wenn jemand das Limit pro Client umgeht, und schützt die Server-IP vor Sperren bei den
 abgefragten Diensten. Bei Überschreitung kommt `429` mit `Retry-After`. Antworten von `/api/check` und `/api/mcp`,
 die das Client-Limit betreffen, tragen `RateLimit-Limit`, `RateLimit-Remaining` und `RateLimit-Reset`

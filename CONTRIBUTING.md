@@ -85,9 +85,12 @@ Die End-to-End-Tests in `e2e/` starten `next start` und stubben `POST /api/check
 aber netzlosen Bericht der Engine (`e2e/helpers.ts`); sie prüfen Ampel, Shortlist, Wiederholung bei
 Lücken, Exporte, Tastaturbedienung und WCAG-2.1-AA-Regeln mit axe. Einmalig `npx playwright install chromium`.
 Die CI (`.github/workflows/ci.yml`) führt `npm audit`, Lint, Typen, Tests, MCP-Build, Pakettest, den
-Next.js-Build und die End-to-End-Tests aus. `.github/workflows/live-probe.yml` fragt montags jede Quelle
-mit einem bekannten vergebenen und einem Zufallsnamen ab (`scripts/live-probe.ts`) und schlägt fehl,
-wenn ein Dienst Endpunkt oder Format ändert. Neue Quelle: Kanarienname in `CANARIES` ergänzen.
+Next.js-Build und die End-to-End-Tests aus. `.github/workflows/live-probe.yml` fragt montags (`scripts/live-probe.ts`)
+jede Quelle aus `STATIC_SOURCES` außer den beiden netzlosen (`known_brands`, `wikidata_brands`) sowie die Domain-Registries
+für .de, .com und .io mit einem bekannten vergebenen und einem Zufallsnamen ab. Er meldet Warnungen, wenn ein Dienst
+Endpunkt oder Format ändert, und schlägt nur bei npm, PyPI und crates.io sowie bei fehlendem Eintrag fehl. Neue Quelle:
+Kanariennamen in `CANARIES` in `src/lib/probe-canaries.ts` ergänzen (oder dort begründet als Ausnahme eintragen);
+ohne Eintrag scheitern Probe und `tests/probe-canaries.test.ts`.
 
 ---
 

@@ -42,7 +42,7 @@ export type BrandIndex = {
 export const MAX_EVIDENCE = 5;
 export const GENERIC_THRESHOLD = 20;
 
-/** Kopie von containsAtBoundary aus known-names.ts (dort nicht exportiert): Marke steht am Anfang/Ende oder grenzt an einen Bindestrich. */
+/** Kopie von containsAtBoundary aus brand-match.ts (dort exportiert; hier nicht importiert, damit sich nicht ändert, was der Browser erreicht, siehe tests/client-bundle-boundary.test.ts): Marke steht am Anfang/Ende oder grenzt an einen Bindestrich. */
 function containsAtBoundary(name: string, brand: string): boolean {
   let from = 0;
   for (;;) {

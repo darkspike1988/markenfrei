@@ -1,7 +1,10 @@
 name: Live-Probe der Quellen
 
-# Fragt jede Quelle mit einem bekannten vergebenen und einem Zufallsnamen ab (scripts/live-probe.ts).
-# Schlägt fehl, wenn ein Dienst Endpunkt oder Format ändert und die Quelle still "unbekannt" liefern würde.
+# Fragt jede Quelle aus STATIC_SOURCES und die Domain-Registries .de, .com und .io mit einem bekannten
+# vergebenen und einem Zufallsnamen ab (scripts/live-probe.ts). Ausgenommen sind nur die beiden Quellen
+# ohne Netz (known_brands, wikidata_brands); die Ausnahmen stehen in src/lib/probe-canaries.ts.
+# Meldet Warnungen, wenn eine Quelle still "unbekannt" liefern würde (Dienst ändert Endpunkt oder Format).
+# Schlägt nur fehl bei npm, PyPI und crates.io (Stufe gate) und wenn eine Quelle weder Kanarienname noch Ausnahme hat.
 # Bewusst nicht Teil der normalen CI: sie hängt vom Netz und von Diensten Dritter ab.
 
 on:

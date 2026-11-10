@@ -88,8 +88,8 @@ Gelb, dann Rot, innerhalb davon nach Zahl der Treffer und dann der Lücken.
   Langsame Quellen erscheinen als `unknown` unter „Ohne Antwort“.
 - **Fremde Dienste sehen den Namen.** Die Anfragen gehen vom Server (oder bei stdio-MCP von
   deinem Rechner) direkt an die Quellen.
-- **GitHub ohne Token** erlaubt 60 Anfragen pro Stunde und IP; danach meldet die Quelle
-  `unknown`, bis das Limit zurückgesetzt ist.
+- **GitHub ohne Token:** GitHub erlaubt 60 Anfragen pro Stunde und IP. Markenfrei hört schon nach 50 neuen
+  Namen pro Stunde auf und meldet dann `unknown` („Abfragelimit für längere Zeit erreicht“), ohne es als wiederholbar zu markieren.
 - **„Keine Idee?“** erzeugt Vorschläge regelbasiert aus OpenThesaurus, Datamuse und festen
   Wortbausteinen. Die Vorschläge sind ungeprüft, bis du sie prüfst.
 - **„Name im Detail“ und „Varianten“** arbeiten nur im Browser nach festen Regeln, ohne KI, ohne Netz und ohne
@@ -258,8 +258,10 @@ der Code allein reicht nicht:
 
 1. **Betreiberangaben setzen** (`MARKENFREI_OPERATOR_*`, `MARKENFREI_HOSTING_PROVIDER`). Eine öffentliche
    deutsche Website braucht ein Impressum und eine Datenschutzerklärung. Der Text der Datenschutzerklärung
-   beschreibt, was die Anwendung tatsächlich tut (keine Cookies, kein Browser-Speicher, keine Namen in
-   Logs, Weitergabe an Drittdienste, Rate-Limit je IP). Lass ihn vor dem Livegang von einer fachkundigen
+   beschreibt, was die Anwendung tatsächlich tut (keine Cookies, keine Namen in Logs; im Browser steht nur,
+   was du selbst einschaltest: die gewählte Darstellung unter `markenfrei:theme` (nur bei Hell oder Dunkel) und der
+   Verlauf „Zuletzt geprüft“ unter `markenfrei:history` (die letzten 12 Prüfungen), nichts davon erreicht den
+   Server; Weitergabe an Drittdienste, Rate-Limit je IP). Lass ihn vor dem Livegang von einer fachkundigen
    Person prüfen; er ersetzt keine Rechtsberatung.
 2. **HTTPS und Proxy.** `MARKENFREI_TRUSTED_PROXIES` auf die Zahl der Proxys vor der App setzen
    (Caddy oder nginx: 1). Die Anwendung setzt Security-Header (CSP, `nosniff`, `frame-ancestors 'none'`,
@@ -297,8 +299,9 @@ der Code allein reicht nicht:
      `src/lib/engine/http.ts`): etwa **4 bis 5 Prüfungen pro Sekunde**. Bis etwa 20 gleichzeitige Prüfungen dauert eine
      im Median 4,5 s, ab etwa 40 laufen sie in die Frist von 8 s und liefern Lücken.
    - Enger sind die Grenzen der Dienste: **Apple ca. 18 neue Namen pro Minute** (Budget, siehe oben) und
-     **GitHub ohne Token 60 neue Namen pro Stunde** je Server-IP (mit Token 5.000). Wiederholte Namen kommen aus dem
-     Zwischenspeicher (10 Minuten) und zählen nicht. Setze `GITHUB_TOKEN`, sonst ist die GitHub-Zeile nach 60 neuen
+     **GitHub ohne Token 50 neue Namen pro Stunde** je Server-IP (eigenes Budget unter dem GitHub-Limit von 60; mit Token
+     4.500 unter dem GitHub-Limit von 5.000). Wiederholte Namen kommen aus dem
+     Zwischenspeicher (10 Minuten) und zählen nicht. Setze `GITHUB_TOKEN`, sonst ist die GitHub-Zeile nach 50 neuen
      Namen pro Stunde für alle Nutzer „unbekannt“.
    - Mehr Prozesse auf derselben IP erhöhen diese Grenzen nicht (Betriebsgrenze, siehe Punkt 4).
 9. **Optional:** npm-Paket veröffentlichen (`cd mcp && npm publish`), damit `npx -y markenfrei-mcp` geht.
