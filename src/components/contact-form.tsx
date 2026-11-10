@@ -15,8 +15,7 @@ type Status = { kind: "idle" } | { kind: "sending" } | { kind: "done" } | { kind
 
 const FIELD_ORDER: FieldName[] = ["name", "email", "message", "consent"];
 
-const INPUT =
-  "block w-full rounded-lg border border-line-strong bg-surface px-3.5 py-3 text-base text-ink placeholder:text-muted hover:border-muted aria-[invalid=true]:border-bad";
+const INPUT = "field";
 
 function isFieldName(value: unknown): value is FieldName {
   return typeof value === "string" && (FIELD_ORDER as string[]).includes(value);
@@ -273,18 +272,18 @@ export function ContactForm({ token }: { token: string }) {
         <button
           type="submit"
           aria-disabled={sending}
-          className="inline-flex min-h-12 items-center justify-center rounded-lg bg-button px-6 font-medium text-button-ink transition-colors hover:bg-button-hover active:scale-[0.98] aria-disabled:opacity-60"
+          className="btn btn-primary min-h-12 px-6 text-base"
         >
           {sending ? "Wird gesendet …" : "Nachricht senden"}
         </button>
         <div aria-live="polite" aria-atomic="true" className="min-h-14">
           {status.kind === "done" ? (
-            <p className="rounded-lg border border-line bg-ok-bg px-4 py-3 text-sm text-ok">
+            <p className="rounded-xl border border-ok/35 bg-ok-bg px-4 py-3 text-sm text-ok">
               Danke, deine Nachricht wurde gesendet. Die Antwort kommt per E-Mail an die angegebene Adresse.
             </p>
           ) : null}
           {status.kind === "failed" ? (
-            <p className="rounded-lg border border-line bg-bad-bg px-4 py-3 text-sm text-bad">{status.message}</p>
+            <p className="rounded-xl border border-bad/35 bg-bad-bg px-4 py-3 text-sm text-bad">{status.message}</p>
           ) : null}
         </div>
       </div>

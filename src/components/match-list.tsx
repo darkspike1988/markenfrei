@@ -19,7 +19,7 @@ export const MATCH_DISCLAIMER = "Ähnlichkeit ist nur ein Hinweis, kein Rechtsbe
 export function MatchList({ matches, name }: { matches: SourceMatch[]; name: string }) {
   if (matches.length === 0) return null;
   return (
-    <div className="col-span-2 mt-1 rounded-md border border-line bg-surface px-3 py-2">
+    <div className="col-span-2 mt-1.5 rounded-xl border border-line bg-wash/50 px-3.5 py-2.5">
       <ul className="space-y-1.5">
         {matches.map((m) => {
           const k = KIND_CHIP[m.kind];
@@ -28,7 +28,7 @@ export function MatchList({ matches, name }: { matches: SourceMatch[]; name: str
               <span className="font-mono text-sm text-ink [overflow-wrap:anywhere]">
                 {highlightMatch(name, m.label).map((seg, i) =>
                   seg.match ? (
-                    <mark key={i} className="rounded-sm bg-info-bg px-px font-semibold text-info underline decoration-1 underline-offset-2">
+                    <mark key={i} className="rounded-sm bg-warn-bg px-px font-semibold text-ink underline decoration-lamp-warn decoration-2 underline-offset-2">
                       {seg.text}
                     </mark>
                   ) : (

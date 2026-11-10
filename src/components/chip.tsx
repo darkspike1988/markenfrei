@@ -1,3 +1,4 @@
+/** Umschalter mit aria-pressed; Aussehen und Zustände stehen in globals.css (.chip). */
 export function Chip({
   pressed,
   onClick,
@@ -20,13 +21,7 @@ export function Chip({
       aria-pressed={pressed}
       onClick={onClick}
       disabled={disabled}
-      className={`inline-flex min-h-8 items-center rounded-md border px-2.5 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
-        mono ? "font-mono" : ""
-      } ${
-        pressed
-          ? "border-button bg-button text-button-ink hover:bg-button-hover"
-          : "border-line-strong bg-surface text-soft hover:border-muted hover:text-ink"
-      }`}
+      className={`chip ${mono ? "font-mono" : ""}`}
     >
       {children}
     </button>

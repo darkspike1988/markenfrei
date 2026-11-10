@@ -12,7 +12,7 @@ const PROSE = "max-w-2xl space-y-3 text-soft";
 export function GuideSection({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
     <section aria-labelledby={id} className="mt-12">
-      <h2 id={id} className="mb-3 font-serif text-2xl tracking-tight text-ink">
+      <h2 id={id} className="mb-3 font-serif text-[1.7rem] leading-tight text-ink">
         {title}
       </h2>
       <div className={PROSE}>{children}</div>
@@ -49,12 +49,12 @@ export function Guide({
 }) {
   const others = GUIDES.filter((g) => g.href !== path);
   return (
-    <div className="pt-8 sm:pt-14">
+    <div className="pt-10 sm:pt-16">
       {faq && faq.length > 0 && (
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: faqPageJsonLd(faq) }} />
       )}
       <div className="mb-8 max-w-2xl sm:mb-10">
-        <h1 className="font-serif text-[2.1rem] leading-[1.1] tracking-[-0.02em] text-ink sm:text-5xl">{title}</h1>
+        <h1 className="display text-[2.6rem] text-ink sm:text-6xl">{title}</h1>
         <div className="mt-4 space-y-3 text-base text-soft sm:text-lg">{lead}</div>
       </div>
 
@@ -65,7 +65,7 @@ export function Guide({
       {children}
 
       <section aria-labelledby="grenzen" className="mt-12 rounded-lg border border-line bg-wash px-4 py-5 sm:px-6">
-        <h2 id="grenzen" className="mb-3 font-serif text-2xl tracking-tight text-ink">
+        <h2 id="grenzen" className="mb-3 font-serif text-[1.7rem] leading-tight text-ink">
           Grenzen dieser Prüfung
         </h2>
         <div className={PROSE}>{limits}</div>
@@ -73,7 +73,7 @@ export function Guide({
 
       {faq && faq.length > 0 && (
         <section aria-labelledby="fragen" className="mt-12">
-          <h2 id="fragen" className="mb-3 font-serif text-2xl tracking-tight text-ink">
+          <h2 id="fragen" className="mb-3 font-serif text-[1.7rem] leading-tight text-ink">
             Häufige Fragen
           </h2>
           <dl className="max-w-2xl space-y-5">
@@ -88,7 +88,7 @@ export function Guide({
       )}
 
       <nav aria-labelledby="weitere" className="mt-12">
-        <h2 id="weitere" className="mb-3 font-serif text-2xl tracking-tight text-ink">
+        <h2 id="weitere" className="mb-3 font-serif text-[1.7rem] leading-tight text-ink">
           Weitere Anleitungen
         </h2>
         <ul className="max-w-2xl divide-y divide-line border-y border-line">

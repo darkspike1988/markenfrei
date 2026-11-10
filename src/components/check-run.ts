@@ -1,5 +1,5 @@
 import type { NameReport } from "@/lib/engine/check";
-import { rankReports, type ShortlistEntry } from "@/lib/engine/verdict";
+import { rankReports, type ShortlistEntry, type Verdict } from "@/lib/engine/verdict";
 import type { Selection } from "@/components/checker-config";
 
 /** Reine Typen und Funktionen des Prüflaufs (ohne React), damit sie sich mit node:test prüfen lassen. */
@@ -27,6 +27,28 @@ export function nextItem(previous: Item | undefined, outcome: Outcome): Item {
 
 export type Run = { id: number; sel: Selection; items: Record<string, Item> };
 
+export const CANCELLED_MESSAGE = "Prüfung abgebrochen.";
+
+/**
+ * Lauf nach „Abbrechen“: offene Namen werden zu Fehlerzeilen (mit „Erneut prüfen“), fertige
+ * Berichte bleiben stehen, automatisches und händisches Nachprüfen endet.
+ */
+export function cancelRun(run: Run): Run {
+  const items: Record<string, Item> = {};
+  for (const [name, item] of Object.entries(run.items)) {
+    if (item.state === "loading") items[name] = { state: "error", message: CANCELLED_MESSAGE };
+    else if (item.state === "done") {
+      items[name] = item.retryError
+        ? { state: "done", report: item.report, retryError: item.retryError }
+        : { state: "done", report: item.report };
+    } else items[name] = item;
+  }
+  return { ...run, items };
+}
+
+/** Stand für den Signalgeber im Seitenkopf: läuft noch, sonst die schlechteste Ampel der fertigen Berichte. */
+export type RunSignal = "checking" | Verdict | null;
+
 /** Aus einem Lauf abgeleitete Ergebnisdaten für die Anzeige. */
 export type RunView = {
   names: string[];
@@ -40,6 +62,11 @@ export type RunView = {
   /** Zeitpunkt der jüngsten Prüfung (ISO), leer ohne Ergebnis */
   latestCheck: string;
   finished: boolean;
+  /** Offene Quellen werden gerade automatisch oder von Hand erneut geprüft */
+  rechecking: boolean;
+  /** Anzahl der fertigen Berichte je Ampel */
+  tally: Record<Verdict, number>;
+  signal: RunSignal;
   /** Beim Einhängen offen: bei mehreren Namen der erste mit Treffer oder Lücke (Rangfolge), sonst nichts */
   firstOpen: string | undefined;
 };
@@ -64,6 +91,13 @@ export function deriveRun(run: Run | null): RunView {
     return r ? [r] : [];
   });
   const latestCheck = done.reduce((latest, r) => (r.checkedAt > latest ? r.checkedAt : latest), "");
+  const rechecking = names.some((n) => {
+    const it = run?.items[n];
+    return it?.state === "done" && (it.waiting !== undefined || it.rechecking === true);
+  });
+  const tally: Record<Verdict, number> = { green: 0, yellow: 0, red: 0 };
+  for (const r of done) tally[r.verdict]++;
+  const worst: Verdict | null = tally.red > 0 ? "red" : tally.yellow > 0 ? "yellow" : tally.green > 0 ? "green" : null;
   return {
     names,
     done,
@@ -73,6 +107,9 @@ export function deriveRun(run: Run | null): RunView {
     ranked,
     latestCheck,
     finished: run !== null && pending.length === 0,
+    rechecking,
+    tally,
+    signal: pending.length > 0 || rechecking ? "checking" : worst,
     firstOpen: ranking.find((e) => e.verdict !== "green")?.name,
   };
 }

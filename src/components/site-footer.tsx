@@ -1,30 +1,57 @@
 import Link from "next/link";
+import { SignalMark } from "@/components/signal-mark";
+import { GUIDES } from "@/lib/guides";
+
+const LINK = "inline-flex min-h-7 items-center text-soft underline decoration-line-strong hover:text-ink hover:decoration-ink";
+
+const GROUPS: { title: string; links: { href: string; label: string }[] }[] = [
+  { title: "Prüfen", links: GUIDES.map((g) => ({ href: g.href, label: g.nav })) },
+  {
+    title: "Nachschlagen",
+    links: [
+      { href: "/quellen", label: "Quellen" },
+      { href: "/mcp", label: "MCP" },
+      { href: "/api-docs", label: "API" },
+    ],
+  },
+  {
+    title: "Rechtliches",
+    links: [
+      { href: "/datenschutz", label: "Datenschutz" },
+      { href: "/impressum", label: "Impressum" },
+      { href: "/kontakt", label: "Kontakt" },
+    ],
+  },
+];
 
 export function SiteFooter() {
   return (
-    <footer className="border-t border-line">
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 py-8 text-sm text-muted sm:flex-row sm:items-start sm:justify-between sm:px-6">
-        <p className="max-w-md">
-          Vorprüfung, keine Rechtsberatung, ohne Gewähr (Haftung und Gewährleistung: siehe Impressum). Die Anwendung
-          speichert keine Suchanfragen; geprüfte Namen gehen an die abgefragten Dienste (siehe Datenschutz).
-        </p>
-        <nav aria-label="Weitere Seiten" className="flex flex-wrap gap-x-4 gap-y-1">
-          <Link href="/quellen" className="inline-flex min-h-6 items-center underline hover:text-ink">
-            Quellen
-          </Link>
-          <Link href="/mcp" className="inline-flex min-h-6 items-center underline hover:text-ink">
-            MCP
-          </Link>
-          <Link href="/datenschutz" className="inline-flex min-h-6 items-center underline hover:text-ink">
-            Datenschutz
-          </Link>
-          <Link href="/kontakt" className="inline-flex min-h-6 items-center underline hover:text-ink">
-            Kontakt
-          </Link>
-          <Link href="/impressum" className="inline-flex min-h-6 items-center underline hover:text-ink">
-            Impressum
-          </Link>
-        </nav>
+    <footer className="border-t border-line bg-wash/60">
+      <div className="mx-auto grid w-full max-w-5xl gap-x-10 gap-y-8 px-4 py-10 text-sm sm:px-6 md:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,1fr))]">
+        <div className="max-w-sm">
+          <p className="inline-flex items-center gap-2.5">
+            <SignalMark />
+            <span className="font-serif text-lg font-medium tracking-[-0.02em] text-ink">Markenfrei</span>
+          </p>
+          <p className="mt-3 text-muted">
+            Vorprüfung, keine Rechtsberatung, ohne Gewähr (Haftung und Gewährleistung: siehe Impressum). Die Anwendung
+            speichert keine Suchanfragen; geprüfte Namen gehen an die abgefragten Dienste (siehe Datenschutz).
+          </p>
+        </div>
+        {GROUPS.map((g) => (
+          <nav key={g.title} aria-label={g.title}>
+            <p className="eyebrow mb-2">{g.title}</p>
+            <ul className="space-y-0.5">
+              {g.links.map((l) => (
+                <li key={l.href}>
+                  <Link href={l.href} className={LINK}>
+                    {l.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        ))}
       </div>
     </footer>
   );

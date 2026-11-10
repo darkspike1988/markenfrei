@@ -6,12 +6,12 @@ import { CopyButton } from "@/components/copy-button";
  */
 export function CodeBlock({ text, label }: { text: string; label: string }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-line bg-surface">
-      <div className="flex items-center justify-between gap-3 px-3 pt-2">
-        <span className="text-xs text-muted">{label}</span>
+    <div className="card overflow-hidden">
+      <div className="flex items-center justify-between gap-3 border-b border-line bg-wash/60 py-1 pl-4 pr-1.5">
+        <span className="eyebrow">{label}</span>
         <CopyButton text={text} />
       </div>
-      <pre tabIndex={0} role="region" aria-label={label} className="overflow-x-auto px-3 pb-3 pt-1.5 font-mono text-[13px] leading-relaxed text-ink">
+      <pre tabIndex={0} role="region" aria-label={label} className="overflow-x-auto px-4 py-3.5 font-mono text-[13px] leading-relaxed text-ink">
         <code>{text}</code>
       </pre>
     </div>

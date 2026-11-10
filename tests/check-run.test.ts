@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { checkName } from "@/lib/engine/check";
-import { buildJsonExport, deriveRun, nextItem, type Item, type Run } from "@/components/check-run";
+import { buildJsonExport, cancelRun, CANCELLED_MESSAGE, deriveRun, nextItem, type Item, type Run } from "@/components/check-run";
 
 // Berichte offline: nur die Marken-Heuristik (kein Netz).
 const report = (name: string) => checkName(name, { sources: ["known_brands"], namespaces: ["known_names"] });
@@ -77,4 +77,52 @@ test("nextItem: Erfolg löscht retryError und ersetzt den Bericht", async () => 
   const next = nextItem(prev, { ok: true, report: fresh });
   assert.deepEqual(next, { state: "done", report: fresh });
   assert.equal("retryError" in next, false);
+});
+
+test("deriveRun: Signal läuft, solange Namen offen sind oder Quellen nachgeprüft werden, sonst die schlechteste Ampel", async () => {
+  const [free, taken] = await Promise.all([report("wachwerk"), report("github")]);
+  assert.equal(deriveRun(null).signal, null);
+  const run = (items: Record<string, Item>): Run => ({ id: 5, sel: sel(Object.keys(items)), items });
+
+  const open = deriveRun(run({ wachwerk: { state: "done", report: free }, offen: { state: "loading" } }));
+  assert.equal(open.signal, "checking");
+
+  const waiting = deriveRun(run({ wachwerk: { state: "done", report: free, waiting: { attempt: 1, max: 6 } } }));
+  assert.equal(waiting.finished, true);
+  assert.equal(waiting.rechecking, true);
+  assert.equal(waiting.signal, "checking", "automatisches Nachprüfen gilt nicht als fertig grün");
+
+  const done = deriveRun(run({ wachwerk: { state: "done", report: free }, github: { state: "done", report: taken } }));
+  assert.deepEqual(done.tally, { green: 1, yellow: 0, red: 1 });
+  assert.equal(done.signal, "red");
+  assert.equal(deriveRun(run({ wachwerk: { state: "done", report: free } })).signal, "green");
+  assert.equal(deriveRun(run({ kaputt: { state: "error", message: "x" } })).signal, null, "ohne Bericht keine Ampel");
+});
+
+test("cancelRun: offene Namen werden zu Fehlerzeilen, Berichte bleiben, Nachprüfen endet", async () => {
+  const r = await report("wachwerk");
+  const run: Run = {
+    id: 6,
+    sel: sel(["wachwerk", "wartet", "offen", "kaputt", "alt"]),
+    items: {
+      wachwerk: { state: "done", report: r },
+      wartet: { state: "done", report: r, waiting: { attempt: 2, max: 6 }, rechecking: true },
+      offen: { state: "loading" },
+      kaputt: { state: "error", message: "x" },
+      alt: { state: "done", report: r, retryError: "HTTP 500", rechecking: true },
+    },
+  };
+  const cancelled = cancelRun(run);
+  assert.deepEqual(cancelled.items, {
+    wachwerk: { state: "done", report: r },
+    wartet: { state: "done", report: r },
+    offen: { state: "error", message: CANCELLED_MESSAGE },
+    kaputt: { state: "error", message: "x" },
+    alt: { state: "done", report: r, retryError: "HTTP 500" },
+  });
+  const view = deriveRun(cancelled);
+  assert.equal(view.finished, true);
+  assert.equal(view.rechecking, false);
+  assert.notEqual(view.signal, "checking");
+  assert.equal(run.items.offen.state, "loading", "der ursprüngliche Lauf bleibt unverändert");
 });

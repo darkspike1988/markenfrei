@@ -1,48 +1,63 @@
 @import "tailwindcss";
 
 /*
- * Farben: warmes Monochrom, Farbe nur für Bedeutung (Status).
- * Kontrast (WCAG 2.x) für Text auf canvas, surface und wash jeweils mindestens 4.5:1,
- * auch für muted und alle Statusfarben auf ihrem Hintergrund. Geprüft mit
- * relativer Leuchtdichte nach WCAG, Werte im Kommentar je Token.
+ * Gestaltung: Registerpapier und Signalanlage. Warmes Papier, Tinte, eine Displayschrift mit
+ * Charakter (Fraunces) und die drei Lampen der Ampel als einzige Farbe. Farbe steht nur für
+ * Bedeutung (Status), nie allein: jeder Status steht zusätzlich als Text.
+ *
+ * Kontrast (WCAG 2.x): Text auf canvas, surface und wash jeweils mindestens 4.5:1, auch für muted
+ * und alle Statusfarben auf ihrem Hintergrund. Die Lampenfarben (--lamp-*) sind Flächen, kein Text,
+ * und haben mindestens 3:1 auf canvas und surface. Werte im Kommentar je Token, gerechnet mit
+ * relativer Leuchtdichte nach WCAG.
  */
 :root {
   color-scheme: light;
-  --canvas: #fbfbfa;
-  --surface: #ffffff;
-  --wash: #f3f2ee;
-  --ink: #1b1b19;
-  --soft: #3a3936;
-  --muted: #5f5e5a; /* 6.3:1 auf canvas, 5.8:1 auf wash */
-  --line: #e4e3df;
-  --line-strong: #cfcdc7;
-  --ok: #2c6532; /* 6.1:1 auf ok-bg */
-  --ok-bg: #e9f2e8;
-  --warn: #7a5000; /* 6.2:1 auf warn-bg */
-  --warn-bg: #fbf0d4;
-  --bad: #9a2c2a; /* 6.4:1 auf bad-bg */
-  --bad-bg: #fbe9e9;
+  --canvas: #f7f5ef;
+  --surface: #fffefb;
+  --wash: #efece3;
+  --ink: #1a1915;
+  --soft: #3b3933;
+  --muted: #5e5c54; /* 6.1:1 auf canvas, 5.6:1 auf wash */
+  --line: #e3dfd4;
+  --line-strong: #cbc6b8;
+  --ok: #25632d; /* 6.2:1 auf ok-bg */
+  --ok-bg: #e4f0e0;
+  --warn: #744c00; /* 6.4:1 auf warn-bg */
+  --warn-bg: #f8ecc8;
+  --bad: #982a26; /* 6.4:1 auf bad-bg */
+  --bad-bg: #f9e4e1;
   --info: #1b5f8c;
   --info-bg: #e5f1fa;
   --focus: #1b5f8c;
-  --button: #1b1b19;
-  --button-ink: #ffffff;
-  --button-hover: #3a3936;
+  --button: #1a1915;
+  --button-ink: #fffefb;
+  --button-hover: #35332c;
+  --lamp-ok: #2e8540; /* 4.2:1 auf canvas */
+  --lamp-warn: #b47600; /* 3.5:1 auf canvas */
+  --lamp-bad: #cf3a2b; /* 4.5:1 auf canvas */
+  --housing: #1a1915;
+  --shadow-color: 48 40 18;
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .35 0 0 0 0 .3 0 0 0 0 .2 0 0 0 .16 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
+/*
+ * Dunkle Werte: folgen dem System, außer jemand hat im Seitenkopf „Hell“ gewählt (data-theme am <html>,
+ * gesetzt von theme-toggle.tsx und dem Skript in layout.tsx). Der Block für data-theme="dark" darunter
+ * muss mit diesem hier identisch bleiben.
+ */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --canvas: #151514;
-    --surface: #1c1c1a;
-    --wash: #252523;
-    --ink: #ecebe7;
-    --soft: #cfcdc8;
-    --muted: #a19f99; /* 6.9:1 auf canvas, 5.9:1 auf wash */
-    --line: #2e2e2b;
-    --line-strong: #44433f;
-    --ok: #93d198; /* 8.5:1 auf ok-bg */
-    --ok-bg: #1b2a1d;
+    --canvas: #131311;
+    --surface: #1b1a18;
+    --wash: #242320;
+    --ink: #efede6;
+    --soft: #d2cfc6;
+    --muted: #a3a097; /* 7.0:1 auf canvas, 5.9:1 auf wash */
+    --line: #2d2c28;
+    --line-strong: #47453f;
+    --ok: #93d198; /* 8.6:1 auf ok-bg */
+    --ok-bg: #18291b;
     --warn: #e6bc62; /* 8.4:1 auf warn-bg */
     --warn-bg: #2e2614;
     --bad: #f29a95; /* 7.1:1 auf bad-bg */
@@ -50,10 +65,52 @@
     --info: #92c5ec;
     --info-bg: #17283a;
     --focus: #92c5ec;
-    --button: #ecebe7;
-    --button-ink: #151514;
-    --button-hover: #cfcdc8;
+    --button: #efede6;
+    --button-ink: #131311;
+    --button-hover: #d2cfc6;
+    --lamp-ok: #4cc764;
+    --lamp-warn: #f2b93b;
+    --lamp-bad: #f0604f;
+    --housing: #2d2c28;
+    --shadow-color: 0 0 0;
+    --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 .95 0 0 0 .07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   }
+}
+
+/* Gewählt „Dunkel“: identisch mit dem Block oben (bei Änderungen beide anpassen). */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --canvas: #131311;
+  --surface: #1b1a18;
+  --wash: #242320;
+  --ink: #efede6;
+  --soft: #d2cfc6;
+  --muted: #a3a097; /* 7.0:1 auf canvas, 5.9:1 auf wash */
+  --line: #2d2c28;
+  --line-strong: #47453f;
+  --ok: #93d198; /* 8.6:1 auf ok-bg */
+  --ok-bg: #18291b;
+  --warn: #e6bc62; /* 8.4:1 auf warn-bg */
+  --warn-bg: #2e2614;
+  --bad: #f29a95; /* 7.1:1 auf bad-bg */
+  --bad-bg: #36201f;
+  --info: #92c5ec;
+  --info-bg: #17283a;
+  --focus: #92c5ec;
+  --button: #efede6;
+  --button-ink: #131311;
+  --button-hover: #d2cfc6;
+  --lamp-ok: #4cc764;
+  --lamp-warn: #f2b93b;
+  --lamp-bad: #f0604f;
+  --housing: #2d2c28;
+  --shadow-color: 0 0 0;
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 .95 0 0 0 .07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Gewählt „Hell“: die Werte aus :root, auch wenn das System dunkel ist. */
+:root[data-theme="light"] {
+  color-scheme: light;
 }
 
 @theme inline {
@@ -76,21 +133,59 @@
   --color-button: var(--button);
   --color-button-ink: var(--button-ink);
   --color-button-hover: var(--button-hover);
+  --color-lamp-ok: var(--lamp-ok);
+  --color-lamp-warn: var(--lamp-warn);
+  --color-lamp-bad: var(--lamp-bad);
   --font-sans: var(--font-geist-sans), "SF Pro Text", "Helvetica Neue", sans-serif;
   --font-mono: var(--font-geist-mono), "SF Mono", ui-monospace, monospace;
-  --font-serif: var(--font-newsreader), "Iowan Old Style", Georgia, serif;
+  --font-serif: var(--font-display), "Iowan Old Style", Georgia, serif;
+  --shadow-card: 0 1px 0 rgb(var(--shadow-color) / 0.04), 0 12px 32px -18px rgb(var(--shadow-color) / 0.28);
+  --shadow-lift: 0 1px 0 rgb(var(--shadow-color) / 0.05), 0 24px 48px -24px rgb(var(--shadow-color) / 0.38);
+  --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 html {
   -webkit-text-size-adjust: 100%;
+  scroll-padding-top: 5rem;
 }
 
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+/* Papierkorn im Seitengrund (nicht als Ebene über dem Inhalt): Karten bleiben glatt, Text bleibt messbar. */
 body {
-  background: var(--canvas);
+  position: relative;
+  background: var(--canvas) var(--grain);
   color: var(--ink);
   font-family: var(--font-sans);
   line-height: 1.6;
   overflow-wrap: anywhere;
+}
+
+/* Kopfbereich: Punktraster und ein schwacher Schein in den drei Lampenfarben. */
+.backdrop {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 46rem;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  background:
+    radial-gradient(38rem 20rem at 96% 4%, color-mix(in oklab, var(--lamp-bad) 11%, transparent), transparent 70%),
+    radial-gradient(44rem 22rem at 74% -6%, color-mix(in oklab, var(--lamp-warn) 15%, transparent), transparent 70%),
+    radial-gradient(40rem 22rem at 46% -12%, color-mix(in oklab, var(--lamp-ok) 10%, transparent), transparent 70%);
+}
+.backdrop::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle at 1px 1px, var(--line-strong) 1px, transparent 1.5px);
+  background-size: 22px 22px;
+  mask-image: radial-gradient(ellipse 70% 62% at 50% 0%, #000 22%, transparent 78%);
+  opacity: 0.7;
 }
 
 /* Sichtbarer Fokus für Tastatur, auch auf farbigen Flächen */
@@ -101,13 +196,65 @@ body {
 }
 
 ::selection {
-  background: var(--info-bg);
+  background: color-mix(in oklab, var(--lamp-warn) 32%, transparent);
   color: var(--ink);
 }
 
 a {
   text-underline-offset: 3px;
   text-decoration-thickness: 1px;
+}
+
+h1,
+h2,
+h3 {
+  /* Nur der Umbruchstil: die Kurzform text-wrap würde white-space: nowrap an diesen Elementen aufheben. */
+  text-wrap-style: balance;
+}
+p,
+li,
+dd {
+  text-wrap-style: pretty;
+}
+
+/* Displayschrift: weiche Formen in großen Graden, das betonte Wort kursiv mit eigenwilligen Formen. */
+.display {
+  font-family: var(--font-serif);
+  font-optical-sizing: auto;
+  font-variation-settings: "SOFT" 60, "WONK" 0;
+  font-weight: 420;
+  letter-spacing: -0.028em;
+  line-height: 1.02;
+}
+.display em {
+  font-style: italic;
+  font-variation-settings: "SOFT" 100, "WONK" 1;
+  font-weight: 380;
+}
+h2.font-serif,
+h3.font-serif {
+  font-variation-settings: "SOFT" 50, "WONK" 0;
+  font-weight: 460;
+  letter-spacing: -0.02em;
+}
+
+/* Handgezogener Strich unter dem betonten Wort der Startseite (Farbe der Lampe „vergeben“). */
+.scribble {
+  position: relative;
+  white-space: nowrap;
+}
+.scribble > svg {
+  position: absolute;
+  left: -2%;
+  bottom: -0.16em;
+  width: 104%;
+  height: 0.34em;
+  overflow: visible;
+  color: var(--lamp-bad);
+}
+.scribble path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
 }
 
 /* Aufklappbare Bereiche ohne Browser-Dreieck, mit eigenem +/- */
@@ -128,17 +275,389 @@ details[open] > summary .toggle-sign::before {
   content: "\2212";
 }
 
+/* Sanftes Auf- und Zuklappen, wo der Browser Höhen zu „auto“ überblenden kann. */
+@supports (interpolate-size: allow-keywords) {
+  @media (prefers-reduced-motion: no-preference) {
+    :root {
+      interpolate-size: allow-keywords;
+    }
+    details::details-content {
+      block-size: 0;
+      overflow: clip;
+      overflow-clip-margin: 6px;
+      transition:
+        block-size 260ms var(--ease-out-soft),
+        content-visibility 260ms allow-discrete;
+    }
+    details[open]::details-content {
+      block-size: auto;
+    }
+  }
+}
+
 /* Eingabefeld wächst mit dem Inhalt (wo unterstützt) */
 .auto-grow {
   field-sizing: content;
-  min-height: 3rem;
+  min-height: 2.75rem;
   max-height: 14rem;
 }
 
+@layer components {
+  /* Kleine Beschriftung in Schreibmaschinenschrift: Gruppenköpfe, Tabellenköpfe, Vorzeilen. */
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    line-height: 1.4;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .btn {
+    display: inline-flex;
+    min-height: 2.75rem;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 0.75rem;
+    padding: 0 1.1rem;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    white-space: nowrap;
+    transition:
+      background-color 160ms ease,
+      border-color 160ms ease,
+      box-shadow 160ms ease,
+      transform 120ms ease;
+  }
+  .btn:active:not(:disabled, [aria-disabled="true"]) {
+    transform: translateY(1px) scale(0.985);
+  }
+  .btn:disabled,
+  .btn[aria-disabled="true"] {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+  .btn-primary {
+    background: var(--button);
+    color: var(--button-ink);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.14),
+      0 1px 2px rgb(var(--shadow-color) / 0.3),
+      0 10px 20px -12px rgb(var(--shadow-color) / 0.7);
+  }
+  .btn-primary:hover:not(:disabled, [aria-disabled="true"]) {
+    background: var(--button-hover);
+  }
+  .btn-primary .btn-arrow {
+    transition: transform 200ms var(--ease-out-soft);
+  }
+  .btn-primary:hover:not(:disabled) .btn-arrow {
+    transform: translateX(3px);
+  }
+  .btn-secondary {
+    border: 1px solid var(--line-strong);
+    background: var(--surface);
+    color: var(--ink);
+  }
+  .btn-secondary:hover:not(:disabled, [aria-disabled="true"]) {
+    border-color: var(--muted);
+    background: var(--wash);
+  }
+  .btn-sm {
+    min-height: 2.25rem;
+    border-radius: 0.625rem;
+    padding: 0 0.85rem;
+    font-size: 0.875rem;
+  }
+
+  /* Leise Schaltfläche in Textgröße: Werkzeugleisten und Nebenaktionen. */
+  .btn-quiet {
+    display: inline-flex;
+    min-height: 2rem;
+    align-items: center;
+    gap: 0.4rem;
+    border-radius: 0.5rem;
+    padding: 0 0.6rem;
+    font-size: 0.875rem;
+    color: var(--soft);
+    transition:
+      background-color 140ms ease,
+      color 140ms ease;
+  }
+  .btn-quiet:hover:not(:disabled) {
+    background: var(--wash);
+    color: var(--ink);
+  }
+  .btn-quiet:disabled {
+    cursor: wait;
+    opacity: 0.6;
+  }
+
+  /* Umschalter (aria-pressed): Namensräume, Endungen, Quellen, Muster, Ansicht. */
+  .chip {
+    display: inline-flex;
+    min-height: 2rem;
+    align-items: center;
+    gap: 0.35rem;
+    border: 1px solid var(--line-strong);
+    border-radius: 0.5rem;
+    background: var(--surface);
+    padding: 0 0.65rem;
+    font-size: 0.875rem;
+    color: var(--soft);
+    transition:
+      background-color 140ms ease,
+      border-color 140ms ease,
+      color 140ms ease,
+      transform 120ms ease;
+  }
+  .chip:hover:not(:disabled) {
+    border-color: var(--muted);
+    color: var(--ink);
+  }
+  .chip:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+  .chip[aria-pressed="true"] {
+    border-color: var(--button);
+    background: var(--button);
+    color: var(--button-ink);
+  }
+  .chip[aria-pressed="true"]:hover:not(:disabled) {
+    border-color: var(--button-hover);
+    background: var(--button-hover);
+    color: var(--button-ink);
+  }
+  .chip:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
+
+  /* Namensplättchen: Kandidaten, Varianten, eingegebene Namen. */
+  .tag {
+    display: inline-flex;
+    min-height: 1.75rem;
+    align-items: center;
+    gap: 0.35rem;
+    border: 1px solid var(--line);
+    border-radius: 0.375rem;
+    background: var(--wash);
+    padding: 0 0.5rem;
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    color: var(--soft);
+  }
+
+  .card {
+    border: 1px solid var(--line);
+    border-radius: 1.125rem;
+    background: var(--surface);
+    box-shadow: var(--shadow-card);
+  }
+
+  /* Textfeld der Nebenformulare (Stichwörter, Kontakt). */
+  .field {
+    display: block;
+    width: 100%;
+    border: 1px solid var(--line-strong);
+    border-radius: 0.75rem;
+    background: var(--surface);
+    padding: 0.7rem 0.9rem;
+    font-size: 1rem;
+    color: var(--ink);
+    transition:
+      border-color 140ms ease,
+      box-shadow 140ms ease;
+  }
+  .field::placeholder {
+    color: var(--muted);
+  }
+  .field:hover {
+    border-color: var(--muted);
+  }
+  .field[aria-invalid="true"] {
+    border-color: var(--bad);
+  }
+
+  /* Eingabekonsole des Prüfers: eine Karte, die als Ganzes den Fokus zeigt. */
+  .console {
+    border: 1px solid var(--line-strong);
+    border-radius: 1.375rem;
+    background: var(--surface);
+    box-shadow: var(--shadow-lift);
+    transition:
+      border-color 160ms ease,
+      box-shadow 160ms ease;
+  }
+  .console:has(.console-input:focus-visible) {
+    border-color: var(--ink);
+    box-shadow:
+      0 0 0 4px color-mix(in oklab, var(--focus) 26%, transparent),
+      var(--shadow-lift);
+  }
+  .console-input {
+    width: 100%;
+    resize: none;
+    background: transparent;
+    font-family: var(--font-mono);
+    color: var(--ink);
+    outline: none;
+  }
+  .console-input::placeholder {
+    font-family: var(--font-sans);
+    color: var(--muted);
+  }
+
+  .kbd {
+    display: inline-flex;
+    min-width: 1.5rem;
+    height: 1.5rem;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--line-strong);
+    border-bottom-width: 2px;
+    border-radius: 0.375rem;
+    background: var(--canvas);
+    padding: 0 0.35rem;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+
+  /*
+   * Stempel: das Urteil je Name. Rahmen und Text in der Statusfarbe auf deren Hintergrund,
+   * leicht gedreht wie von Hand gesetzt. Der Text nennt das Urteil, die Farbe ergänzt nur.
+   */
+  .stamp {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5em;
+    border: 1.5px solid currentColor;
+    border-radius: 0.3125rem;
+    padding: 0.28em 0.6em 0.24em;
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    line-height: 1.35;
+    text-transform: uppercase;
+    white-space: nowrap;
+    rotate: -1.2deg;
+  }
+  .stamp-md {
+    font-size: 0.75rem;
+    padding: 0.34em 0.7em 0.3em;
+    outline: 1px solid color-mix(in oklab, currentColor 38%, transparent);
+    outline-offset: 2px;
+  }
+
+  /* Lampe: runder Punkt in der Statusfarbe. Hohl heißt „keine Antwort“. */
+  .lamp {
+    display: inline-block;
+    flex-shrink: 0;
+    border-radius: 9999px;
+    background: var(--lamp, var(--muted));
+  }
+  .lamp-ok {
+    --lamp: var(--lamp-ok);
+  }
+  .lamp-warn {
+    --lamp: var(--lamp-warn);
+  }
+  .lamp-bad {
+    --lamp: var(--lamp-bad);
+  }
+  .lamp-unknown {
+    background: transparent;
+    box-shadow: inset 0 0 0 1.5px var(--muted);
+  }
+
+  /* Lichterkette: je abgefragter Quelle ein Segment, Lücke zwischen den Namensräumen. */
+  .lamps {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 3px;
+  }
+  .lamps > i {
+    width: var(--lamp-w, 7px);
+    height: 16px;
+    border-radius: 2px;
+    background: var(--lamp, var(--muted));
+  }
+  .lamps > i.lamp-unknown {
+    background: transparent;
+    box-shadow: inset 0 0 0 1.5px var(--muted);
+  }
+  .lamps > i.lamps-gap {
+    margin-left: 5px;
+  }
+
+  /* Signalgeber im Seitenkopf: drei Lampen im Gehäuse, folgt dem Stand der Prüfung (data-signal an <html>). */
+  .signal {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    border-radius: 9999px;
+    background: var(--housing);
+    padding: 4px 5px;
+  }
+  .signal > i {
+    width: 7px;
+    height: 7px;
+    border-radius: 9999px;
+    background: var(--lamp);
+    transition: opacity 240ms ease;
+  }
+  .signal > i:nth-child(1) {
+    --lamp: #f0604f;
+  }
+  .signal > i:nth-child(2) {
+    --lamp: #f2b93b;
+  }
+  .signal > i:nth-child(3) {
+    --lamp: #4cc764;
+  }
+}
+
+html[data-signal="red"] .signal > i:not(:nth-child(1)),
+html[data-signal="yellow"] .signal > i:not(:nth-child(2)),
+html[data-signal="green"] .signal > i:not(:nth-child(3)) {
+  opacity: 0.22;
+}
+html[data-signal="checking"] .signal > i {
+  animation: lamp-chase 1.05s ease-in-out infinite;
+}
+html[data-signal="checking"] .signal > i:nth-child(2) {
+  animation-delay: 0.18s;
+}
+html[data-signal="checking"] .signal > i:nth-child(3) {
+  animation-delay: 0.36s;
+}
+
+@keyframes lamp-chase {
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+
+/*
+ * Einblenden: Die Deckkraft ist nach dem ersten Drittel erreicht, nur die Bewegung läuft weiter.
+ * So ist Text früh voll lesbar (und sein Kontrast messbar), der Einstieg wirkt trotzdem weich.
+ */
 @keyframes fade-in {
   from {
     opacity: 0;
-    transform: translateY(4px);
+    transform: translateY(10px);
+  }
+  35% {
+    opacity: 1;
   }
   to {
     opacity: 1;
@@ -152,34 +671,126 @@ details[open] > summary .toggle-sign::before {
     opacity: 1;
   }
   50% {
-    opacity: 0.5;
+    opacity: 0.45;
+  }
+}
+
+@keyframes stamp-in {
+  from {
+    opacity: 0;
+    scale: 1.35;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+  }
+}
+
+@keyframes lamp-in {
+  from {
+    opacity: 0;
+    transform: scaleY(0.3);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes scan {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(350%);
+  }
+}
+
+@keyframes draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
   }
 }
 
 .fade-in {
-  animation: fade-in 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: fade-in 380ms var(--ease-out-soft) both;
+}
+
+/* Gestaffelter Einstieg: Elemente erscheinen nacheinander (Verzögerung über --i). */
+.rise {
+  animation: fade-in 560ms var(--ease-out-soft) both;
+  animation-delay: calc(var(--i, 0) * 55ms);
 }
 
 .skeleton {
   animation: pulse-soft 1.4s ease-in-out infinite;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .fade-in,
-  .skeleton {
-    animation: none;
-  }
+.stamp-in {
+  animation: stamp-in 260ms cubic-bezier(0.3, 1.4, 0.5, 1) both;
+}
+
+.lamps-in > i {
+  transform-origin: bottom;
+  animation: lamp-in 320ms var(--ease-out-soft) both;
+  animation-delay: calc(var(--n, 0) * 22ms);
+}
+
+.scribble path {
+  animation: draw 900ms 420ms var(--ease-out-soft) both;
+}
+
+/* Laufbalken einer Prüfung: fester Fortschritt plus wandernder Schein, solange Antworten ausstehen. */
+.progress {
+  position: relative;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: var(--line);
+}
+.progress > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: var(--ink);
+  transition: width 320ms var(--ease-out-soft);
+}
+.progress::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 30%;
+  background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--lamp-warn) 80%, transparent), transparent);
+  animation: scan 1.3s linear infinite;
 }
 
 /* Pfeil an aufklappbaren Zeilen: zeigt nach unten, offen nach oben */
 .chevron {
-  transition: transform 150ms ease;
+  transition: transform 200ms var(--ease-out-soft);
 }
-details[open] > summary .chevron {
+details[open] > summary .chevron,
+button[aria-expanded="true"] .chevron {
   transform: rotate(180deg);
 }
+
 @media (prefers-reduced-motion: reduce) {
-  .chevron {
+  .fade-in,
+  .rise,
+  .skeleton,
+  .stamp-in,
+  .lamps-in > i,
+  .scribble path,
+  .progress::after,
+  html[data-signal="checking"] .signal > i {
+    animation: none;
+  }
+  .chevron,
+  .btn,
+  .chip,
+  .progress > span {
     transition: none;
   }
 }
@@ -198,7 +809,9 @@ details[open] > summary .chevron {
     margin: 14mm;
   }
 
-  :root {
+  /* Gleich spezifisch wie die dunklen Blöcke oben und später in der Datei: gilt auch bei dunkler Darstellung. */
+  :root:not([data-theme="light"]),
+  :root[data-theme] {
     color-scheme: light;
     --canvas: #ffffff;
     --surface: #ffffff;
@@ -216,6 +829,9 @@ details[open] > summary .chevron {
     --bad-bg: #ffffff;
     --info: #000000;
     --info-bg: #ffffff;
+    --lamp-ok: #14401a;
+    --lamp-warn: #4d3200;
+    --lamp-bad: #6f1816;
   }
 
   html,
@@ -226,12 +842,17 @@ details[open] > summary .chevron {
     min-height: 0;
   }
 
+  .backdrop {
+    display: none;
+  }
+
   header,
   footer,
   nav,
   form,
   button,
-  .chevron {
+  .chevron,
+  .lamps {
     display: none !important;
   }
 
@@ -241,16 +862,34 @@ details[open] > summary .chevron {
   }
 
   .fade-in,
-  .skeleton {
+  .rise,
+  .skeleton,
+  .stamp-in {
     animation: none;
+  }
+
+  .card {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .stamp {
+    rotate: none;
+    outline: 0;
+  }
+
+  details::details-content {
+    transition: none;
   }
 
   details[id^="bericht-"] {
     break-inside: avoid;
+    border-bottom: 1px solid var(--line);
   }
 
   /* Begründung in der Kopfzeile ganz zeigen statt abschneiden */
-  details[id^="bericht-"] > summary > span {
+  details[id^="bericht-"] > summary span {
     overflow: visible;
     text-overflow: clip;
     white-space: normal;

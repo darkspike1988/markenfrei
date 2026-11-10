@@ -6,15 +6,15 @@
  * Zeigt nie die Fehlermeldung oder einen Stacktrace. Ein <a> statt <Link>: lädt die Seite komplett neu.
  */
 const CSS = `
-:root{color-scheme:light;--canvas:#fbfbfa;--ink:#1b1b19;--soft:#3a3936;--muted:#5f5e5a;--focus:#1b5f8c;--button:#1b1b19;--button-ink:#ffffff}
-@media (prefers-color-scheme: dark){:root{color-scheme:dark;--canvas:#151514;--ink:#ecebe7;--soft:#cfcdc8;--muted:#a19f99;--focus:#92c5ec;--button:#ecebe7;--button-ink:#151514}}
+:root{color-scheme:light;--canvas:#f7f5ef;--ink:#1a1915;--soft:#3b3933;--muted:#5e5c54;--focus:#1b5f8c;--button:#1a1915;--button-ink:#fffefb}
+@media (prefers-color-scheme: dark){:root{color-scheme:dark;--canvas:#131311;--ink:#efede6;--soft:#d2cfc6;--muted:#a3a097;--focus:#92c5ec;--button:#efede6;--button-ink:#131311}}
 body{margin:0;background:var(--canvas);color:var(--ink);font-family:system-ui,"Helvetica Neue",sans-serif;line-height:1.6}
 main{max-width:48rem;margin:0 auto;padding:3.5rem 1rem}
 h1{font-family:Georgia,serif;font-weight:400;font-size:2.25rem;line-height:1.1;margin:0 0 1rem}
 p{color:var(--soft);margin:0 0 .75rem}
 .ref{color:var(--muted);font-size:.875rem}
 .row{display:flex;flex-wrap:wrap;align-items:center;gap:.75rem 1.5rem;margin-top:1.5rem}
-button{min-height:3rem;padding:0 1.5rem;border:0;border-radius:.5rem;background:var(--button);color:var(--button-ink);font:inherit;font-weight:500;cursor:pointer}
+button{min-height:3rem;padding:0 1.5rem;border:0;border-radius:.75rem;background:var(--button);color:var(--button-ink);font:inherit;font-weight:500;cursor:pointer}
 a{color:var(--ink);text-underline-offset:3px}
 :focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 `;

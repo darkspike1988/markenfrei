@@ -3,9 +3,12 @@
 import type { RefObject } from "react";
 import Link from "next/link";
 import { EXPORT_DISCLAIMER } from "@/lib/export";
+import { VERDICT_LABEL, type Verdict } from "@/lib/engine/verdict";
 import type { Run, RunView } from "@/components/check-run";
+import { Chevron } from "@/components/chevron";
 import { Chip } from "@/components/chip";
 import { CopyButton } from "@/components/copy-button";
+import { Menu } from "@/components/menu";
 import { MatrixView } from "@/components/matrix-view";
 import { QUIET_BUTTON, ReportEntry, ReportError, ReportSkeleton } from "@/components/report-card";
 import { VerdictBadge } from "@/components/status-badge";
@@ -13,9 +16,15 @@ import { shortlistCount } from "@/components/verdict-text";
 
 const PRINT_DATE = new Intl.DateTimeFormat("de-DE", { dateStyle: "long", timeStyle: "short" });
 
+const TALLY: { verdict: Verdict; lamp: string }[] = [
+  { verdict: "green", lamp: "lamp-ok" },
+  { verdict: "yellow", lamp: "lamp-warn" },
+  { verdict: "red", lamp: "lamp-bad" },
+];
+
 /**
- * Ergebnisbereich: Überschrift, Exporte, Umschalter Liste/Vergleich, Berichtszeilen, Legende und
- * Druckfußzeile. Reine Darstellung; Zustand und Aktionen kommen vom Aufrufer.
+ * Ergebnisbereich: Überschrift, Laufanzeige, Werkzeugleiste (Ansicht, Filter, Exporte), Berichtskarten,
+ * Legende und Druckfußzeile. Reine Darstellung; Zustand und Aktionen kommen vom Aufrufer.
  */
 export function CheckResults({
   run,
@@ -31,6 +40,9 @@ export function CheckResults({
   openFromMatrix,
   recheck,
   retry,
+  cancel,
+  findingsOnly,
+  onFindingsOnlyChange,
   checkTypoVariants,
 }: {
   run: Run | null;
@@ -46,13 +58,17 @@ export function CheckResults({
   openFromMatrix: (name: string) => void;
   recheck: (name: string) => void;
   retry: (name: string) => void;
+  cancel: () => void;
+  findingsOnly: boolean;
+  onFindingsOnlyChange: (value: boolean) => void;
   checkTypoVariants: (original: string, variants: string[]) => void;
 }) {
-  const { names, done, pending, failed, ranking, ranked, latestCheck, finished, firstOpen } = view;
+  const { names, done, pending, failed, ranking, ranked, latestCheck, finished, rechecking, tally, firstOpen } = view;
   const showMatrix = mode === "matrix" && ranked.length > 1;
+  const settled = names.length - pending.length;
 
   return (
-    <div ref={resultsRef} className="scroll-mt-6 space-y-3">
+    <div ref={resultsRef} className="scroll-mt-24 space-y-5">
       <p className="sr-only" aria-live="polite">
         {run
           ? finished
@@ -63,43 +79,89 @@ export function CheckResults({
 
       {run && (
         <>
-          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-            <div className="flex flex-wrap items-baseline gap-x-3">
-              <h2 ref={headingRef} tabIndex={-1} className="font-serif text-2xl tracking-tight text-ink outline-none">
+          <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+            <div>
+              <h2
+                ref={headingRef}
+                tabIndex={-1}
+                className="font-serif text-3xl leading-tight text-ink outline-none sm:text-4xl"
+              >
                 {names.length === 1 ? "Ergebnis" : "Ergebnisse"}
               </h2>
-              {names.length > 1 && <p className="text-sm text-muted">{shortlistCount(ranking, pending.length)}</p>}
+              {names.length > 1 && <p className="mt-1 text-sm text-muted">{shortlistCount(ranking, pending.length)}</p>}
             </div>
-            {done.length > 0 && (
-              <div className="flex flex-wrap gap-x-4 print:hidden">
+            {names.length > 1 && done.length > 0 && (
+              <ul aria-label="Namen je Ampel" className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-soft">
+                {TALLY.map((t) => (
+                  <li key={t.verdict} className="inline-flex items-center gap-2">
+                    <span aria-hidden className={`lamp size-2.5 ${t.lamp}`} />
+                    <span className="font-mono text-base font-medium tabular-nums text-ink">{tally[t.verdict]}</span>
+                    {VERDICT_LABEL[t.verdict]}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {(!finished || rechecking) && (
+            <div className="flex items-center gap-4 print:hidden">
+              <div className="min-w-0 flex-1">
+                <div className="progress" aria-hidden>
+                  <span style={{ width: `${names.length ? (settled / names.length) * 100 : 0}%` }} />
+                </div>
+                <p className="mt-1.5 text-sm text-muted">
+                  {finished
+                    ? "Quellen ohne Antwort werden erneut geprüft …"
+                    : `${settled} von ${names.length} ${names.length === 1 ? "Name" : "Namen"} geprüft`}
+                </p>
+              </div>
+              <button type="button" onClick={cancel} className="btn btn-secondary btn-sm">
+                Abbrechen
+              </button>
+            </div>
+          )}
+
+          {done.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 print:hidden">
+              <div className="flex flex-wrap items-center gap-1.5">
+                {ranked.length > 1 && (
+                  <div role="group" aria-label="Ansicht" className="flex gap-1.5">
+                    <Chip pressed={!showMatrix} onClick={() => onViewChange("list")}>
+                      Liste
+                    </Chip>
+                    <Chip pressed={showMatrix} onClick={() => onViewChange("matrix")}>
+                      Vergleich
+                    </Chip>
+                  </div>
+                )}
+                {!showMatrix && (
+                  <Chip
+                    pressed={findingsOnly}
+                    onClick={() => onFindingsOnlyChange(!findingsOnly)}
+                    title="Blendet in den Berichten die Quellen mit „nicht gefunden“ aus"
+                  >
+                    Nur Auffälliges
+                  </Chip>
+                )}
+              </div>
+              <div role="group" aria-label="Weitergeben" className="-mx-1 flex flex-wrap items-center">
                 <CopyButton text={() => window.location.href} label="Link kopieren" />
-                <button type="button" onClick={exportJson} className={QUIET_BUTTON}>
-                  JSON exportieren
-                </button>
-                <button type="button" onClick={exportCsv} className={QUIET_BUTTON}>
-                  Als CSV
-                </button>
-                <button type="button" onClick={exportMarkdown} className={QUIET_BUTTON}>
-                  Als Markdown
-                </button>
-                <button type="button" onClick={exportIcs} className={QUIET_BUTTON}>
-                  Erinnerung (.ics)
-                </button>
+                <Menu
+                  className={QUIET_BUTTON}
+                  items={[
+                    { label: "JSON", onSelect: exportJson },
+                    { label: "CSV", onSelect: exportCsv },
+                    { label: "Markdown", onSelect: exportMarkdown },
+                    { label: "Erinnerung (.ics)", onSelect: exportIcs },
+                  ]}
+                >
+                  Exportieren
+                  <Chevron />
+                </Menu>
                 <button type="button" onClick={() => window.print()} className={QUIET_BUTTON}>
                   Drucken
                 </button>
               </div>
-            )}
-          </div>
-
-          {ranked.length > 1 && (
-            <div role="group" aria-label="Ansicht" className="flex gap-1.5 print:hidden">
-              <Chip pressed={!showMatrix} onClick={() => onViewChange("list")}>
-                Liste
-              </Chip>
-              <Chip pressed={showMatrix} onClick={() => onViewChange("matrix")}>
-                Vergleich
-              </Chip>
             </div>
           )}
 
@@ -109,7 +171,7 @@ export function CheckResults({
             </div>
           )}
 
-          <div className={`divide-y divide-line border-y border-line ${showMatrix ? "hidden print:block" : ""}`}>
+          <div className={`space-y-3 ${showMatrix ? "hidden print:block" : ""}`}>
             {ranking.map((e) => {
               const key = names.find((n) => {
                 const it = run.items[n];
@@ -126,6 +188,7 @@ export function CheckResults({
                   waiting={it.waiting}
                   rechecking={it.rechecking}
                   retryError={it.retryError}
+                  findingsOnly={findingsOnly}
                   onRecheck={() => recheck(key)}
                   onCheckVariants={checkTypoVariants}
                 />
@@ -160,21 +223,20 @@ export function CheckResults({
   );
 }
 
-
 /** Eine Zeile Ampel-Legende, erst sichtbar, wenn Ergebnisse da sind. Die ausführliche Erklärung steht unter Quellen. */
 function Legend() {
   return (
-    <p className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-1 text-sm text-muted">
-      <span className="inline-flex items-center gap-2">
+    <p className="flex flex-wrap items-center gap-x-6 gap-y-2.5 pt-1 text-sm text-muted">
+      <span className="inline-flex items-center gap-2.5">
         <VerdictBadge verdict="green" size="sm" /> alle Quellen ohne Fund
       </span>
-      <span className="inline-flex items-center gap-2">
+      <span className="inline-flex items-center gap-2.5">
         <VerdictBadge verdict="yellow" size="sm" /> ähnlich, unzulässig oder offen
       </span>
-      <span className="inline-flex items-center gap-2">
+      <span className="inline-flex items-center gap-2.5">
         <VerdictBadge verdict="red" size="sm" /> mindestens eine Quelle
       </span>
-      <Link href="/quellen#ampel" className="underline hover:text-ink">
+      <Link href="/quellen#ampel" className="inline-flex min-h-6 items-center underline hover:text-ink">
         Mehr zur Ampel
       </Link>
     </p>

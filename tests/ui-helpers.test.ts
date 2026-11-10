@@ -8,6 +8,7 @@ import {
   groupFeaturedTlds,
   groupOptional,
   parseSelection,
+  previewNames,
   selectionSummary,
   type CheckerConfig,
   type SourceInfo,
@@ -131,4 +132,24 @@ test("groupNotes blendet Hinweise zu „nicht gefunden“ aus, verliert aber kei
 
   const mixed = groupNotes([res("npm", "not_found", "a"), res("PyPI", "not_found", "b")]);
   assert.equal(hiddenNoteLead(mixed.hidden[0], mixed.hidden.length), "npm");
+});
+
+test("previewNames zeigt den geprüften Namen, den Ablehnungsgrund und Doppelte wie der Server", () => {
+  assert.deepEqual(previewNames(""), []);
+  assert.deepEqual(previewNames("wachwerk"), [{ input: "wachwerk", name: "wachwerk" }]);
+  assert.deepEqual(previewNames("Wach Werk, Müller.de\nwachwerk"), [
+    { input: "Wach Werk", name: "wachwerk" },
+    { input: "Müller.de", name: "mueller" },
+    { input: "wachwerk", name: "wachwerk", duplicate: true },
+  ]);
+
+  const [tooShort, dotted, hyphen] = previewNames("a, foo.bar.baz, -x-");
+  for (const p of [tooShort, dotted, hyphen]) {
+    assert.equal(p.name, null, p.input);
+    assert.ok(p.error && p.error.length > 0, p.input);
+    assert.equal(p.duplicate, undefined);
+  }
+  // Der Grund ist derselbe Text, den normalizeName (und damit /api/check) liefert.
+  assert.match(tooShort.error ?? "", /mindestens 2 Zeichen/);
+  assert.match(hyphen.error ?? "", /Bindestrich/);
 });

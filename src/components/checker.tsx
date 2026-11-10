@@ -7,12 +7,20 @@ import { exportFileName, toCsv, toMarkdown } from "@/lib/export";
 import { buildReminderIcs } from "@/lib/ics";
 import { buildShortlist, MAX_TYPO_CHECK } from "@/lib/insights";
 import { trackEvent } from "@/lib/analytics";
-import { hasAnySource, parseSelection, splitNames, type CheckerConfig, type Selection } from "@/components/checker-config";
+import {
+  buildQuery,
+  hasAnySource,
+  parseSelection,
+  previewNames,
+  type CheckerConfig,
+  type Selection,
+} from "@/components/checker-config";
 import { buildJsonExport, deriveRun } from "@/components/check-run";
 import { CheckerForm } from "@/components/check-form";
 import { CheckResults } from "@/components/check-results";
 import { downloadFile } from "@/components/download";
 import { IdeaFinder } from "@/components/idea-finder";
+import { recordCheck, RecentChecks } from "@/components/recent-checks";
 import { reportAnchor } from "@/components/report-card";
 import { useCheckRun } from "@/components/use-check-run";
 import { usePrintExpand } from "@/components/use-print-expand";
@@ -55,18 +63,38 @@ export function Checker({
   const [extra, setExtra] = useState<string[]>(initial.extra);
   const [formError, setFormError] = useState("");
   const [mode, setMode] = useState<"list" | "matrix">("list");
+  /** „Nur Auffälliges“: blendet in den Berichten die Zeilen „nicht gefunden“ aus */
+  const [findingsOnly, setFindingsOnly] = useState(false);
   /** Anker, zu dem nach dem Wechsel von der Vergleichsansicht zur Liste gesprungen wird */
   const jumpTo = useRef<string | null>(null);
 
-  const { run, start, recheck, retry } = useCheckRun(config);
+  const { run, start, recheck, retry, cancel } = useCheckRun(config);
   usePrintExpand(resultsRef);
   const view = deriveRun(run);
 
-  /** Startet einen Lauf; mit reveal wandern danach Fokus und Ansicht zu den Ergebnissen. */
+  // Der Signalgeber im Seitenkopf folgt dem Lauf: Lampen laufen während der Prüfung, danach leuchtet
+  // die des schlechtesten Ergebnisses. Reine Zierde, die Aussage steht immer als Text im Ergebnis.
+  const signal = view.signal;
+  useEffect(() => {
+    if (inert) return;
+    const root = document.documentElement;
+    if (signal) root.dataset.signal = signal;
+    else delete root.dataset.signal;
+    return () => {
+      delete root.dataset.signal;
+    };
+  }, [signal, inert]);
+
+  /**
+   * Startet einen Lauf; mit reveal wandern danach Fokus und Ansicht zu den Ergebnissen. Jeder Lauf (auch der
+   * automatische über ?q=) landet im Verlauf, sofern der eingeschaltet ist.
+   */
   function startRun(sel: Selection, reveal = false) {
     const id = start(sel);
     revealFor.current = reveal ? id : null;
     if (reveal) trackEvent("pruefung");
+    const query = buildQuery(sel, config);
+    if (query) recordCheck(query);
   }
 
   function submitNames(names: string[]) {
@@ -92,7 +120,12 @@ export function Checker({
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (inert) return;
-    submitNames(splitNames(text));
+    // Eingaben, die denselben Namen ergeben („Wach Werk“, „wachwerk“), nur einmal abfragen.
+    submitNames(
+      previewNames(text)
+        .filter((p) => !p.duplicate)
+        .map((p) => p.input),
+    );
   }
 
   // Link mit ?q=… prüft beim Öffnen sofort (nur einmal).
@@ -155,6 +188,23 @@ export function Checker({
     submitNames(list);
   }
 
+  /** Übernimmt eine gespeicherte Auswahl (Verlauf) vollständig ins Formular und prüft sie. */
+  function applySelection(sel: Selection) {
+    setText(sel.names.join(", "));
+    setNamespaces(sel.namespaces);
+    setTlds(sel.tlds);
+    setExtra(sel.extra);
+    setFormError("");
+    startRun(sel, true);
+  }
+
+  /** Eintrag aus „Zuletzt geprüft“: unbrauchbare Einträge (keine oder zu viele Namen, keine Quelle) tun nichts. */
+  function checkRecent(query: string) {
+    const sel = parseSelection(new URLSearchParams(query), config);
+    if (inert || sel.names.length === 0 || sel.names.length > config.maxNames || !hasAnySource(sel)) return;
+    applySelection(sel);
+  }
+
   /** „Tippfehler-Varianten prüfen“ aus einem Bericht: Original zuerst, dann die gewählten Varianten. */
   function checkTypoVariants(original: string, variants: string[]) {
     trackEvent("varianten/tippfehler");
@@ -197,7 +247,7 @@ export function Checker({
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       <CheckerForm
         config={config}
         inert={inert}
@@ -228,12 +278,16 @@ export function Checker({
         openFromMatrix={openFromMatrix}
         recheck={recheck}
         retry={retry}
+        cancel={cancel}
+        findingsOnly={findingsOnly}
+        onFindingsOnlyChange={setFindingsOnly}
         checkTypoVariants={checkTypoVariants}
       />
 
-      <div className="space-y-2 print:hidden">
+      <div className="grid items-start gap-3 md:grid-cols-2 lg:grid-cols-3 print:hidden">
         <IdeaFinder max={config.maxNames} onUse={applyIdeas} />
         <VariantPicker text={text} max={config.maxNames} onUse={applyIdeas} />
+        <RecentChecks onUse={checkRecent} />
       </div>
     </div>
   );

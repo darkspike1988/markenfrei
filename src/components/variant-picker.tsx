@@ -3,25 +3,10 @@
 import { useState } from "react";
 import { trackEvent } from "@/lib/analytics";
 import { splitNames } from "@/components/checker-config";
+import { Chevron } from "@/components/chevron";
+import { Chip } from "@/components/chip";
 import { buildShortlist, generateVariants, VARIANT_PREFIXES, VARIANT_SUFFIXES } from "@/lib/insights";
 import { normalizeName } from "@/lib/name";
-
-function ToggleChip({ pressed, onClick, children }: { pressed: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      type="button"
-      aria-pressed={pressed}
-      onClick={onClick}
-      className={`inline-flex min-h-8 items-center rounded-md border px-2.5 text-sm transition-colors ${
-        pressed
-          ? "border-button bg-button text-button-ink hover:bg-button-hover"
-          : "border-line-strong bg-surface text-soft hover:border-muted hover:text-ink"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
 
 function toggled(list: string[], item: string): string[] {
   return list.includes(item) ? list.filter((x) => x !== item) : [...list, item];
@@ -63,49 +48,50 @@ export function VariantPicker({
   else if (normalized && !normalized.ok) hint = normalized.error;
 
   return (
-    <details className="group">
-      <summary className="inline-flex min-h-8 items-center gap-1.5 text-sm text-soft hover:text-ink">
-        <span aria-hidden className="toggle-sign text-muted" />
-        <span>
-          <span className="font-medium text-ink">Varianten</span> <span className="text-muted">Präfixe, Suffixe, Bindestrich</span>
+    <details className="card">
+      <summary className="flex min-h-16 items-center gap-3 rounded-[1.0625rem] px-4 py-3 transition-colors hover:bg-wash/50 sm:px-5">
+        <span className="min-w-0 flex-1">
+          <span className="block font-medium text-ink">Varianten</span>
+          <span className="block text-sm text-muted">Präfixe, Suffixe, Bindestrich</span>
         </span>
+        <Chevron className="text-muted" />
       </summary>
-      <div className="space-y-4 pb-2 pt-3">
+      <div className="space-y-4 border-t border-line px-4 pb-5 pt-4 sm:px-5">
         <p className="text-sm text-muted">
           Feste Muster zum Namen im Eingabefeld, ohne KI. Die Kandidaten sind ungeprüft, bis du sie prüfst.
         </p>
 
         <fieldset>
-          <legend className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">Präfixe</legend>
+          <legend className="eyebrow mb-2">Präfixe</legend>
           <div className="flex flex-wrap gap-1.5">
             {VARIANT_PREFIXES.map((p) => (
-              <ToggleChip key={p} pressed={prefixes.includes(p)} onClick={() => setPrefixes((c) => toggled(c, p))}>
+              <Chip key={p} pressed={prefixes.includes(p)} onClick={() => setPrefixes((c) => toggled(c, p))}>
                 <span className="font-mono">{p}-</span>
-              </ToggleChip>
+              </Chip>
             ))}
           </div>
         </fieldset>
 
         <fieldset>
-          <legend className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">Suffixe</legend>
+          <legend className="eyebrow mb-2">Suffixe</legend>
           <div className="flex flex-wrap gap-1.5">
             {VARIANT_SUFFIXES.map((s) => (
-              <ToggleChip key={s} pressed={suffixes.includes(s)} onClick={() => setSuffixes((c) => toggled(c, s))}>
+              <Chip key={s} pressed={suffixes.includes(s)} onClick={() => setSuffixes((c) => toggled(c, s))}>
                 <span className="font-mono">-{s}</span>
-              </ToggleChip>
+              </Chip>
             ))}
           </div>
         </fieldset>
 
         <fieldset>
-          <legend className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">Schreibweise</legend>
+          <legend className="eyebrow mb-2">Schreibweise</legend>
           <div className="flex flex-wrap gap-1.5">
-            <ToggleChip pressed={hyphen} onClick={() => setHyphen((v) => !v)}>
+            <Chip pressed={hyphen} onClick={() => setHyphen((v) => !v)}>
               mit und ohne Bindestrich
-            </ToggleChip>
-            <ToggleChip pressed={plural} onClick={() => setPlural((v) => !v)}>
+            </Chip>
+            <Chip pressed={plural} onClick={() => setPlural((v) => !v)}>
               Plural / Singular (s)
-            </ToggleChip>
+            </Chip>
           </div>
           <p className="mt-1.5 text-[13px] text-muted">
             Bindestrich: aus „wach werk“ werden wachwerk und wach-werk, Präfixe und Suffixe entstehen zusätzlich mit
@@ -126,7 +112,7 @@ export function VariantPicker({
                   <li
                     key={n}
                     title={i === 0 ? "dein Name" : variants.find((v) => v.name === n)?.label}
-                    className="rounded border border-line bg-wash px-2 py-0.5 font-mono text-sm text-soft"
+                    className="tag"
                   >
                     {n}
                     {i === 0 && <span className="font-sans text-muted"> (dein Name)</span>}
@@ -145,7 +131,7 @@ export function VariantPicker({
                   trackEvent("varianten/muster");
                   onUse(shortlist.names);
                 }}
-                className="inline-flex min-h-10 items-center rounded-md bg-button px-4 text-sm font-medium text-button-ink hover:bg-button-hover active:scale-[0.98]"
+                className="btn btn-primary"
               >
                 Alle prüfen ({shortlist.names.length})
               </button>

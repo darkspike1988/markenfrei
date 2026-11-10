@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import type { NameReport } from "@/lib/engine/check";
 import type { SourceResult } from "@/lib/engine/types";
 import { NAMESPACE_LABEL, NAMESPACES } from "@/lib/engine/types";
 import { rankReports, STATUS_LABEL } from "@/lib/engine/verdict";
 import { Chevron } from "@/components/chevron";
-import { StatusText, VerdictBadge } from "@/components/status-badge";
+import { statusLamp, StatusText, VerdictBadge } from "@/components/status-badge";
 import { MatchList } from "@/components/match-list";
 import { VerdictPanel } from "@/components/verdict-panel";
 import { NameInsights } from "@/components/name-insights";
@@ -19,14 +19,13 @@ export function reportAnchor(name: string): string {
   return `bericht-${name.replace(/[^a-z0-9-]/gi, "")}`;
 }
 
-export const QUIET_BUTTON =
-  "inline-flex min-h-6 items-center text-sm text-soft underline hover:text-ink disabled:cursor-wait disabled:opacity-60";
+export const QUIET_BUTTON = "btn-quiet";
 
 /** Eine Zeile je Quelle: Name, Status, Link. Das Ziel (z. B. Paketname) steht auf kleinen Schirmen darunter. */
 function SourceRow({ r, name, note }: { r: SourceResult; name: string; note?: string }) {
   const showTarget = r.namespace !== "domains" && r.target !== name && r.target !== r.label;
   return (
-    <li className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 py-1.5">
+    <li className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 border-b border-line/70 py-2 last:border-b-0">
       <div className="min-w-0">
         <span className="font-medium text-ink [overflow-wrap:anywhere]">{r.label}</span>
         {r.weak && (
@@ -47,12 +46,15 @@ function SourceRow({ r, name, note }: { r: SourceResult; name: string; note?: st
             href={r.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex min-h-6 min-w-12 items-center justify-end text-sm text-soft underline hover:text-ink"
+            className="inline-flex min-h-6 min-w-14 items-center justify-end gap-1 text-sm text-soft underline decoration-line-strong hover:text-ink hover:decoration-ink"
           >
             prüfen<span className="sr-only">: {r.label}</span>
+            <svg aria-hidden viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 2h6v6M10 2 2.5 9.5" />
+            </svg>
           </a>
         ) : (
-          <span className="min-w-12" aria-hidden />
+          <span className="min-w-14" aria-hidden />
         )}
       </div>
       {note && <p className="col-span-2 text-[13px] leading-snug text-muted">{note}</p>}
@@ -62,15 +64,27 @@ function SourceRow({ r, name, note }: { r: SourceResult; name: string; note?: st
 }
 
 /** Gruppenkopf: kleine Beschriftung mit feiner Linie; Hinweise zu „nicht gefunden“ auf Abruf. */
-function SourceGroup({ ns, rows, name }: { ns: (typeof NAMESPACES)[number]; rows: SourceResult[]; name: string }) {
+function SourceGroup({
+  ns,
+  rows,
+  name,
+  findingsOnly,
+}: {
+  ns: (typeof NAMESPACES)[number];
+  rows: SourceResult[];
+  name: string;
+  findingsOnly: boolean;
+}) {
   const notesId = useId();
   const [showHidden, setShowHidden] = useState(false);
   const notes: GroupNotes = groupNotes(rows);
+  const shown = findingsOnly ? rows.filter((r) => r.status !== "not_found") : rows;
+  const concealed = rows.length - shown.length;
 
   return (
     <section aria-label={NAMESPACE_LABEL[ns]}>
       <div className="flex items-center gap-3">
-        <h4 className="text-xs font-medium uppercase tracking-wide text-muted">{NAMESPACE_LABEL[ns]}</h4>
+        <h4 className="eyebrow">{NAMESPACE_LABEL[ns]}</h4>
         <span aria-hidden className="h-px flex-1 bg-line" />
         {notes.hidden.length > 0 && (
           <button
@@ -89,14 +103,22 @@ function SourceGroup({ ns, rows, name }: { ns: (typeof NAMESPACES)[number]; rows
           {STATUS_LABEL[s.status]}: {s.note}
         </p>
       ))}
-      <ul>
-        {rows.map((r) => (
-          <SourceRow key={r.sourceId} r={r} name={name} note={notes.inline.get(r.sourceId)} />
-        ))}
-      </ul>
+      {shown.length > 0 && (
+        <ul className="mt-1">
+          {shown.map((r) => (
+            <SourceRow key={r.sourceId} r={r} name={name} note={notes.inline.get(r.sourceId)} />
+          ))}
+        </ul>
+      )}
+      {concealed > 0 && (
+        <p className="mt-1.5 text-[13px] text-muted">
+          {concealed === rows.length ? "Alle" : "Weitere"} {concealed} {concealed === 1 ? "Quelle" : "Quellen"} ohne Fund
+          ausgeblendet.
+        </p>
+      )}
       <div id={notesId} hidden={!showHidden}>
         {notes.hidden.length > 0 && (
-          <ul className="mb-1 space-y-1 border-l border-line pl-3 text-[13px] leading-snug text-muted">
+          <ul className="mb-1 mt-2 space-y-1 border-l border-line pl-3 text-[13px] leading-snug text-muted">
             {notes.hidden.map((h) => (
               <li key={h.note}>
                 <span className="font-medium text-soft">{hiddenNoteLead(h, notes.hidden.length)}:</span> {h.note}
@@ -109,6 +131,33 @@ function SourceGroup({ ns, rows, name }: { ns: (typeof NAMESPACES)[number]; rows
   );
 }
 
+/**
+ * Lichterkette in der Kopfzeile: je Quelle ein Segment in der Farbe ihres Status, mit Lücke zwischen den
+ * Namensräumen. Reine Zierde für den schnellen Blick; dieselbe Aussage steht als Text im Urteilsfeld.
+ */
+function Lamps({ groups }: { groups: { ns: string; rows: SourceResult[] }[] }) {
+  const total = groups.reduce((n, g) => n + g.rows.length, 0);
+  let n = 0;
+  return (
+    <span
+      aria-hidden
+      className="lamps lamps-in order-5 hidden shrink-0 flex-nowrap md:flex"
+      style={{ "--lamp-w": total > 26 ? "4px" : "7px" } as CSSProperties}
+    >
+      {groups.flatMap((g, gi) =>
+        g.rows.map((r, ri) => (
+          <i
+            key={r.sourceId}
+            title={`${r.label}: ${STATUS_LABEL[r.status]}`}
+            className={`${statusLamp(r.status, r.weak)} ${gi > 0 && ri === 0 ? "lamps-gap" : ""}`}
+            style={{ "--n": n++ } as CSSProperties}
+          />
+        )),
+      )}
+    </span>
+  );
+}
+
 export function ReportEntry({
   report,
   defaultOpen,
@@ -116,6 +165,7 @@ export function ReportEntry({
   waiting,
   rechecking,
   retryError,
+  findingsOnly = false,
   onRecheck,
   onCheckVariants,
 }: {
@@ -129,6 +179,8 @@ export function ReportEntry({
   rechecking?: boolean;
   /** Die letzte Wiederholung ist gescheitert; der angezeigte Bericht stammt noch von der früheren Prüfung */
   retryError?: string;
+  /** Quellen mit „nicht gefunden“ ausblenden */
+  findingsOnly?: boolean;
   onRecheck?: () => void;
   /** „Tippfehler-Varianten prüfen“: Original plus gewählte Varianten als Shortlist */
   onCheckVariants?: (original: string, variants: string[]) => void;
@@ -166,13 +218,13 @@ export function ReportEntry({
       id={anchor}
       open={open}
       onToggle={(e) => setOpen(e.currentTarget.open)}
-      className="fade-in scroll-mt-6"
+      className="card fade-in scroll-mt-24"
     >
       <summary
         onClick={() => (touched.current = true)}
-        className="flex min-h-12 flex-wrap items-center gap-x-3 gap-y-0.5 py-2.5 sm:flex-nowrap"
+        className="flex min-h-14 flex-wrap items-center gap-x-4 gap-y-1 rounded-[1.0625rem] px-4 py-3 transition-colors hover:bg-wash/50 sm:flex-nowrap sm:px-6"
       >
-        <h3 className="order-1 font-mono text-base font-medium text-ink sm:text-lg">{report.name}</h3>
+        <h3 className="order-1 font-mono text-lg font-medium text-ink sm:text-xl">{report.name}</h3>
         <span className="order-2">
           <VerdictBadge verdict={report.verdict} size="sm" />
         </span>
@@ -180,10 +232,11 @@ export function ReportEntry({
           {reason}
           {retryError && <span className="text-warn"> · Stand {DATE.format(checkedAt)}, Neuprüfung fehlgeschlagen</span>}
         </span>
-        <Chevron className="order-3 ml-auto text-muted sm:order-4" />
+        <Lamps groups={groups} />
+        <Chevron className="order-3 ml-auto text-muted sm:order-6 sm:ml-0" />
       </summary>
 
-      <div className="space-y-4 pb-5">
+      <div className="space-y-6 border-t border-line px-4 pb-6 pt-5 sm:px-6">
         <VerdictPanel report={report} />
 
         {(report.input.trim().toLowerCase() !== report.name || report.incomplete.length > 0 || waiting || retryError) && (
@@ -209,16 +262,18 @@ export function ReportEntry({
               </p>
             )}
             {!waiting && report.incomplete.length > 0 && onRecheck && (
-              <button type="button" onClick={onRecheck} disabled={rechecking} className={QUIET_BUTTON}>
+              <button type="button" onClick={onRecheck} disabled={rechecking} className="btn btn-secondary btn-sm">
                 {rechecking ? "Prüfe erneut …" : "Quellen ohne Antwort erneut prüfen"}
               </button>
             )}
           </div>
         )}
 
-        {groups.map((g) => (
-          <SourceGroup key={g.ns} ns={g.ns} rows={g.rows} name={report.name} />
-        ))}
+        <div className="grid gap-x-10 gap-y-6 md:grid-cols-2">
+          {groups.map((g) => (
+            <SourceGroup key={g.ns} ns={g.ns} rows={g.rows} name={report.name} findingsOnly={findingsOnly} />
+          ))}
+        </div>
 
         {report.manualLinks.length > 0 && (
           <p className="text-sm text-muted">
@@ -234,8 +289,10 @@ export function ReportEntry({
           </p>
         )}
 
-        <TrademarkBlock prep={report.trademark} name={report.name} />
-        <NameInsights name={report.name} onCheckVariants={onCheckVariants} />
+        <div>
+          <TrademarkBlock prep={report.trademark} name={report.name} />
+          <NameInsights name={report.name} onCheckVariants={onCheckVariants} />
+        </div>
 
         <p className="text-xs text-muted">
           „Nicht gefunden“ heißt nicht „registrierbar“. Geprüft am{" "}
@@ -249,8 +306,8 @@ export function ReportEntry({
 /** Platzhalter in der Höhe einer Zeile, damit nichts springt, wenn das Ergebnis eintrifft. */
 export function ReportSkeleton({ name }: { name: string }) {
   return (
-    <div className="flex min-h-12 items-center justify-between gap-4 py-2.5" aria-busy="true">
-      <span className="font-mono text-base text-muted sm:text-lg">{name}</span>
+    <div className="card flex min-h-14 items-center justify-between gap-4 px-4 py-3 sm:px-6" aria-busy="true">
+      <span className="font-mono text-lg text-muted sm:text-xl">{name}</span>
       <span className="skeleton text-sm text-muted">wird geprüft …</span>
     </div>
   );
@@ -258,11 +315,11 @@ export function ReportSkeleton({ name }: { name: string }) {
 
 export function ReportError({ name, message, onRetry }: { name: string; message: string; onRetry?: () => void }) {
   return (
-    <div className="py-2.5" role="alert">
+    <div className="card px-4 py-3 sm:px-6" role="alert">
       <div className="flex min-h-8 flex-wrap items-center justify-between gap-3">
-        <span className="font-mono text-base text-ink sm:text-lg">{name}</span>
+        <span className="font-mono text-lg text-ink sm:text-xl">{name}</span>
         {onRetry && (
-          <button type="button" onClick={onRetry} className={QUIET_BUTTON}>
+          <button type="button" onClick={onRetry} className="btn btn-secondary btn-sm">
             Erneut prüfen
           </button>
         )}

@@ -4,7 +4,7 @@ import { useId, useMemo, useState } from "react";
 import { Chevron } from "@/components/chevron";
 import { analyzeName, MAX_TYPO_CHECK } from "@/lib/insights";
 
-const HEADING = "mb-2 text-xs font-medium uppercase tracking-wide text-muted";
+const HEADING = "eyebrow mb-2";
 
 /** Eine Variante zum Ankreuzen: Name und Beschreibung stehen als Text, nicht nur als Farbe. */
 function VariantCheck({
@@ -65,8 +65,8 @@ export function NameInsights({
   );
 
   return (
-    <details className="group border-t border-line pt-1">
-      <summary className="flex min-h-11 items-center justify-between gap-3 py-2">
+    <details className="border-t border-line">
+      <summary className="flex min-h-12 items-center justify-between gap-3 py-2.5">
         <span className="flex flex-wrap items-baseline gap-x-2">
           <span className="font-medium text-ink">Name im Detail</span>
           <span className="text-sm text-muted">Fakten und Heuristiken, keine Bewertung</span>
@@ -74,7 +74,7 @@ export function NameInsights({
         <Chevron className="text-muted" />
       </summary>
 
-      <div className="space-y-6 pb-2 pt-1 text-sm">
+      <div className="space-y-6 pb-4 pt-1 text-sm">
         <dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-6 gap-y-1">
           {insights.facts.map((f) => (
             <div key={f.label} className="contents">
@@ -141,7 +141,7 @@ export function NameInsights({
               type="button"
               disabled={picked.length === 0}
               onClick={() => onCheckVariants(insights.name, picked)}
-              className="inline-flex min-h-10 items-center rounded-md border border-line-strong px-4 text-sm font-medium text-ink hover:bg-wash disabled:cursor-not-allowed disabled:opacity-60"
+              className="btn btn-secondary btn-sm"
             >
               Tippfehler-Varianten prüfen{picked.length > 0 ? ` (${picked.length})` : ""}
             </button>

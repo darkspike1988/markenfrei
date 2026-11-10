@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { MissingOperatorNotice, WithOperator } from "@/components/operator-notice";
+import { MAX_HISTORY } from "@/lib/history";
 import { mailConfigFromEnv } from "@/lib/mail";
 
 export const metadata: Metadata = {
@@ -11,7 +12,7 @@ export const metadata: Metadata = {
 
 function H2({ id, children }: { id: string; children: React.ReactNode }) {
   return (
-    <h2 id={id} className="mb-2 mt-10 font-serif text-2xl tracking-tight text-ink">
+    <h2 id={id} className="mb-2 mt-12 font-serif text-[1.7rem] leading-tight text-ink">
       {children}
     </h2>
   );
@@ -19,8 +20,8 @@ function H2({ id, children }: { id: string; children: React.ReactNode }) {
 
 export default function DatenschutzPage() {
   return (
-    <div className="pt-8 sm:pt-14">
-      <h1 className="font-serif text-4xl leading-[1.1] tracking-[-0.02em] text-ink sm:text-5xl">Datenschutz</h1>
+    <div className="pt-10 sm:pt-16">
+      <h1 className="display text-[2.6rem] text-ink sm:text-6xl">Datenschutz</h1>
       <Suspense fallback={<div className="mt-6 min-h-[70vh]" aria-hidden />}>
         <WithOperator>
           {({ operator, missing, recommendations }) => (
@@ -37,8 +38,11 @@ export default function DatenschutzPage() {
 
                 <H2 id="kurz">Kurz gesagt</H2>
                 <p>
-                  Markenfrei setzt keine Cookies, nutzt keinen Browser-Speicher und lädt keine Schriften oder
-                  Skripte von fremden Servern. Die Anwendung protokolliert keine eingegebenen Namen. Zur
+                  Markenfrei setzt keine Cookies und lädt keine Schriften oder Skripte von fremden Servern. Im
+                  Speicher deines Browsers liegt nur, was du selbst einschaltest: die gewählte Darstellung und der
+                  Verlauf deiner letzten Prüfungen (siehe{" "}
+                  <a href="#browser-speicher" className="underline hover:text-ink">Speicher im Browser</a>). Die
+                  Anwendung protokolliert keine eingegebenen Namen. Zur
                   Verbesserung der Seite gibt es eine einfache Reichweitenmessung auf dem eigenen Server, ohne
                   Cookies und ohne die eingegebenen Namen (siehe{" "}
                   <a href="#reichweite" className="underline hover:text-ink">Reichweitenmessung</a>).
@@ -62,6 +66,22 @@ export default function DatenschutzPage() {
                   Eindeutige Prüfergebnisse (Name, Quelle, Status) hält der Server bis zu zehn Minuten im
                   Arbeitsspeicher, damit wiederholte Prüfungen die Dienste nicht erneut belasten. Sie sind nicht mit
                   deiner IP-Adresse verknüpft und werden nicht dauerhaft gespeichert.
+                </p>
+
+                <H2 id="browser-speicher">Speicher im Browser</H2>
+                <p>
+                  Ohne dein Zutun speichert die Seite nichts in deinem Browser. Wählst du im Seitenkopf die
+                  Darstellung „Hell“ oder „Dunkel“, merkt sich dein Browser diese Wahl (Eintrag{" "}
+                  <code className="font-mono">markenfrei:theme</code>); „System“ löscht den Eintrag wieder.
+                </p>
+                <p>
+                  Schaltest du unter „Zuletzt geprüft“ den Verlauf ein, merkt sich dein Browser die letzten{" "}
+                  {MAX_HISTORY} Prüfungen mit Namen, Auswahl und Zeitpunkt (Eintrag{" "}
+                  <code className="font-mono">markenfrei:history</code>); „Verlauf löschen und ausschalten“ entfernt
+                  ihn. Beide Einträge bleiben auf deinem Gerät, werden nicht an den Server oder an Dritte übertragen
+                  und lassen sich auch über die Einstellungen deines Browsers löschen. Grundlage ist § 25 Abs. 2
+                  Nr. 2 TDDDG: Die Speicherung ist nötig, um die von dir ausdrücklich gewünschte Funktion
+                  bereitzustellen.
                 </p>
 
                 <H2 id="ip">IP-Adresse und Missbrauchsschutz</H2>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
+import { Chevron } from "@/components/chevron";
 
 type Candidate = { name: string; origin?: string };
 
@@ -63,15 +64,15 @@ export function IdeaFinder({ max, onUse }: { max: number; onUse: (names: string[
   }
 
   return (
-    <details className="group">
-      <summary className="inline-flex min-h-8 items-center gap-1.5 text-sm text-soft hover:text-ink">
-        <span aria-hidden className="toggle-sign text-muted" />
-        <span>
-          <span className="font-medium text-ink">Keine Idee?</span>{" "}
-          <span className="text-muted">Vorschläge aus Stichwörtern</span>
+    <details className="card">
+      <summary className="flex min-h-16 items-center gap-3 rounded-[1.0625rem] px-4 py-3 transition-colors hover:bg-wash/50 sm:px-5">
+        <span className="min-w-0 flex-1">
+          <span className="block font-medium text-ink">Keine Idee?</span>
+          <span className="block text-sm text-muted">Vorschläge aus Stichwörtern</span>
         </span>
+        <Chevron className="text-muted" />
       </summary>
-      <div className="space-y-4 pb-2 pt-3">
+      <div className="space-y-4 border-t border-line px-4 pb-5 pt-4 sm:px-5">
         <p className="text-sm text-muted">
           Regelbasiert, ohne KI: Wortstämme aus OpenThesaurus und Datamuse werden nach festen Regeln zu Kunstwörtern
           kombiniert. Die Vorschläge sind ungeprüft, bis du sie prüfst.
@@ -86,12 +87,12 @@ export function IdeaFinder({ max, onUse }: { max: number; onUse: (names: string[
             onChange={(e) => setKeywords(e.target.value)}
             placeholder="Stichwörter, z. B. schicht, plan, pflege"
             autoComplete="off"
-            className="min-h-10 flex-1 rounded-md border border-line-strong bg-surface px-3 text-ink placeholder:text-muted"
+            className="field min-h-11 flex-1 py-2"
           />
           <button
             type="submit"
             disabled={state === "loading"}
-            className="inline-flex min-h-10 items-center justify-center rounded-md border border-line-strong px-4 text-sm font-medium text-ink hover:bg-wash disabled:opacity-60"
+            className="btn btn-secondary"
           >
             {state === "loading" ? "Suche …" : "Vorschläge"}
           </button>
@@ -105,7 +106,7 @@ export function IdeaFinder({ max, onUse }: { max: number; onUse: (names: string[
                   <li
                     key={c.name}
                     title={c.origin}
-                    className="rounded border border-line bg-wash px-2 py-0.5 font-mono text-sm text-soft"
+                    className="tag"
                   >
                     {c.name}
                   </li>
@@ -114,7 +115,7 @@ export function IdeaFinder({ max, onUse }: { max: number; onUse: (names: string[
               <button
                 type="button"
                 onClick={() => onUse(ideas.map((c) => c.name))}
-                className="inline-flex min-h-10 items-center rounded-md bg-button px-4 text-sm font-medium text-button-ink hover:bg-button-hover active:scale-[0.98]"
+                className="btn btn-primary"
               >
                 {ideas.length === 1 ? "Diesen Namen prüfen" : `Diese ${ideas.length} Namen prüfen`}
               </button>

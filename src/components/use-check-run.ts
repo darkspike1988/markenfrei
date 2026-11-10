@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { NameReport } from "@/lib/engine/check";
 import { trackEvent } from "@/lib/analytics";
 import { buildQuery, buildRequestBody, type CheckerConfig, type Selection } from "@/components/checker-config";
-import { nextItem, type Item, type Outcome, type Run, type Waiting } from "@/components/check-run";
+import { cancelRun, nextItem, type Item, type Outcome, type Run, type Waiting } from "@/components/check-run";
 
 const CONCURRENCY = 3;
 
@@ -44,6 +44,8 @@ export function useCheckRun(config: CheckerConfig) {
         signal,
       });
       const json = (await res.json().catch(() => null)) as { error?: string; reports?: NameReport[] } | null;
+      // Nach „Abbrechen“ eingetroffene Antworten zählen nicht mehr und planen keine Wiederholung.
+      if (signal.aborted) return;
       if (!res.ok || !json?.reports?.[0]) {
         outcome = { ok: false, message: json?.error ?? `Die Prüfung ist fehlgeschlagen (HTTP ${res.status}).` };
       } else {
@@ -127,5 +129,13 @@ export function useCheckRun(config: CheckerConfig) {
     [],
   );
 
-  return { run, start, recheck, retry };
+  /** Bricht offene Anfragen und das automatische Nachprüfen ab; fertige Berichte bleiben stehen. */
+  function cancel() {
+    abort.current?.abort();
+    clearRetries();
+    abort.current = new AbortController();
+    setRun((r) => (r ? cancelRun(r) : r));
+  }
+
+  return { run, start, recheck, retry, cancel };
 }

@@ -16,7 +16,7 @@ const optionalStores = STATIC_SOURCES.filter((s) => s.namespace === "stores" && 
 const FAQ: FaqItem[] = [
   {
     q: "Prüft Markenfrei den App-Namen auch in anderen Ländern?",
-    a: "Nein. Der App Store wird nur im deutschen Store durchsucht, in den ersten 25 Treffern der Suche. Andere Länder sind nicht geprüft.",
+    a: "Nein. Der App Store wird nur im deutschen Store durchsucht. Geprüft werden die ersten 25 Treffer der Suche. Ist die Seite voll und der exakte Name nicht dabei, zeigt Markenfrei „ähnlich“ statt „nicht gefunden“, weil weitere Treffer nicht eingesehen wurden. Andere Länder sind nicht geprüft.",
   },
   {
     q: "Prüft Markenfrei bei Google Play den App-Titel?",
@@ -52,8 +52,8 @@ export default function AppNamePruefenPage() {
             </li>
             <li>Der App Store wird nur im deutschen Store geprüft. Andere Länder sind nicht geprüft.</li>
             <li>
-              Die Suche liefert höchstens 25 Treffer. Eine App, die dort nicht unter den Treffern erscheint, bleibt
-              unbemerkt.
+              Geprüft werden die ersten 25 Treffer der Suche. Ist die Seite voll und der exakte Name nicht dabei, zeigt
+              Markenfrei „ähnlich“ statt „nicht gefunden“, weil weitere Treffer nicht eingesehen wurden.
             </li>
             <li>
               Bei Google Play werden nur die beiden genannten Bundle-IDs geprüft, keine App-Titel und keine anderen IDs.

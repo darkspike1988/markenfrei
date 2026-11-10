@@ -11,8 +11,8 @@ export const metadata: Metadata = {
 
 export default function ImpressumPage() {
   return (
-    <div className="pt-8 sm:pt-14">
-      <h1 className="font-serif text-4xl leading-[1.1] tracking-[-0.02em] text-ink sm:text-5xl">Impressum</h1>
+    <div className="pt-10 sm:pt-16">
+      <h1 className="display text-[2.6rem] text-ink sm:text-6xl">Impressum</h1>
       <Suspense fallback={<div className="mt-6 min-h-[26rem]" aria-hidden />}>
         <WithOperator>
           {({ operator, missing, recommendations }) => (

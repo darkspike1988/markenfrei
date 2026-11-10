@@ -3,6 +3,7 @@
  * Zustand im Link. Nur Typen und reine Funktionen: hier darf kein Server-Code landen.
  */
 import { NAMESPACES, type Namespace } from "@/lib/engine/types";
+import { normalizeName } from "@/lib/name";
 
 export type SourceInfo = {
   id: string;
@@ -169,4 +170,31 @@ export function groupOptional(sources: SourceInfo[]): { ns: Namespace; list: Sou
     m.set(s.namespace, [...(m.get(s.namespace) ?? []), s]);
   }
   return NAMESPACES.filter((ns) => m.has(ns)).map((ns) => ({ ns, list: m.get(ns)! }));
+}
+
+export type NamePreview = {
+  /** Eingabe wie getippt (ohne Leerraum am Rand) */
+  input: string;
+  /** Name, wie er geprüft wird; null, wenn die Eingabe kein gültiger Name ist */
+  name: string | null;
+  /** Grund, warum die Eingabe kein gültiger Name ist */
+  error?: string;
+  /** Die Eingabe ergibt denselben Namen wie eine frühere und erscheint im Ergebnis nur einmal */
+  duplicate?: boolean;
+};
+
+/**
+ * Vorschau während der Eingabe: je Eintrag der Name, wie ihn die Prüfung normalisiert
+ * („Wach Werk“ → „wachwerk“, „müller.de“ → „mueller“), oder der Grund für die Ablehnung.
+ * Dieselbe Normalisierung wie auf dem Server, ohne Anfrage.
+ */
+export function previewNames(text: string): NamePreview[] {
+  const seen = new Set<string>();
+  return splitNames(text).map((input) => {
+    const result = normalizeName(input);
+    if (!result.ok) return { input, name: null, error: result.error };
+    const duplicate = seen.has(result.name);
+    seen.add(result.name);
+    return duplicate ? { input, name: result.name, duplicate } : { input, name: result.name };
+  });
 }

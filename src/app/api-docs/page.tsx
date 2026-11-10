@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { CHECK_ERRORS, CHECK_MAX_BODY_BYTES } from "@/app/api/_lib/check-schema";
 import { CodeBlock } from "@/components/code-block";
+import { TocInline, TocLayout, type TocItem } from "@/components/page-toc";
 import { DEFAULT_CACHE_TTL_MS } from "@/lib/cache";
 import { DEFAULT_NAMESPACES, MAX_NAMES, MAX_TLDS, STATIC_SOURCES } from "@/lib/engine/check";
 import { DEFAULT_DOMAIN_TLDS, DOMAIN_TLDS } from "@/lib/engine/sources/domains";
@@ -100,9 +101,19 @@ for entry in data["ranking"]:
     # "green" heißt nur: in den gewählten Quellen nichts gefunden
     print(entry["name"], entry["verdict"], "vergeben:", entry["taken"], "unbekannt:", entry["unknown"])`;
 
+const TOC: TocItem[] = [
+  { href: "#ueberblick", label: "Überblick" },
+  { href: "#grenzen", label: "Grenzen" },
+  { href: "#beispiele", label: "Beispiele" },
+  { href: "#antwort", label: "Antwort" },
+  { href: "#werte", label: "Werte" },
+  { href: "#fehler", label: "Fehler" },
+  { href: "#agenten", label: "Maschinenlesbar" },
+];
+
 function H2({ id, children }: { id: string; children: React.ReactNode }) {
   return (
-    <h2 id={id} className="mb-3 mt-12 font-serif text-2xl tracking-tight text-ink">
+    <h2 id={id} className="mb-3 mt-14 font-serif text-[1.7rem] leading-tight text-ink">
       {children}
     </h2>
   );
@@ -118,8 +129,8 @@ export default function ApiDocsPage() {
   const optionalSources = STATIC_SOURCES.filter((s) => !s.defaultEnabled);
 
   return (
-    <div className="pt-8 sm:pt-14">
-      <h1 className="font-serif text-4xl leading-[1.1] tracking-[-0.02em] text-ink sm:text-5xl">API für Entwickler</h1>
+    <TocLayout items={TOC}>
+      <h1 className="display text-[2.6rem] text-ink sm:text-6xl">API für Entwickler</h1>
       <div className="mt-4 max-w-2xl space-y-3 text-soft">
         <p>
           Dieselbe Prüfung wie auf der Webseite, als JSON-Schnittstelle: ohne Konto, ohne Schlüssel, ohne LLM. Du
@@ -133,22 +144,14 @@ export default function ApiDocsPage() {
         </p>
       </div>
 
-      <nav aria-label="Abschnitte" className="mt-6 flex flex-wrap gap-x-4 gap-y-1 text-sm">
-        <a href="#ueberblick" className="inline-block py-1 underline">Überblick</a>
-        <a href="#grenzen" className="inline-block py-1 underline">Grenzen</a>
-        <a href="#beispiele" className="inline-block py-1 underline">Beispiele</a>
-        <a href="#antwort" className="inline-block py-1 underline">Antwort</a>
-        <a href="#werte" className="inline-block py-1 underline">Werte</a>
-        <a href="#fehler" className="inline-block py-1 underline">Fehler</a>
-        <a href="#agenten" className="inline-block py-1 underline">Maschinenlesbar</a>
-      </nav>
+      <TocInline items={TOC} />
 
       <section aria-labelledby="ueberblick">
         <H2 id="ueberblick">Überblick</H2>
         <div className="border-y border-line">
           <table className="w-full text-left text-sm">
             <caption className="sr-only">Öffentliche Endpunkte</caption>
-            <thead className="border-b border-line text-xs uppercase tracking-wide text-muted">
+            <thead className="eyebrow border-b border-line">
               <tr>
                 <th scope="col" className="py-2 pr-4 font-medium">Endpunkt</th>
                 <th scope="col" className="py-2 font-medium">Zweck</th>
@@ -360,7 +363,7 @@ export default function ApiDocsPage() {
         <div className="border-y border-line">
           <table className="w-full text-left text-sm">
             <caption className="sr-only">Fehlerantworten von POST /api/check</caption>
-            <thead className="border-b border-line text-xs uppercase tracking-wide text-muted">
+            <thead className="eyebrow border-b border-line">
               <tr>
                 <th scope="col" className="py-2 pr-4 font-medium">Status</th>
                 <th scope="col" className="py-2 pr-4 font-medium">Fall</th>
@@ -398,6 +401,6 @@ export default function ApiDocsPage() {
           </li>
         </ul>
       </section>
-    </div>
+    </TocLayout>
   );
 }

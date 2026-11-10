@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { TocInline, TocLayout, type TocItem } from "@/components/page-toc";
 import { VerdictBadge } from "@/components/status-badge";
 import { STATIC_SOURCES } from "@/lib/engine/check";
 import { DEFAULT_DOMAIN_TLDS, DOH_ONLY_TLDS, DOMAIN_TLDS, FEATURED_TLDS } from "@/lib/engine/sources/domains";
@@ -27,7 +28,7 @@ function tldMethod(t: string): string {
 
 function H2({ id, children }: { id: string; children: React.ReactNode }) {
   return (
-    <h2 id={id} className="mb-3 mt-12 font-serif text-2xl tracking-tight text-ink">
+    <h2 id={id} className="mb-3 mt-14 font-serif text-[1.7rem] leading-tight text-ink">
       {children}
     </h2>
   );
@@ -39,10 +40,16 @@ export default function QuellenPage() {
     (g) => g.list.length > 0,
   );
   const checked = new Date(TRADEMARK_LINKS_CHECKED).toLocaleDateString("de-DE", { dateStyle: "long" });
+  const toc: TocItem[] = [
+    { href: "#ampel", label: "Ampel" },
+    { href: "#domains", label: "Domains" },
+    ...groups.map((g): TocItem => ({ href: `#${g.ns}`, label: NAMESPACE_LABEL[g.ns] })),
+    { href: "#marke", label: "Marke" },
+  ];
 
   return (
-    <div className="pt-8 sm:pt-14">
-      <h1 className="font-serif text-4xl leading-[1.1] tracking-[-0.02em] text-ink sm:text-5xl">Quellen</h1>
+    <TocLayout items={toc}>
+      <h1 className="display text-[2.6rem] text-ink sm:text-6xl">Quellen</h1>
       <div className="mt-4 max-w-2xl space-y-3 text-soft">
         <p>
           Jede Quelle liefert genau einen Status: vergeben, nicht gefunden, ähnlich, nicht zulässig oder unbekannt.
@@ -58,22 +65,7 @@ export default function QuellenPage() {
         </p>
       </div>
 
-      <nav aria-label="Abschnitte" className="mt-6 flex flex-wrap gap-x-4 gap-y-1 text-sm">
-        <a href="#ampel" className="inline-block py-1 underline">
-          Ampel
-        </a>
-        <a href="#domains" className="inline-block py-1 underline">
-          Domains
-        </a>
-        {groups.map((g) => (
-          <a key={g.ns} href={`#${g.ns}`} className="inline-block py-1 underline">
-            {NAMESPACE_LABEL[g.ns]}
-          </a>
-        ))}
-        <a href="#marke" className="inline-block py-1 underline">
-          Marke
-        </a>
-      </nav>
+      <TocInline items={toc} />
 
       <section aria-labelledby="ampel">
         <H2 id="ampel">Ampel</H2>
@@ -125,7 +117,7 @@ export default function QuellenPage() {
         </p>
         <div className="border-y border-line">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-line text-xs uppercase tracking-wide text-muted">
+            <thead className="eyebrow border-b border-line">
               <tr>
                 <th scope="col" className="py-2 pr-4 font-medium">
                   Endung
@@ -206,6 +198,6 @@ export default function QuellenPage() {
         </Link>
         .
       </p>
-    </div>
+    </TocLayout>
   );
 }

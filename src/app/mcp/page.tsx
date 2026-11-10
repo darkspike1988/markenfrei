@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { CodeBlock as Code } from "@/components/code-block";
+import { TocInline, TocLayout, type TocItem } from "@/components/page-toc";
 
 export const metadata: Metadata = {
   title: "MCP einrichten",
@@ -42,9 +43,16 @@ const TOOLS: { name: string; input: string; text: string }[] = [
   },
 ];
 
+const TOC: TocItem[] = [
+  { href: "#claude-code", label: "Claude Code" },
+  { href: "#claude-desktop", label: "Claude Desktop" },
+  { href: "#cursor", label: "Cursor" },
+  { href: "#tools", label: "Werkzeuge" },
+];
+
 function H2({ id, children }: { id: string; children: React.ReactNode }) {
   return (
-    <h2 id={id} className="mb-3 mt-12 font-serif text-2xl tracking-tight text-ink">
+    <h2 id={id} className="mb-3 mt-14 font-serif text-[1.7rem] leading-tight text-ink">
       {children}
     </h2>
   );
@@ -52,8 +60,8 @@ function H2({ id, children }: { id: string; children: React.ReactNode }) {
 
 export default function McpPage() {
   return (
-    <div className="pt-8 sm:pt-14">
-      <h1 className="font-serif text-4xl leading-[1.1] tracking-[-0.02em] text-ink sm:text-5xl">MCP einrichten</h1>
+    <TocLayout items={TOC}>
+      <h1 className="display text-[2.6rem] text-ink sm:text-6xl">MCP einrichten</h1>
       <p className="mt-4 max-w-2xl text-soft">
         Ein Coding-Agent kann vor dem Anlegen eines Projekts oder Pakets prüfen, wo der Name in den benötigten
         Namensräumen schon vergeben ist. Beim Benennen erzeugt das Sprachmodell deines Clients die Kandidaten,
@@ -65,6 +73,8 @@ export default function McpPage() {
         <code className="font-mono">node mcp/dist/markenfrei-mcp.mjs</code>). Jede selbst betriebene Instanz bietet
         die HTTP-Adresse unter <code className="font-mono">/api/mcp</code>.
       </p>
+
+      <TocInline items={TOC} />
 
       <section aria-labelledby="claude-code">
         <H2 id="claude-code">Claude Code</H2>
@@ -122,6 +132,6 @@ export default function McpPage() {
           .
         </p>
       </section>
-    </div>
+    </TocLayout>
   );
 }

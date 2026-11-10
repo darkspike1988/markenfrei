@@ -1,6 +1,6 @@
-import { expect } from "@playwright/test";
+import { expect, type Locator } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
-import { stubCheckApi, test } from "./helpers";
+import { stubCheckApi, stubReport, test } from "./helpers";
 
 test.describe("Prüfer", () => {
   test("ein freier Name ergibt Grün, ein vergebener Rot, jeweils mit Text", async ({ page }) => {
@@ -9,11 +9,12 @@ test.describe("Prüfer", () => {
     await page.getByRole("textbox").first().fill("wachwerk");
     await page.getByRole("button", { name: "Prüfen", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Ergebnis" })).toBeVisible();
-    await expect(page.getByText("Keine Treffer").first()).toBeVisible();
+    // Auf die Berichtskarte begrenzt: Legende und Überschrift enthalten dieselben Wörter und würden immer passen.
+    await expect(page.getByTestId("verdict-panel")).toContainText("Keine Treffer");
 
     await page.getByRole("textbox").first().fill("react");
     await page.getByRole("button", { name: "Prüfen", exact: true }).click();
-    await expect(page.getByText("Vergeben").first()).toBeVisible();
+    await expect(page.locator("details#bericht-react").getByTestId("verdict-panel")).toContainText("Vergeben");
   });
 
   test("Shortlist: Rangliste zeigt freie Namen zuerst, Vergleich und Liste lassen sich umschalten", async ({ page }) => {
@@ -65,10 +66,11 @@ test.describe("Prüfer", () => {
     await page.getByRole("textbox").first().fill("wachwerk");
     await page.getByRole("button", { name: "Prüfen", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Ergebnis" })).toBeVisible();
-    await expect(page.getByText("Treffer oder Lücken prüfen").first()).toBeVisible();
+    const panel = page.locator("details#bericht-wachwerk").getByTestId("verdict-panel");
+    await expect(panel).toContainText("Treffer oder Lücken prüfen");
     // erster Versuch: Lücke; die Oberfläche wiederholt nach wenigen Sekunden von selbst
     await expect.poll(() => calls.length, { timeout: 20_000 }).toBeGreaterThanOrEqual(2);
-    await expect(page.getByText("Keine Treffer").first()).toBeVisible({ timeout: 10_000 });
+    await expect(panel).toContainText("Keine Treffer", { timeout: 10_000 });
   });
 
   test("Vergleich → Name anklicken wechselt zur Liste und klappt die Berichtszeile auf", async ({ page }) => {
@@ -144,9 +146,10 @@ test.describe("Prüfer", () => {
     await page.getByRole("textbox").first().fill("wachwerk");
     await page.getByRole("button", { name: "Prüfen", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Ergebnis" })).toBeVisible();
-    for (const [label, ext] of [["Als CSV", ".csv"], ["Als Markdown", ".md"], ["JSON exportieren", ".json"]] as const) {
+    for (const [label, ext] of [["CSV", ".csv"], ["Markdown", ".md"], ["JSON", ".json"]] as const) {
+      await page.getByRole("button", { name: "Exportieren" }).click();
       const download = page.waitForEvent("download");
-      await page.getByRole("button", { name: label }).click();
+      await page.getByRole("button", { name: label, exact: true }).click();
       expect((await download).suggestedFilename()).toMatch(new RegExp(`\\${ext}$`));
     }
   });
@@ -160,8 +163,9 @@ test.describe("Prüfer", () => {
     const requests: string[] = [];
     page.on("request", (r) => requests.push(r.url()));
     const callsBefore = calls.length;
+    await page.getByRole("button", { name: "Exportieren" }).click();
     const download = page.waitForEvent("download");
-    await page.getByRole("button", { name: "Erinnerung (.ics)" }).click();
+    await page.getByRole("button", { name: "Erinnerung (.ics)", exact: true }).click();
     const file = await download;
     expect(file.suggestedFilename()).toBe("markenfrei-wachwerk.ics");
     const { readFile } = await import("node:fs/promises");
@@ -178,6 +182,160 @@ test.describe("Prüfer", () => {
     await page.getByRole("button", { name: "Prüfen", exact: true }).click();
     await expect(page.locator("form [role=alert]")).toBeVisible();
     expect(calls).toHaveLength(0);
+
+    // 11 Namen, erlaubt sind 10
+    const eleven = Array.from({ length: 11 }, (_, i) => `name${String.fromCharCode(97 + i)}`).join(", ");
+    await page.getByRole("textbox").first().fill(eleven);
+    await page.getByRole("button", { name: "Prüfen", exact: true }).click();
+    await expect(page.locator("form [role=alert]")).toBeVisible();
+    await expect(page.locator("form [role=alert]")).toContainText("Höchstens 10 Namen");
+    expect(calls).toHaveLength(0);
+  });
+
+  test("Eingabe-Vorschau zeigt die geprüften Namen; Doppelte werden nur einmal abgefragt, Plättchen lassen sich entfernen", async ({ page }) => {
+    const calls = await stubCheckApi(page);
+    await page.goto("/");
+    const field = page.getByRole("textbox").first();
+    await field.fill("Wach Werk, wachwerk, müller.de, xy");
+    const tokens = page.getByRole("list", { name: "Erkannte Namen" });
+    await expect(tokens.getByRole("listitem")).toHaveCount(4);
+    await expect(tokens.getByRole("listitem").filter({ hasText: "doppelt" })).toHaveCount(1);
+    await expect(tokens).toContainText("mueller");
+
+    await page.getByRole("button", { name: "xy entfernen" }).click();
+    await expect(field).toHaveValue("Wach Werk, wachwerk, müller.de");
+
+    await page.getByRole("button", { name: "Prüfen", exact: true }).click();
+    await expect(page.locator("details[id^='bericht-']")).toHaveCount(2);
+    expect([...calls].sort()).toEqual(["Wach Werk", "müller.de"]);
+  });
+
+  test("„Nur Auffälliges“ blendet Quellen ohne Fund aus und wieder ein", async ({ page }) => {
+    await stubCheckApi(page);
+    await page.goto("/");
+    await page.getByRole("textbox").first().fill("react");
+    await page.getByRole("button", { name: "Prüfen", exact: true }).click();
+    const card = page.locator("details#bericht-react");
+    await expect(card.getByText("PyPI", { exact: true })).toBeVisible();
+
+    const filter = page.getByRole("button", { name: "Nur Auffälliges" });
+    await filter.click();
+    await expect(filter).toHaveAttribute("aria-pressed", "true");
+    await expect(card.getByText("npm", { exact: true })).toBeVisible();
+    await expect(card.getByText("PyPI", { exact: true })).toBeHidden();
+    await expect(card.getByText(/Quellen ohne Fund\s+ausgeblendet/).first()).toBeVisible();
+
+    await filter.click();
+    await expect(card.getByText("PyPI", { exact: true })).toBeVisible();
+  });
+
+  test("Abbrechen beendet eine laufende Prüfung; „Erneut prüfen“ holt das Ergebnis nach", async ({ page }) => {
+    let hanging = true;
+    let release = () => {};
+    const hang = new Promise<void>((resolve) => (release = resolve));
+    await page.route("**/api/check", async (route) => {
+      if (hanging) {
+        await hang;
+        await route.abort().catch(() => {});
+        return;
+      }
+      const body = route.request().postDataJSON() as { names: string[] };
+      await route.fulfill({ json: { reports: [await stubReport(body.names[0])] } });
+    });
+    await page.goto("/");
+    await page.getByRole("textbox").first().fill("wachwerk");
+    await page.getByRole("button", { name: "Prüfen", exact: true }).click();
+    await page.getByRole("button", { name: "Abbrechen" }).click();
+    await expect(page.getByText("Prüfung abgebrochen.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Abbrechen" })).toBeHidden();
+
+    hanging = false;
+    await page.getByRole("button", { name: "Erneut prüfen" }).click();
+    await expect(page.locator("details#bericht-wachwerk")).toContainText("Keine Treffer");
+    release();
+  });
+
+  test("Seitenkopf bei 360 px: einzeilig, ohne Umbruch in Wörtern, ohne horizontales Überlaufen", async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 700 });
+    await page.goto("/");
+    const links = page.getByRole("navigation", { name: "Hauptnavigation" }).getByRole("link").filter({ visible: true });
+    await expect(links).toHaveCount(2);
+    const wordmark = page.locator("header").getByText("Markenfrei", { exact: true });
+    // Zeilen eines Elements: verschiedene Oberkanten der Textfragmente (ein Umbruch mitten im Wort ergibt zwei).
+    const lineCount = (l: Locator) =>
+      l.evaluate((el) => {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        return new Set(Array.from(range.getClientRects(), (r) => Math.round(r.top))).size;
+      });
+    for (const el of [wordmark, ...(await links.all())]) {
+      const box = await el.boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.height).toBeLessThanOrEqual(40);
+      expect(await lineCount(el)).toBe(1);
+    }
+    await expect(page.getByRole("button", { name: "Darstellung" })).toBeVisible();
+    const { scrollWidth, clientWidth } = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    }));
+    expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
+  });
+
+  test("Darstellung: „Dunkel“ gilt nach dem Neuladen, „System“ entfernt Wahl und Speichereintrag", async ({ page }) => {
+    await page.goto("/");
+    const html = page.locator("html");
+    await expect(html).not.toHaveAttribute("data-theme");
+    expect(await page.evaluate(() => localStorage.getItem("markenfrei:theme"))).toBeNull();
+
+    await page.getByRole("button", { name: "Darstellung" }).click();
+    await page.getByRole("button", { name: "Dunkel", exact: true }).click();
+    await expect(html).toHaveAttribute("data-theme", "dark");
+    expect(await page.evaluate(() => localStorage.getItem("markenfrei:theme"))).toBe("dark");
+
+    // Neu laden (goto wartet, bis die Seite aktiv ist): das Skript im Kopf setzt die Wahl wieder
+    await page.goto("/");
+    await expect(html).toHaveAttribute("data-theme", "dark");
+    await page.getByRole("button", { name: "Darstellung" }).click();
+    await expect(page.getByRole("button", { name: "Dunkel", exact: true })).toHaveAttribute("aria-pressed", "true");
+
+    await page.getByRole("button", { name: "System", exact: true }).click();
+    await expect(html).not.toHaveAttribute("data-theme");
+    expect(await page.evaluate(() => localStorage.getItem("markenfrei:theme"))).toBeNull();
+  });
+
+  test("Verlauf: aus, bis man ihn einschaltet; merkt sich Prüfungen, prüft per Klick erneut und lässt sich löschen", async ({ page }) => {
+    const calls = await stubCheckApi(page);
+    const stored = () => page.evaluate(() => localStorage.getItem("markenfrei:history"));
+    await page.goto("/");
+    await page.getByRole("textbox").first().fill("planzeit");
+    await page.getByRole("button", { name: "Prüfen", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Ergebnis" })).toBeVisible();
+    expect(await stored()).toBeNull();
+
+    await page.getByText("Zuletzt geprüft", { exact: true }).click();
+    await page.getByRole("button", { name: "Verlauf einschalten" }).click();
+    expect(await stored()).toBe("[]");
+    await expect(page.getByText("Noch keine Prüfung gemerkt.")).toBeVisible();
+
+    await page.getByRole("textbox").first().fill("wachwerk");
+    await page.getByRole("button", { name: "Prüfen", exact: true }).click();
+    await expect(page.locator("details#bericht-wachwerk")).toBeVisible();
+    expect(JSON.parse((await stored()) ?? "[]")).toEqual([expect.objectContaining({ query: "q=wachwerk" })]);
+
+    await page.goto("/");
+    await page.getByText("Zuletzt geprüft", { exact: true }).click();
+    const entry = page.getByRole("button", { name: /^wachwerk/ });
+    await expect(entry).toBeVisible();
+    const before = calls.length;
+    await entry.click();
+    await expect(page.getByRole("heading", { name: "Ergebnis" })).toBeVisible();
+    await expect.poll(() => calls.length).toBeGreaterThan(before);
+    await expect(page.getByRole("textbox").first()).toHaveValue("wachwerk");
+
+    await page.getByRole("button", { name: "Verlauf löschen und ausschalten" }).click();
+    expect(await stored()).toBeNull();
+    await expect(page.getByRole("button", { name: "Verlauf einschalten" })).toBeVisible();
   });
 });
 

@@ -6,15 +6,15 @@ import { shortlistSummary } from "@/components/verdict-text";
 
 /** Farbe + Symbol + Wort je Ampel (nie nur Farbe). Symbole sind verschieden geformt: Kreis, Dreieck, Kreuz. */
 const PANEL: Record<Verdict, { box: string; symbol: string; word: string }> = {
-  green: { box: "border-ok bg-ok-bg text-ok", symbol: "○", word: "Grün" },
-  yellow: { box: "border-warn bg-warn-bg text-warn", symbol: "▲", word: "Gelb" },
-  red: { box: "border-bad bg-bad-bg text-bad", symbol: "✕", word: "Rot" },
+  green: { box: "border-ok/35 bg-ok-bg text-ok", symbol: "○", word: "Grün" },
+  yellow: { box: "border-warn/35 bg-warn-bg text-warn", symbol: "▲", word: "Gelb" },
+  red: { box: "border-bad/35 bg-bad-bg text-bad", symbol: "✕", word: "Rot" },
 };
 
 const SEGMENT_STYLE: Record<BarKey, string> = {
-  taken: "bg-bad",
-  similar: "bg-warn",
-  not_found: "bg-ok",
+  taken: "bg-lamp-bad",
+  similar: "bg-lamp-warn",
+  not_found: "bg-lamp-ok",
   // Schraffur (siehe .bar-hatch in globals.css): unbekannt darf nicht wie Grün wirken
   unknown: "bar-hatch",
 };
@@ -24,11 +24,7 @@ export function VerdictBarView({ results }: { results: NameReport["results"] }) 
   const bar = buildVerdictBar(results);
   if (bar.total === 0) return null;
   return (
-    <div
-      role="img"
-      aria-label={bar.ariaLabel}
-      className="flex h-3 w-full overflow-hidden rounded border border-line-strong bg-surface"
-    >
+    <div role="img" aria-label={bar.ariaLabel} className="flex h-2.5 w-full gap-0.5 overflow-hidden rounded-full">
       {bar.segments
         .filter((s) => s.count > 0)
         .map((s) => (
@@ -36,7 +32,7 @@ export function VerdictBarView({ results }: { results: NameReport["results"] }) 
             key={s.key}
             title={`${s.count} ${s.label}`}
             style={{ flexGrow: s.count, flexBasis: 0 }}
-            className={`min-w-1 border-r border-surface last:border-r-0 ${SEGMENT_STYLE[s.key]}`}
+            className={`min-w-1.5 rounded-[2px] ${SEGMENT_STYLE[s.key]}`}
           />
         ))}
     </div>
@@ -52,9 +48,12 @@ export function VerdictPanel({ report }: { report: NameReport }) {
   const bar = buildVerdictBar(report.results);
   const reason = shortlistSummary(rankReports([report])[0]);
   return (
-    <div data-testid="verdict-panel" className={`rounded-lg border-l-4 px-4 py-3 ${s.box}`}>
-      <p className="flex items-center gap-3 text-lg font-semibold sm:text-xl">
-        <span aria-hidden className="text-2xl leading-none">
+    <div data-testid="verdict-panel" className={`rounded-2xl border px-4 py-4 sm:px-6 sm:py-5 ${s.box}`}>
+      <p className="flex items-center gap-3 font-serif text-2xl font-medium leading-tight tracking-[-0.02em] sm:text-[1.75rem]">
+        <span
+          aria-hidden
+          className="grid size-9 shrink-0 place-items-center rounded-full border-[1.5px] border-current font-sans text-base leading-none sm:size-10"
+        >
           {s.symbol}
         </span>
         <span>
@@ -62,8 +61,11 @@ export function VerdictPanel({ report }: { report: NameReport }) {
           {VERDICT_LABEL[report.verdict]}
         </span>
       </p>
-      <p className="mt-1 text-sm text-ink">{reason}</p>
-      <p className="mt-2 text-sm text-ink">
+      <p className="mt-2.5 text-[15px] text-ink">{reason}</p>
+      <div className="mt-3.5">
+        <VerdictBarView results={report.results} />
+      </div>
+      <p className="mt-2 font-mono text-[13px] text-ink">
         {bar.countText.split(" · ").map((part, i, all) => (
           // Jede Angabe ist unteilbar; das Trennzeichen hängt an ihr, das Leerzeichen DAZWISCHEN liegt
           // außerhalb der Hülle, sonst gäbe es keine Umbruchstelle und die Zeile liefe über.
@@ -76,10 +78,9 @@ export function VerdictPanel({ report }: { report: NameReport }) {
           </Fragment>
         ))}
       </p>
-      <div className="mt-2">
-        <VerdictBarView results={report.results} />
-      </div>
-      <p className="mt-2 text-xs text-soft">„Nicht gefunden“ heißt nicht „registrierbar“. Der Balken zählt Quellen, er bewertet nichts.</p>
+      <p className="mt-3 text-xs text-soft">
+        „Nicht gefunden“ heißt nicht „registrierbar“. Der Balken zählt Quellen, er bewertet nichts.
+      </p>
     </div>
   );
 }

@@ -14,8 +14,8 @@ export default function ErrorPage({ error, retry }: { error: unknown; retry: () 
       : null;
 
   return (
-    <div className="pt-8 sm:pt-14">
-      <h1 className="font-serif text-4xl leading-[1.1] tracking-[-0.02em] text-ink sm:text-5xl">
+    <div className="pt-10 sm:pt-16">
+      <h1 className="display text-[2.6rem] text-ink sm:text-6xl">
         Etwas ist schiefgelaufen
       </h1>
       <div className="mt-4 max-w-2xl space-y-3 text-soft">
@@ -26,7 +26,7 @@ export default function ErrorPage({ error, retry }: { error: unknown; retry: () 
         <button
           type="button"
           onClick={() => retry()}
-          className="inline-flex min-h-12 items-center justify-center rounded-lg bg-button px-6 font-medium text-button-ink transition-colors hover:bg-button-hover active:scale-[0.98]"
+          className="btn btn-primary min-h-12 px-6 text-base"
         >
           Erneut versuchen
         </button>
