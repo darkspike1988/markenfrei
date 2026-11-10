@@ -1,4 +1,5 @@
 import { MAX_NAMES, resolveSources, type CheckOptions } from "@/lib/engine/check";
+import { effectiveSources } from "@/lib/engine/format";
 import { normalizeName } from "@/lib/name";
 import { createRateLimiter, guardRequestDetailed, limitedResponse, type GuardOutcome, type RateLimiter } from "@/lib/rate-limit";
 import { DEFAULT_PUBLIC_URL } from "@/lib/site";
@@ -145,7 +146,8 @@ const OUTBOUND_TOOLS = new Set([...CHECK_TOOLS, "markenfrei_suggest_names"]);
 
 /**
  * Kosten einer MCP-Nachricht fürs Rate-Limit. Prüf-Werkzeuge kosten wie /api/check
- * Namen × Quellenumfang (bei ungültiger Auswahl nur die Namen: das Werkzeug meldet dann
+ * Namen × Quellenumfang, mit derselben Quellenauswahl wie das Werkzeug (social ohne sources
+ * ergänzt die Social-Quellen; bei ungültiger Auswahl nur die Namen: das Werkzeug meldet dann
  * einen Fehler ohne Netzabfrage). Alles andere kostet 1.
  * outbound: ob der Aufruf ausgehende Abfragen auslöst und damit fürs Prozess-Limit zählt.
  */
@@ -165,6 +167,7 @@ export function mcpRequestCost(message: unknown): { cost: number; outbound: bool
       tlds: args.tlds,
       sources: args.sources,
     } as Pick<CheckOptions, "namespaces" | "tlds" | "sources">;
+    if (Array.isArray(opts.namespaces)) opts.sources = effectiveSources(opts.namespaces, opts.sources);
     return { cost: checkCost(names, opts), outbound: true };
   } catch {
     return { cost: names, outbound: true };

@@ -10,7 +10,9 @@ import {
   isJsonContentType,
   mcpRequestCost,
 } from "@/app/api/_lib/http";
-import { CheckInputError, STATIC_SOURCES, resolveSources } from "@/lib/engine/check";
+import { CheckInputError, MAX_TLDS, STATIC_SOURCES, resolveSources } from "@/lib/engine/check";
+import { effectiveSources } from "@/lib/engine/format";
+import { NAMESPACES } from "@/lib/engine/types";
 import { DOMAIN_TLDS } from "@/lib/engine/sources/domains";
 import { createRateLimiter } from "@/lib/rate-limit";
 
@@ -125,6 +127,34 @@ test("MCP-Kosten: markenfrei_check_name zählt den Quellenumfang mit", () => {
   assert.deepEqual(mcpRequestCost({ jsonrpc: "2.0", id: 1, method: "tools/list" }), { cost: 1, outbound: false });
   assert.deepEqual(mcpRequestCost([call("markenfrei_check_name", {})]), { cost: 1, outbound: false });
   assert.deepEqual(mcpRequestCost(undefined), { cost: 1, outbound: false });
+});
+
+test("MCP-Kosten: social ohne sources zählt die ergänzten Social-Quellen mit", () => {
+  const call = (name: string, args: unknown) => ({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } });
+  const namespaces = [...NAMESPACES];
+  assert.ok(namespaces.includes("social"));
+  // Eine Endungsanzahl suchen, bei der die ergänzten Quellen den Faktor anheben
+  let found: { tlds: string[]; naive: number; effective: number } | undefined;
+  for (let n = 1; n <= MAX_TLDS && !found; n++) {
+    const tlds = DOMAIN_TLDS.slice(0, n);
+    const naive = checkCost(1, { namespaces, tlds });
+    const effective = checkCost(1, { namespaces, tlds, sources: effectiveSources(namespaces, undefined) });
+    if (effective > naive) found = { tlds, naive, effective };
+  }
+  assert.ok(found, "keine Auswahl gefunden, bei der Social den Faktor ändert");
+  const args = { namespaces, tlds: found.tlds };
+
+  // Befund: berechnet wurde ohne bluesky und mastodon, geprüft aber mit ihnen
+  assert.deepEqual(mcpRequestCost(call("markenfrei_check_name", { name: "wachwerk", ...args })), { cost: found.effective, outbound: true });
+  const names = ["alpha", "beta", "gamma"];
+  assert.deepEqual(mcpRequestCost(call("markenfrei_check_names", { names, ...args })), { cost: 3 * found.effective, outbound: true });
+  // Mit ausdrücklichen sources gilt nur diese Liste
+  assert.deepEqual(
+    mcpRequestCost(call("markenfrei_check_name", { name: "wachwerk", namespaces: ["social"], sources: [] })),
+    { cost: 1, outbound: true },
+  );
+  // Unlesbare namespaces: nur die Namen, wie bei jeder ungültigen Auswahl
+  assert.deepEqual(mcpRequestCost(call("markenfrei_check_names", { names, namespaces: { includes: 1 } })).outbound, true);
 });
 
 test("Prozess-Limit greift unabhängig vom Client-Schlüssel", () => {

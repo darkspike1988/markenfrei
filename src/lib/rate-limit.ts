@@ -26,8 +26,11 @@ export function createRateLimiter(opts: {
   limit: number;
   windowMs: number;
   now?: () => number;
+  /** Obergrenze der gemerkten Schlüssel (Standard 10 000); kleiner nur für Tests sinnvoll */
+  maxKeys?: number;
 }): RateLimiter {
   const now = opts.now ?? Date.now;
+  const maxKeys = Math.max(1, opts.maxKeys ?? MAX_KEYS);
   const windows = new Map<string, { count: number; resetAt: number }>();
 
   return {
@@ -36,18 +39,24 @@ export function createRateLimiter(opts: {
       const t = now();
 
       // Abgelaufene Fenster gelegentlich entfernen, damit die Map nicht wächst
-      if (windows.size > 2000) {
+      if (windows.size > 2000 || windows.size >= maxKeys) {
         for (const [k, w] of windows) if (w.resetAt <= t) windows.delete(k);
-      }
-      // Harte Obergrenze: älteste Einträge zuerst (Map behält die Einfügereihenfolge)
-      while (windows.size >= MAX_KEYS) {
-        const oldest = windows.keys().next().value;
-        if (oldest === undefined) break;
-        windows.delete(oldest);
       }
 
       let w = windows.get(key);
-      if (!w || w.resetAt <= t) {
+      if (w && w.resetAt <= t) {
+        // Löschen und unten neu einfügen: So steht der Schlüssel in der Map wieder hinten
+        windows.delete(key);
+        w = undefined;
+      }
+      if (!w) {
+        // Harte Obergrenze, nur für neue Schlüssel: Fenster mit dem ältesten Beginn zuerst
+        // (Map behält die Einfügereihenfolge). Das laufende Fenster des Anfragenden bleibt.
+        while (windows.size >= maxKeys) {
+          const oldest = windows.keys().next().value;
+          if (oldest === undefined) break;
+          windows.delete(oldest);
+        }
         w = { count: 0, resetAt: t + opts.windowMs };
         windows.set(key, w);
       }
@@ -83,10 +92,14 @@ export const TRUSTED_PROXIES =
 /**
  * IPv6-Adressen zählen als Netz (/64), weil ein Anschluss meist ein ganzes /64 bekommt und sonst
  * jede Anfrage von einer neuen Adresse käme. IPv4 und IPv4-mapped IPv6 bleiben unverändert (IPv4).
- * Nicht lesbare Werte bleiben wie sie sind.
+ * Ein angehängter Port ("1.2.3.4:5678", "[2001:db8::1]:443") zählt nicht mit, sonst hätte
+ * jeder Quellport einen eigenen Zähler. Nicht lesbare Werte bleiben wie sie sind.
  */
 export function rateLimitKey(address: string): string {
-  const a = address.replace(/^\[|\]$/g, "").split("%")[0].toLowerCase();
+  const trimmed = address.trim();
+  const bracketed = /^\[([^\]]*)\](?::\d{1,5})?$/.exec(trimmed);
+  const v4WithPort = /^(\d{1,3}(?:\.\d{1,3}){3}):\d{1,5}$/.exec(trimmed);
+  const a = (bracketed?.[1] ?? v4WithPort?.[1] ?? trimmed).split("%")[0].toLowerCase();
   if (!a.includes(":")) return a;
   const mapped = /^(?:0{0,4}:){2,5}ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(a);
   if (mapped) return mapped[1];

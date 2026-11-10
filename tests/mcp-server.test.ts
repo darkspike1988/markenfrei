@@ -12,6 +12,7 @@ import {
   CheckNamesOutputSchema,
   createMarkenfreiMcpServer,
   formatRanking,
+  INTERNAL_ERROR_TEXT,
   prepareShortlist,
   SuggestNamesOutputSchema,
   TOOL_NAMES,
@@ -350,6 +351,32 @@ test("Eingabefehler der Engine ergeben isError mit deutscher Meldung", async () 
   const prep = await call("markenfrei_trademark_prep", { name: "-x-" });
   assert.equal(prep.isError, true);
   assert.match(text(prep), /^Eingabefehler:/);
+});
+
+test("unerwartete Fehler ergeben einen festen Text ohne die Meldung der Ausnahme", async () => {
+  const broken = createMarkenfreiMcpServer({
+    now: () => {
+      throw new Error("geheim: /srv/markenfrei/.env nicht lesbar");
+    },
+  });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const other = new Client({ name: "test", version: "0" });
+  await Promise.all([broken.connect(serverTransport), other.connect(clientTransport)]);
+  try {
+    for (const [name, args] of [
+      ["markenfrei_check_name", { name: "wachwerk", tlds: ["de"], sources: ["npm"] }],
+      ["markenfrei_check_names", { names: ["wachwerk"], tlds: ["de"], sources: ["npm"] }],
+    ] as const) {
+      const res = (await other.callTool({ name, arguments: args })) as CallToolResult;
+      assert.equal(res.isError, true, name);
+      assert.equal(text(res), INTERNAL_ERROR_TEXT);
+      assert.match(text(res), /^Interner Fehler\./);
+      assert.ok(!/geheim|\.env/.test(JSON.stringify(res)), `${name}: Ausnahmetext sichtbar`);
+      assert.equal(res.structuredContent, undefined);
+    }
+  } finally {
+    await other.close();
+  }
 });
 
 test("Schemafehler (Endung, Anzahl, Länge) ergeben isError statt Absturz", async () => {

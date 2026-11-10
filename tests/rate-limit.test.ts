@@ -73,6 +73,71 @@ test("die Map bleibt auch bei sehr vielen Schlüsseln begrenzt", () => {
   assert.equal(rl.check("k0").allowed, true);
 });
 
+test("an der Obergrenze behält der Anfragende sein laufendes Fenster", () => {
+  const c = clock();
+  const rl = createRateLimiter({ limit: 2, windowMs: 60_000, now: c.now, maxKeys: 3 });
+  rl.check("a");
+  rl.check("a");
+  rl.check("b");
+  rl.check("c");
+  // Befund: "a" war der älteste Eintrag, wurde bei der eigenen Anfrage verdrängt und begann bei 0
+  assert.equal(rl.check("a").allowed, false);
+  assert.equal(rl.check("a").allowed, false);
+  // Ein neuer Schlüssel verdrängt weiterhin den ältesten
+  assert.equal(rl.check("d").allowed, true);
+  assert.equal(rl.check("a").allowed, true, "a wurde von d verdrängt");
+});
+
+test("ein erneuertes Fenster gilt als jung und wird nicht als ältestes verdrängt", () => {
+  const c = clock();
+  const rl = createRateLimiter({ limit: 2, windowMs: 60_000, now: c.now, maxKeys: 4 });
+  rl.check("a");
+  c.advance(30_000);
+  rl.check("b", 2);
+  rl.check("c", 2);
+  c.advance(31_000);
+  // Fenster von a ist abgelaufen und beginnt neu; b und c laufen noch
+  rl.check("a", 2);
+  rl.check("d");
+  // Befund: a behielt nach der Erneuerung den ersten Platz und wurde als "ältester" verdrängt
+  assert.equal(rl.check("e").allowed, true, "verdrängt b, nicht a");
+  assert.equal(rl.check("a").allowed, false, "a bleibt am Limit");
+  assert.equal(rl.check("c").allowed, false, "c läuft noch");
+});
+
+test("abgelaufene Fenster werden vor laufenden entfernt", () => {
+  const c = clock();
+  const rl = createRateLimiter({ limit: 1, windowMs: 60_000, now: c.now, maxKeys: 3 });
+  rl.check("alt");
+  c.advance(30_000);
+  rl.check("b");
+  c.advance(31_000);
+  rl.check("c");
+  // "alt" ist abgelaufen: d passt hinein, ohne dass b oder c verdrängt werden
+  rl.check("d");
+  assert.equal(rl.check("b").allowed, false);
+  assert.equal(rl.check("c").allowed, false);
+  assert.equal(rl.check("d").allowed, false);
+});
+
+test("ein Port in x-forwarded-for ergibt keinen eigenen Zähler", () => {
+  const req = (xff: string) => new Request("http://x", { headers: { "x-forwarded-for": xff } });
+  assert.equal(rateLimitKey("1.2.3.4:5678"), "1.2.3.4");
+  assert.equal(clientKey(req("1.2.3.4:5678"), 1), clientKey(req("1.2.3.4:41000"), 1));
+  assert.equal(rateLimitKey("[2001:db8::1]:443"), "2001:db8:0:0::/64");
+  assert.equal(clientKey(req("[2001:db8::1]:443"), 1), clientKey(req("[2001:db8::2]:50000"), 1));
+  assert.equal(rateLimitKey("[::ffff:1.2.3.4]:8080"), "1.2.3.4");
+  // Eine reine IPv6-Adresse hat keinen Port: die letzte Gruppe gehört zur Adresse
+  assert.equal(rateLimitKey("2001:db8:1:2::443"), "2001:db8:1:2::/64");
+  assert.equal(rateLimitKey("2001:db8:1:2:3:4:5:8080"), "2001:db8:1:2::/64");
+  assert.equal(rateLimitKey("::1"), "0:0:0:0::/64");
+
+  const rl = createRateLimiter({ limit: 1, windowMs: 60_000, now: clock().now });
+  const guard = createGuard(rl);
+  assert.equal(guard(req("9.9.9.9:1111")), null);
+  assert.equal(guard(req("9.9.9.9:2222"))?.status, 429, "anderer Port, derselbe Zähler");
+});
+
 test("Wächter antwortet mit 429, Retry-After und deutschem Text", async () => {
   const guard = createGuard(createRateLimiter({ limit: 1, windowMs: 60_000, now: clock().now }));
   const req = () => new Request("http://x", { headers: { "x-forwarded-for": "9.9.9.9" } });

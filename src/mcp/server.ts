@@ -139,11 +139,11 @@ function ok(text: string, structured: object): CallToolResult {
   };
 }
 
+/** Text für unerwartete Fehler. Fest, damit keine Ausnahmetexte (Pfade, Interna) nach außen gehen. */
+export const INTERNAL_ERROR_TEXT = "Interner Fehler. Bitte später erneut versuchen.";
+
 function toolError(err: unknown): CallToolResult {
-  const text =
-    err instanceof CheckInputError
-      ? `Eingabefehler: ${err.message}`
-      : `Interner Fehler: ${err instanceof Error ? err.message : String(err)}`;
+  const text = err instanceof CheckInputError ? `Eingabefehler: ${err.message}` : INTERNAL_ERROR_TEXT;
   return { isError: true, content: [{ type: "text", text }] };
 }
 
