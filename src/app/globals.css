@@ -487,9 +487,8 @@ details[open] > summary .toggle-sign::before {
     border-radius: 1.375rem;
     background: var(--surface);
     box-shadow: var(--shadow-lift);
-    transition:
-      border-color 160ms ease,
-      box-shadow 160ms ease;
+    /* Nur der Rand blendet über; der Fokusring (box-shadow) erscheint sofort, damit er nie verzögert sichtbar wird. */
+    transition: border-color 160ms ease;
   }
   .console:has(.console-input:focus-visible) {
     border-color: var(--ink);
@@ -730,7 +729,7 @@ html[data-signal="checking"] .signal > i:nth-child(3) {
 }
 
 .stamp-in {
-  animation: stamp-in 260ms cubic-bezier(0.3, 1.4, 0.5, 1) both;
+  animation: stamp-in 260ms var(--ease-out-soft) both;
 }
 
 .lamps-in > i {
